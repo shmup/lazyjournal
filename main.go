@@ -23,6 +23,7 @@ type App struct {
 	filterText       string
 	currentLogLines  []string
 	filteredLogLines []string
+	logScrollPos     int
 }
 
 func main() {
@@ -76,7 +77,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Filter (Tab to focus)"
+		v.Title = "Filter"
 		v.Editable = true
 		v.Editor = app.createFilterEditor()
 		v.Wrap = true
@@ -88,44 +89,34 @@ func (app *App) layout(g *gocui.Gui) error {
 		}
 		v.Title = "Logs"
 		v.Wrap = true
-		v.Autoscroll = true
+		// Отключить автопрокрутку
+		v.Autoscroll = false
 	}
 
-	// Управляем отображением курсора в зависимости от активного вида
 	currentView := g.CurrentView()
-	if currentView != nil {
-		switch currentView.Name() {
-		case "filter":
-			g.Cursor = true
-		default:
-			g.Cursor = false
-		}
+	if currentView != nil && currentView.Name() == "filter" {
+		g.Cursor = true
+	} else {
+		g.Cursor = false
 	}
 
 	return nil
 }
 
-// Создаем кастомный редактор для поля фильтра
 func (app *App) createFilterEditor() gocui.Editor {
 	return gocui.EditorFunc(func(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
 		switch {
 		case ch != 0 && mod == 0:
 			v.EditWrite(ch)
-			app.filterText = strings.TrimSpace(v.Buffer())
-			app.applyFilter()
 		case key == gocui.KeySpace:
 			v.EditWrite(' ')
-			app.filterText = strings.TrimSpace(v.Buffer())
-			app.applyFilter()
 		case key == gocui.KeyBackspace || key == gocui.KeyBackspace2:
 			v.EditDelete(true)
-			app.filterText = strings.TrimSpace(v.Buffer())
-			app.applyFilter()
 		case key == gocui.KeyDelete:
 			v.EditDelete(false)
-			app.filterText = strings.TrimSpace(v.Buffer())
-			app.applyFilter()
 		}
+		app.filterText = strings.TrimSpace(v.Buffer())
+		app.applyFilter()
 	})
 }
 
@@ -190,7 +181,7 @@ func (app *App) applyFilter() {
 			app.filteredLogLines = append(app.filteredLogLines, line)
 		}
 	}
-
+	app.logScrollPos = 0
 	app.updateLogsView()
 }
 
@@ -201,7 +192,8 @@ func (app *App) updateLogsView() {
 	}
 
 	v.Clear()
-	for _, line := range app.filteredLogLines {
+	linesToDisplay := app.filteredLogLines[app.logScrollPos:]
+	for _, line := range linesToDisplay {
 		fmt.Fprintln(v, line)
 	}
 }
@@ -220,13 +212,32 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("services", gocui.KeyEnter, gocui.ModNone, app.selectService); err != nil {
 		return err
 	}
-
-	// Удалено событие Enter для фильтра, так как теперь фильтрация происходит динамически
-
+	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, app.scrollDownLogs); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModNone, app.scrollUpLogs); err != nil {
+		return err
+	}
 	if err := app.gui.SetKeybinding("", gocui.KeyTab, gocui.ModNone, app.nextView); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func (app *App) scrollDownLogs(g *gocui.Gui, v *gocui.View) error {
+	if app.logScrollPos < len(app.filteredLogLines)-1 {
+		app.logScrollPos++
+		app.updateLogsView()
+	}
+	return nil
+}
+
+func (app *App) scrollUpLogs(g *gocui.Gui, v *gocui.View) error {
+	if app.logScrollPos > 0 {
+		app.logScrollPos--
+		app.updateLogsView()
+	}
 	return nil
 }
 
@@ -280,29 +291,14 @@ func (app *App) selectServiceByIndex(index int) error {
 }
 
 func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
-	currentView := g.CurrentView()
-	var nextView string
-
-	if currentView == nil {
-		nextView = "services"
-	} else {
-		switch currentView.Name() {
-		case "services":
-			nextView = "filter"
-		case "filter":
-			nextView = "logs"
-		case "logs":
-			nextView = "services"
-		default:
-			nextView = "services"
-		}
+	nextView := "services"
+	if v != nil && v.Name() == "services" {
+		nextView = "filter"
+	} else if v != nil && v.Name() == "filter" {
+		nextView = "logs"
 	}
-
-	if _, err := g.SetCurrentView(nextView); err != nil {
-		return err
-	}
-
-	return nil
+	_, err := g.SetCurrentView(nextView)
+	return err
 }
 
 func quit(g *gocui.Gui, v *gocui.View) error {
