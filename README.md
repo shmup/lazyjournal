@@ -38,7 +38,7 @@ Clone the repository, install dependencies from `go.mod` and run the project:
 git clone https://github.com/Lifailon/lazyjournal
 cd lazyjournal/src
 
-# snap install go
+# snap install go --classic
 # go version
 
 go mod tidy
