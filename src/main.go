@@ -8,9 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jroimartin/gocui"
-	// "github.com/jesseduffield/gocui"
-	// "github.com/awesome-gocui/gocui"
+	"github.com/awesome-gocui/gocui"
 )
 
 // Структура хранения информации о журналах
@@ -44,22 +42,21 @@ func main() {
 	}
 
 	// Создаем GUI
-	g, err := gocui.NewGui(gocui.OutputNormal)
+	g, err := gocui.NewGui(gocui.OutputNormal, true)
 	if err != nil {
 		log.Panicln(err)
 	}
-	// g := gocui.NewGui() // fork
 	// Закрываем GUI после завершения
 	defer g.Close()
 
 	app.gui = g
 	// Функция, которая будет вызываться при обновлении интерфейса
 	g.SetManagerFunc(app.layout)
-	// g.SetCurrentView("viewName") // fork
-	g.Mouse = true // включить поддержку мыши
+	// Включить поддержку мыши
+	g.Mouse = false
 
-	// Цветовая схема GUI (ColorBlack, ColorGreen, ColorRed, ColorYellow, ColorBlue, ColorCyan, ColorMagenta)
-	g.FgColor = gocui.ColorDefault // поля окон и цвет текста
+	// Цветовая схема GUI
+	g.FgColor = gocui.ColorDefault // поля всех окон и цвет текста
 	g.BgColor = gocui.ColorDefault // фон
 
 	// Привязка клавиш для работы с интерфейсом из функции setupKeybindings()
@@ -95,36 +92,37 @@ func (app *App) layout(g *gocui.Gui) error {
 
 	// Окно для отображения списка доступных журналов
 	// Размеры окна (позиция слева, сверху, четверть от максимальной ширины, вся высота окна)
-	if v, err := g.SetView("services", 0, 0, maxX/4, maxY-1); err != nil {
+	if v, err := g.SetView("services", 0, 0, maxX/4, maxY-1, 0); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Title = "Services" // заголовок окна
 		v.Highlight = true   // выделение активного элемента
-
+		// Цветовая схема из форка awesome-gocui/gocui
+		v.FrameColor = gocui.ColorGreen // Цвет границ окна
+		v.TitleColor = gocui.ColorGreen // Цвет заголовка
 		v.SelBgColor = gocui.ColorGreen // Цвет фона при выборе в списке
 		v.SelFgColor = gocui.ColorBlack // Цвет текста
 		// v.BgColor = gocui.ColorRed      // Цвет текста
-		// v.FgColor = gocui.ColorYellow   // Цвет фона
-
+		// v.FgColor = gocui.ColorYellow   // Цвет фона внутри окна
 		v.Wrap = false           // отключаем перенос строк
 		v.Autoscroll = true      // включаем автопрокрутку
 		app.updateServicesList() // выводим список журналов в это окно
 	}
 
 	// Окно ввода текста для фильтрации
-	if v, err := g.SetView("filter", maxX/4+1, 0, maxX-1, 2); err != nil {
+	if v, err := g.SetView("filter", maxX/4+1, 0, maxX-1, 2, 0); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Title = "Filter"
 		v.Editable = true                   // включить окно редактируемым для ввода текста
-		v.Editor = app.createFilterEditor() // редактор для обработки ввода (удалить для fork)
+		v.Editor = app.createFilterEditor() // редактор для обработки ввода
 		v.Wrap = true
 	}
 
 	// Окно для вывода записей выбранного журнала
-	if v, err := g.SetView("logs", maxX/4+1, 3, maxX-1, maxY-1); err != nil {
+	if v, err := g.SetView("logs", maxX/4+1, 3, maxX-1, maxY-1, 0); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -376,10 +374,10 @@ func (app *App) createFilterEditor() gocui.Editor {
 			v.EditDelete(false)
 		// Перемещение курсора влево
 		case key == gocui.KeyArrowLeft:
-			v.MoveCursor(-1, 0, false)
+			v.MoveCursor(-1, 0)
 		// Перемещение курсора вправо
 		case key == gocui.KeyArrowRight:
-			v.MoveCursor(1, 0, false)
+			v.MoveCursor(1, 0)
 		}
 		// Обновляем текст в буфере
 		app.filterText = strings.TrimSpace(v.Buffer())
@@ -450,30 +448,33 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 		switch currentView.Name() {
 		// Если текущее окно services, переходим к filter
 		case "services":
-			selectServices.Title = "Services"
-			selectFilter.Title = "Filter 🔸"
-			selectLogs.Title = "Logs"
 			nextView = "filter"
+			selectServices.FrameColor = gocui.ColorDefault
+			selectServices.TitleColor = gocui.ColorDefault
+			selectFilter.FrameColor = gocui.ColorGreen
+			selectFilter.TitleColor = gocui.ColorGreen
+			selectLogs.FrameColor = gocui.ColorDefault
+			selectLogs.TitleColor = gocui.ColorDefault
 		case "filter":
-			selectServices.Title = "Services"
-			selectFilter.Title = "Filter"
-			selectLogs.Title = "Logs 🔸"
 			nextView = "logs"
+			selectServices.FrameColor = gocui.ColorDefault
+			selectServices.TitleColor = gocui.ColorDefault
+			selectFilter.FrameColor = gocui.ColorDefault
+			selectFilter.TitleColor = gocui.ColorDefault
+			selectLogs.FrameColor = gocui.ColorGreen
+			selectLogs.TitleColor = gocui.ColorGreen
 		case "logs":
-			selectServices.Title = "Services 🔸"
-			selectFilter.Title = "Filter"
-			selectLogs.Title = "Logs"
 			nextView = "services"
-		default:
-			selectServices.Title = "Services 🔸"
-			selectFilter.Title = "Filter"
-			selectLogs.Title = "Logs"
-			nextView = "services"
+			selectServices.FrameColor = gocui.ColorGreen
+			selectServices.TitleColor = gocui.ColorGreen
+			selectFilter.FrameColor = gocui.ColorDefault
+			selectFilter.TitleColor = gocui.ColorDefault
+			selectLogs.FrameColor = gocui.ColorDefault
+			selectLogs.TitleColor = gocui.ColorDefault
 		}
 	}
 	// Устанавливаем новое активное окно
 	if _, err := g.SetCurrentView(nextView); err != nil {
-		// if err := g.SetCurrentView(nextView); err != nil { // fork
 		return err
 	}
 	return nil
