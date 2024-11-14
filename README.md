@@ -1,7 +1,7 @@
 # lazyjournal
 
 <!--
-```
+```d
  /$$                                                            
 | $$                                                            
 | $$        /$$$$$$  /$$$$$$$$ /$$   /$$                        
@@ -24,17 +24,19 @@
 ```
 -->
 
-Terminal user interface for journactl written in [Go](https://github.com/golang/go) using the [GoCUI](https://github.com/jroimartin/gocui) library. Displays a list of all available system and user logs for quick viewing and filtering with regex support (like Grep).
+Terminal user interface for `journalctl` tool from [systemd](https://github.com/systemd/systemd), written in [Go](https://github.com/golang/go) with the [gocui](https://github.com/jroimartin/gocui) library.
+
+Displays a list of all available system and user logs for quick viewing and filtering with regex support (like Grep).
 
 This tool is inspired by [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
 
-### Install from source
+## Install from source
 
 Clone the repository, install dependencies from `go.mod` and run the project:
 
 ```shell
 git clone https://github.com/Lifailon/lazyjournal
-cd lazyjournal
+cd lazyjournal/src
 
 # snap install go
 # go version
