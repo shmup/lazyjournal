@@ -183,7 +183,7 @@ func (app *App) updateServicesList() {
 }
 
 // Функция для перемещения по списку журналов вниз
-func (app *App) nextService(g *gocui.Gui, v *gocui.View) error {
+func (app *App) nextService(g *gocui.Gui, v *gocui.View, step int) error {
 	// Обновляем текущее количество видимых строк в терминале (-1 заголовок)
 	_, viewHeight := v.Size()
 	app.maxVisibleServices = viewHeight - 1
@@ -194,17 +194,25 @@ func (app *App) nextService(g *gocui.Gui, v *gocui.View) error {
 	// Переходим к следующему, если текущий выбранный журнал не последний
 	if app.selectedJournal < len(app.journals)-1 {
 		// Увеличиваем индекс выбранного журнала
-		app.selectedJournal++
+		app.selectedJournal += step
+		// Проверяем, чтобы не выйти за пределы списка
+		if app.selectedJournal >= len(app.journals) {
+			app.selectedJournal = len(app.journals) - 1
+		}
 		// Проверяем, вышли ли за пределы видимой области (увеличиваем стартовую позицию видимости, только если дошли до 0 + maxVisibleServices)
 		if app.selectedJournal >= app.startServices+app.maxVisibleServices {
 			// Сдвигаем видимую область вниз
-			app.startServices++
+			app.startServices += step
+			// Проверяем, чтобы не выйти за пределы списка
+			if app.startServices > len(app.journals)-app.maxVisibleServices {
+				app.startServices = len(app.journals) - app.maxVisibleServices
+			}
 			// Обновляем отображение списка служб
 			app.updateServicesList()
 		}
 		// Если сдвинули видимую область, корректируем индекс
 		if app.selectedJournal < app.startServices+app.maxVisibleServices {
-			// Выбираем журнал по индексу по скорректированному индексу
+			// Выбираем журнал по скорректированному индексу
 			return app.selectServiceByIndex(app.selectedJournal - app.startServices)
 		}
 	}
@@ -212,7 +220,7 @@ func (app *App) nextService(g *gocui.Gui, v *gocui.View) error {
 }
 
 // Функция для перемещения по списку журналов вверх
-func (app *App) prevService(g *gocui.Gui, v *gocui.View) error {
+func (app *App) prevService(g *gocui.Gui, v *gocui.View, step int) error {
 	_, viewHeight := v.Size()
 	app.maxVisibleServices = viewHeight - 1
 	if len(app.journals) == 0 {
@@ -220,10 +228,17 @@ func (app *App) prevService(g *gocui.Gui, v *gocui.View) error {
 	}
 	// Переходим к предыдущему, если текущий выбранный журнал не первый
 	if app.selectedJournal > 0 {
-		app.selectedJournal--
+		app.selectedJournal -= step
+		// Если ушли в минус (за начало журнала), приводим к нулю
+		if app.selectedJournal < 0 {
+			app.selectedJournal = 0
+		}
 		// Проверяем, вышли ли за пределы видимой области
 		if app.selectedJournal < app.startServices {
-			app.startServices--
+			app.startServices -= step
+			if app.startServices < 0 {
+				app.startServices = 0
+			}
 			app.updateServicesList()
 		}
 		if app.selectedJournal >= app.startServices {
@@ -377,14 +392,21 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("services", gocui.KeyEnter, gocui.ModNone, app.selectService); err != nil {
 		return err
 	}
-	// Вниз (KeyArrowDown) для перемещения к следующей службе в списке (nextService)
-	if err := app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModNone, app.nextService); err != nil {
-		return err
-	}
+	// Вниз (KeyArrowDown) для перемещения к следующей службе в списке (функция nextService)
+	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextService(g, v, 1)
+	})
+	// Быстрое пролистывание (через 10 записей)
+	app.gui.SetKeybinding("services", gocui.KeyArrowRight, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error { // ModAlt
+		return app.nextService(g, v, 10)
+	})
 	// Вверх для перемещения к предыдущей службе в списке
-	if err := app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModNone, app.prevService); err != nil {
-		return err
-	}
+	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevService(g, v, 1)
+	})
+	app.gui.SetKeybinding("services", gocui.KeyArrowLeft, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevService(g, v, 10)
+	})
 	// Вниз для прокрутки вывода журнала вниз
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, app.scrollDownLogs); err != nil {
 		return err
@@ -398,17 +420,30 @@ func (app *App) setupKeybindings() error {
 
 // Функция для переключения окон через Tab
 func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
+	currentView := g.CurrentView()
+	var nextView string
 	// Начальное окно
-	nextView := "services"
-	// Если текущее окно services, переходим к filter
-	if v != nil && v.Name() == "services" {
-		nextView = "filter"
-	} else if v != nil && v.Name() == "filter" {
-		nextView = "logs"
+	if currentView == nil {
+		nextView = "services"
+	} else {
+		switch currentView.Name() {
+		// Если текущее окно services, переходим к filter
+		case "services":
+			nextView = "filter"
+		case "filter":
+			nextView = "logs"
+		case "logs":
+			nextView = "services"
+		default:
+			nextView = "services"
+		}
 	}
 	// Устанавливаем новое активное окно
-	_, err := g.SetCurrentView(nextView)
-	return err
+	if _, err := g.SetCurrentView(nextView); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Функция для выхода
