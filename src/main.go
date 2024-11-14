@@ -326,11 +326,24 @@ func (app *App) updateLogsView() {
 	}
 	// Очищаем окно для отображения новых строк
 	v.Clear()
-	// Определяем строки для отображения, начиная с позиции logScrollPos
-	linesToDisplay := app.filteredLogLines[app.logScrollPos:]
+	// Получаем размер окна
+	_, viewHeight := v.Size()
+	// Определяем количество строк для отображения, начиная с позиции logScrollPos
+	startLine := app.logScrollPos
+	endLine := startLine + viewHeight
+	if endLine > len(app.filteredLogLines) {
+		endLine = len(app.filteredLogLines)
+	}
 	// Проходим по отфильтрованным строкам и выводим их
-	for _, line := range linesToDisplay {
-		fmt.Fprintln(v, line) // Печатаем каждую строку
+	for i := startLine; i < endLine; i++ {
+		fmt.Fprintln(v, app.filteredLogLines[i])
+	}
+	// Вычисляем процент прокрутки и обновляем заголовок
+	if len(app.filteredLogLines) > 0 {
+		percentage := (startLine * 100) / len(app.filteredLogLines)
+		v.Title = fmt.Sprintf("Logs: %d%% (%d/%d)", percentage, startLine+1, len(app.filteredLogLines))
+	} else {
+		v.Title = "Logs (Scroll Position: 0/0, 0%)" // Если нет строк, устанавливаем 0%
 	}
 }
 

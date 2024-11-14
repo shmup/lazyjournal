@@ -24,9 +24,9 @@
 ```
 -->
 
-Terminal user interface for `journalctl` (tool from [systemd](https://github.com/systemd/systemd)), written in [Go](https://github.com/golang/go) with the [gocui](https://github.com/jroimartin/gocui) library.
+Terminal user interface for `journalctl` (tool for reading logs from [systemd](https://github.com/systemd/systemd)), written in Go with the [gocui](https://github.com/jroimartin/gocui) (fork [awesome-gocui](https://github.com/awesome-gocui/gocui)) library.
 
-Displays a list of all available system and user logs for quick viewing and filtering with regex support (like grep).
+Displays a list of all available system and user journals for quick viewing and filtering with regex support (like grep).
 
 This tool is inspired by and with love for [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
 
