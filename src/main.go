@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/jroimartin/gocui"
+	// "github.com/jesseduffield/gocui"
+	// "github.com/awesome-gocui/gocui"
 )
 
 // Структура хранения информации о журналах
@@ -46,15 +48,18 @@ func main() {
 	if err != nil {
 		log.Panicln(err)
 	}
+	// g := gocui.NewGui() // fork
 	// Закрываем GUI после завершения
 	defer g.Close()
 
 	app.gui = g
-	g.SetManagerFunc(app.layout) // функция, которая будет вызываться при обновлении интерфейса
-	g.Mouse = true               // включаем поддержку мыши для удобного управления
+	// Функция, которая будет вызываться при обновлении интерфейса
+	g.SetManagerFunc(app.layout)
+	// g.SetCurrentView("viewName") // fork
+	g.Mouse = true // включить поддержку мыши
 
-	// Устанавливаем цветовую схему GUI (ColorBlack, ColorGreen, ColorRed, ColorYellow, ColorBlue, ColorCyan, ColorMagenta)
-	g.FgColor = gocui.ColorWhite   // поля окон и цвет текста
+	// Цветовая схема GUI (ColorBlack, ColorGreen, ColorRed, ColorYellow, ColorBlue, ColorCyan, ColorMagenta)
+	g.FgColor = gocui.ColorDefault // поля окон и цвет текста
 	g.BgColor = gocui.ColorDefault // фон
 
 	// Привязка клавиш для работы с интерфейсом из функции setupKeybindings()
@@ -75,7 +80,7 @@ func main() {
 
 	// Загружаем список доступных журналов
 	app.loadServices()
-	// Устанавливаем фокус на окно с журналами
+	// Устанавливаем фокус на окно с журналами по умолчанию
 	g.SetCurrentView("services")
 
 	// Запус GUI
@@ -89,17 +94,22 @@ func (app *App) layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size() // Получаем текущий размер интерфейса терминала
 
 	// Окно для отображения списка доступных журналов
+	// Размеры окна (позиция слева, сверху, четверть от максимальной ширины, вся высота окна)
 	if v, err := g.SetView("services", 0, 0, maxX/4, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Services"            // заголовок окна
-		v.Highlight = true              // выделение активного элемента
-		v.SelBgColor = gocui.ColorGreen // Цвет фона при выборе
-		v.SelFgColor = gocui.ColorBlack // Цвет текста при выборе
-		v.Wrap = false                  // отключаем перенос строк
-		v.Autoscroll = true             // включаем автопрокрутку
-		app.updateServicesList()        // выводим список журналов в это окно
+		v.Title = "Services" // заголовок окна
+		v.Highlight = true   // выделение активного элемента
+
+		v.SelBgColor = gocui.ColorGreen // Цвет фона при выборе в списке
+		v.SelFgColor = gocui.ColorBlack // Цвет текста
+		// v.BgColor = gocui.ColorRed      // Цвет текста
+		// v.FgColor = gocui.ColorYellow   // Цвет фона
+
+		v.Wrap = false           // отключаем перенос строк
+		v.Autoscroll = true      // включаем автопрокрутку
+		app.updateServicesList() // выводим список журналов в это окно
 	}
 
 	// Окно ввода текста для фильтрации
@@ -109,7 +119,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		}
 		v.Title = "Filter"
 		v.Editable = true                   // включить окно редактируемым для ввода текста
-		v.Editor = app.createFilterEditor() // редактор для обработки ввода
+		v.Editor = app.createFilterEditor() // редактор для обработки ввода (удалить для fork)
 		v.Wrap = true
 	}
 
@@ -392,7 +402,7 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("services", gocui.KeyEnter, gocui.ModNone, app.selectService); err != nil {
 		return err
 	}
-	// Вниз (KeyArrowDown) для перемещения к следующей службе в списке (функция nextService)
+	// Вниз (KeyArrowDown) для перемещения к следующей службе в списке журналов (функция nextService)
 	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(g, v, 1)
 	})
@@ -400,18 +410,17 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("services", gocui.KeyArrowRight, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error { // ModAlt
 		return app.nextService(g, v, 10)
 	})
-	// Вверх для перемещения к предыдущей службе в списке
+	// Пролистывание вверх
 	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(g, v, 1)
 	})
 	app.gui.SetKeybinding("services", gocui.KeyArrowLeft, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(g, v, 10)
 	})
-	// Вниз для прокрутки вывода журнала вниз
+	// Пролистывание вывода журнала
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, app.scrollDownLogs); err != nil {
 		return err
 	}
-	// Вверх для прокрутки вывода журнала вверх
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModNone, app.scrollUpLogs); err != nil {
 		return err
 	}
@@ -420,6 +429,18 @@ func (app *App) setupKeybindings() error {
 
 // Функция для переключения окон через Tab
 func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
+	selectServices, err := g.View("services")
+	if err != nil {
+		log.Panicln(err)
+	}
+	selectFilter, err := g.View("filter")
+	if err != nil {
+		log.Panicln(err)
+	}
+	selectLogs, err := g.View("logs")
+	if err != nil {
+		log.Panicln(err)
+	}
 	currentView := g.CurrentView()
 	var nextView string
 	// Начальное окно
@@ -429,20 +450,32 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 		switch currentView.Name() {
 		// Если текущее окно services, переходим к filter
 		case "services":
+			selectServices.Title = "Services"
+			selectFilter.Title = "Filter 🔸"
+			selectLogs.Title = "Logs"
 			nextView = "filter"
 		case "filter":
+			selectServices.Title = "Services"
+			selectFilter.Title = "Filter"
+			selectLogs.Title = "Logs 🔸"
 			nextView = "logs"
 		case "logs":
+			selectServices.Title = "Services 🔸"
+			selectFilter.Title = "Filter"
+			selectLogs.Title = "Logs"
 			nextView = "services"
 		default:
+			selectServices.Title = "Services 🔸"
+			selectFilter.Title = "Filter"
+			selectLogs.Title = "Logs"
 			nextView = "services"
 		}
 	}
 	// Устанавливаем новое активное окно
 	if _, err := g.SetCurrentView(nextView); err != nil {
+		// if err := g.SetCurrentView(nextView); err != nil { // fork
 		return err
 	}
-
 	return nil
 }
 
