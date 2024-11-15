@@ -191,7 +191,7 @@ func (app *App) updateServicesList() {
 }
 
 // Функция для перемещения по списку журналов вниз
-func (app *App) nextService(g *gocui.Gui, v *gocui.View, step int) error {
+func (app *App) nextService(v *gocui.View, step int) error {
 	// Обновляем текущее количество видимых строк в терминале (-1 заголовок)
 	_, viewHeight := v.Size()
 	app.maxVisibleServices = viewHeight - 1
@@ -228,7 +228,7 @@ func (app *App) nextService(g *gocui.Gui, v *gocui.View, step int) error {
 }
 
 // Функция для перемещения по списку журналов вверх
-func (app *App) prevService(g *gocui.Gui, v *gocui.View, step int) error {
+func (app *App) prevService(v *gocui.View, step int) error {
 	_, viewHeight := v.Size()
 	app.maxVisibleServices = viewHeight - 1
 	if len(app.journals) == 0 {
@@ -343,16 +343,16 @@ func (app *App) updateLogsView() {
 		percentage := (startLine * 100) / len(app.filteredLogLines)
 		v.Title = fmt.Sprintf("Logs: %d%% (%d/%d)", percentage, startLine+1, len(app.filteredLogLines))
 	} else {
-		v.Title = "Logs (Scroll Position: 0/0, 0%)" // Если нет строк, устанавливаем 0%
+		v.Title = "Logs: 0% (0/0)" // Если нет строк, устанавливаем 0%
 	}
 }
 
 // Функция для скроллинга вниз
-func (app *App) scrollDownLogs(g *gocui.Gui, v *gocui.View) error {
+func (app *App) scrollDownLogs(step int) error {
 	// Увеличиваем позицию прокрутки на одну строку, если не достигнут конец списка
 	if app.logScrollPos < len(app.filteredLogLines)-1 {
 		// Увеличиваем позицию прокрутки
-		app.logScrollPos++
+		app.logScrollPos += step
 		// Вызываем функцию для обновления отображения журнала
 		app.updateLogsView()
 	}
@@ -360,10 +360,10 @@ func (app *App) scrollDownLogs(g *gocui.Gui, v *gocui.View) error {
 }
 
 // Функция для скроллинга вверх
-func (app *App) scrollUpLogs(g *gocui.Gui, v *gocui.View) error {
+func (app *App) scrollUpLogs(step int) error {
 	// Уменьшаем позицию прокрутки, если текущая позиция больше нуля
 	if app.logScrollPos > 0 {
-		app.logScrollPos--
+		app.logScrollPos -= step
 		app.updateLogsView()
 	}
 	return nil
@@ -409,32 +409,43 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("", gocui.KeyTab, gocui.ModNone, app.nextView); err != nil {
 		return err
 	}
+	// Shift+Tab
+	if err := app.gui.SetKeybinding("", gocui.KeyTab, gocui.ModShift, app.backView); err != nil {
+		return err
+	}
 	// Enter для выбора службы и загрузки журналов
 	if err := app.gui.SetKeybinding("services", gocui.KeyEnter, gocui.ModNone, app.selectService); err != nil {
 		return err
 	}
 	// Вниз (KeyArrowDown) для перемещения к следующей службе в списке журналов (функция nextService)
 	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextService(g, v, 1)
+		return app.nextService(v, 1)
 	})
-	// Быстрое пролистывание (через 10 записей)
-	app.gui.SetKeybinding("services", gocui.KeyArrowRight, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error { // ModAlt
-		return app.nextService(g, v, 10)
+	// Быстрое пролистывание (через 10 записей) Shift+Down
+	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextService(v, 10)
 	})
 	// Пролистывание вверх
 	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevService(g, v, 1)
+		return app.prevService(v, 1)
 	})
-	app.gui.SetKeybinding("services", gocui.KeyArrowLeft, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevService(g, v, 10)
+	// Shift+Up
+	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevService(v, 10)
 	})
 	// Пролистывание вывода журнала
-	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, app.scrollDownLogs); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModNone, app.scrollUpLogs); err != nil {
-		return err
-	}
+	app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollDownLogs(1)
+	})
+	app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollDownLogs(10)
+	})
+	app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollUpLogs(1)
+	})
+	app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollUpLogs(10)
+	})
 	return nil
 }
 
@@ -487,6 +498,58 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 		}
 	}
 	// Устанавливаем новое активное окно
+	if _, err := g.SetCurrentView(nextView); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Функция для обратного переключения окон через Shift+Tab
+func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
+	selectServices, err := g.View("services")
+	if err != nil {
+		log.Panicln(err)
+	}
+	selectFilter, err := g.View("filter")
+	if err != nil {
+		log.Panicln(err)
+	}
+	selectLogs, err := g.View("logs")
+	if err != nil {
+		log.Panicln(err)
+	}
+	currentView := g.CurrentView()
+	var nextView string
+	if currentView == nil {
+		nextView = "services"
+	} else {
+		switch currentView.Name() {
+		case "services":
+			nextView = "logs"
+			selectServices.FrameColor = gocui.ColorDefault
+			selectServices.TitleColor = gocui.ColorDefault
+			selectFilter.FrameColor = gocui.ColorDefault
+			selectFilter.TitleColor = gocui.ColorDefault
+			selectLogs.FrameColor = gocui.ColorGreen
+			selectLogs.TitleColor = gocui.ColorGreen
+		case "logs":
+			nextView = "filter"
+			selectServices.FrameColor = gocui.ColorDefault
+			selectServices.TitleColor = gocui.ColorDefault
+			selectFilter.FrameColor = gocui.ColorGreen
+			selectFilter.TitleColor = gocui.ColorGreen
+			selectLogs.FrameColor = gocui.ColorDefault
+			selectLogs.TitleColor = gocui.ColorDefault
+		case "filter":
+			nextView = "services"
+			selectServices.FrameColor = gocui.ColorGreen
+			selectServices.TitleColor = gocui.ColorGreen
+			selectFilter.FrameColor = gocui.ColorDefault
+			selectFilter.TitleColor = gocui.ColorDefault
+			selectLogs.FrameColor = gocui.ColorDefault
+			selectLogs.TitleColor = gocui.ColorDefault
+		}
+	}
 	if _, err := g.SetCurrentView(nextView); err != nil {
 		return err
 	}
