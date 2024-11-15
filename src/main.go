@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math"
 	"os/exec"
 	"sort"
 	"strings"
@@ -340,19 +341,34 @@ func (app *App) updateLogsView() {
 	}
 	// Вычисляем процент прокрутки и обновляем заголовок
 	if len(app.filteredLogLines) > 0 {
-		percentage := (startLine * 100) / len(app.filteredLogLines)
-		v.Title = fmt.Sprintf("Logs: %d%% (%d/%d)", percentage, startLine+1, len(app.filteredLogLines))
+		// Стартовая позиция + размер текущего вывода логов и округляем в большую сторону (math)
+		percentage := int(math.Ceil(float64((startLine+viewHeight)*100) / float64(len(app.filteredLogLines))))
+		if percentage > 100 {
+			v.Title = fmt.Sprintf("Logs: 100%% (%d)", len(app.filteredLogLines))
+		} else {
+			v.Title = fmt.Sprintf("Logs: %d%% (%d/%d)", percentage, startLine+1+viewHeight, len(app.filteredLogLines))
+		}
 	} else {
-		v.Title = "Logs: 0% (0/0)" // Если нет строк, устанавливаем 0%
+		v.Title = "Logs: 0% (0)" // Если нет строк, устанавливаем 0%
 	}
 }
 
 // Функция для скроллинга вниз
 func (app *App) scrollDownLogs(step int) error {
-	// Увеличиваем позицию прокрутки на одну строку, если не достигнут конец списка
-	if app.logScrollPos < len(app.filteredLogLines)-1 {
+	v, err := app.gui.View("logs")
+	if err != nil {
+		return err
+	}
+	// Получаем высоту окна, что бы не опускать лог с пустыми строками
+	_, viewHeight := v.Size()
+	// Проверяем, что размер журнала больше размера окна
+	if len(app.filteredLogLines) > viewHeight {
 		// Увеличиваем позицию прокрутки
 		app.logScrollPos += step
+		// Если достигнут конец списка, останавливаем на максимальной длинне с учетом высоты окна
+		if app.logScrollPos > len(app.filteredLogLines)-1-viewHeight {
+			app.logScrollPos = len(app.filteredLogLines) - 1 - viewHeight
+		}
 		// Вызываем функцию для обновления отображения журнала
 		app.updateLogsView()
 	}
@@ -361,11 +377,11 @@ func (app *App) scrollDownLogs(step int) error {
 
 // Функция для скроллинга вверх
 func (app *App) scrollUpLogs(step int) error {
-	// Уменьшаем позицию прокрутки, если текущая позиция больше нуля
-	if app.logScrollPos > 0 {
-		app.logScrollPos -= step
-		app.updateLogsView()
+	app.logScrollPos -= step
+	if app.logScrollPos < 0 {
+		app.logScrollPos = 0
 	}
+	app.updateLogsView()
 	return nil
 }
 
