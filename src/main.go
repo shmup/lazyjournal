@@ -21,12 +21,13 @@ type Journal struct {
 // Структура основного приложения (графический интерфейс и данные журналов)
 type App struct {
 	gui             *gocui.Gui // графический интерфейс (gocui)
+	selectUnits     string     // фиксируем, какой список журналов выводить
 	journals        []Journal  // список (массив) журналов для отображения
 	selectedJournal int        // индекс выбранного журнала
 
-	maxVisibleServices int // Максимальное количество видимых элементов в окне списка служб
-	startServices      int // Индекс первого видимого элемента
-	endServices        int // Индекс последнего видимого элемента
+	maxVisibleServices int // максимальное количество видимых элементов в окне списка служб
+	startServices      int // индекс первого видимого элемента
+	endServices        int // индекс последнего видимого элемента
 
 	filterText       string   // текст для фильтрации записей журнала
 	currentLogLines  []string // набор строк (срез) для хранения журнала без фильтрации
@@ -43,7 +44,7 @@ func main() {
 	}
 
 	// Создаем GUI
-	g, err := gocui.NewGui(gocui.OutputNormal, true)
+	g, err := gocui.NewGui(gocui.OutputNormal, true) // 2-й параметр для форка
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -76,8 +77,10 @@ func main() {
 		app.maxVisibleServices = viewHeight - 1
 	}
 
-	// Загружаем список доступных журналов
-	app.loadServices()
+	// Список журналов по умолчанию
+	app.selectUnits = "UNIT" // "USER_UNIT"
+	// Загрузка списков журналов
+	app.loadServices(app.selectUnits)
 	// Устанавливаем фокус на окно с журналами по умолчанию
 	g.SetCurrentView("services")
 
@@ -87,18 +90,18 @@ func main() {
 	}
 }
 
-// Функция для определения структуры интерфейса (окон) GUI
+// Структура интерфейса окон GUI
 func (app *App) layout(g *gocui.Gui) error {
-	maxX, maxY := g.Size() // Получаем текущий размер интерфейса терминала
-
-	// Окно для отображения списка доступных журналов
-	// Размеры окна (позиция слева, сверху, четверть от максимальной ширины, вся высота окна)
-	if v, err := g.SetView("services", 0, 0, maxX/4, maxY-1, 0); err != nil {
+	maxX, maxY := g.Size()  // Получаем текущий размер интерфейса терминала (ширина, высота)
+	panelHeight := maxY / 3 // Высота каждой панели
+	// Окно для отображения списка доступных журналов (UNIT)
+	// Размеры окна: заголовок, отступ слева, отступ сверху, ширина, высота, 5-й параметр из форка для продолжение окна (2)
+	if v, err := g.SetView("services", 0, 0, maxX/4-1, panelHeight-1, 0); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Services" // заголовок окна
-		v.Highlight = true   // выделение активного элемента
+		v.Title = "Units"  // заголовок окна
+		v.Highlight = true // выделение активного элемента
 		// Цветовая схема из форка awesome-gocui/gocui
 		v.FrameColor = gocui.ColorGreen // Цвет границ окна
 		v.TitleColor = gocui.ColorGreen // Цвет заголовка
@@ -109,6 +112,32 @@ func (app *App) layout(g *gocui.Gui) error {
 		v.Wrap = false           // отключаем перенос строк
 		v.Autoscroll = true      // включаем автопрокрутку
 		app.updateServicesList() // выводим список журналов в это окно
+	}
+
+	// Окно для списка из /var/log
+	if v, err := g.SetView("varLogs", 0, panelHeight, maxX/4-1, 2*panelHeight-1, 0); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Var logs"
+		v.Highlight = true
+		v.SelBgColor = gocui.ColorGreen
+		v.SelFgColor = gocui.ColorBlack
+		v.Wrap = false
+		v.Autoscroll = true
+	}
+
+	// Окно для списка контейнеров Docker
+	if v, err := g.SetView("docker", 0, 2*panelHeight, maxX/4-1, maxY-1, 0); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Docker containers"
+		v.Highlight = true
+		v.SelBgColor = gocui.ColorGreen
+		v.SelFgColor = gocui.ColorBlack
+		v.Wrap = false
+		v.Autoscroll = true
 	}
 
 	// Окно ввода текста для фильтрации
@@ -143,9 +172,11 @@ func (app *App) layout(g *gocui.Gui) error {
 	return nil
 }
 
+// ---------------------------------------- journalctl ----------------------------------------
+
 // Функция для загрузки списка журналов служб из journalctl
-func (app *App) loadServices() {
-	cmd := exec.Command("journalctl", "--no-pager", "-F", "UNIT")
+func (app *App) loadServices(journalName string) {
+	cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
 	output, err := cmd.Output()
 	if err != nil {
 		log.Printf("Error getting services: %v", err)
@@ -174,6 +205,7 @@ func (app *App) loadServices() {
 
 // Функция для обновления окна со списком служб
 func (app *App) updateServicesList() {
+	// Выбираем окно для заполнения в зависимости от используемого журнала
 	v, err := app.gui.View("services")
 	if err != nil {
 		return
@@ -303,6 +335,8 @@ func (app *App) loadJournalLogs(serviceName string) {
 	app.applyFilter()
 }
 
+// ---------------------------------------- Filter/Logs ----------------------------------------
+
 // Функция для фильтрации записей текущего журнала
 func (app *App) applyFilter() {
 	app.filteredLogLines = make([]string, 0)
@@ -403,7 +437,7 @@ func (app *App) createFilterEditor() gocui.Editor {
 			v.EditDelete(false)
 		// Перемещение курсора влево
 		case key == gocui.KeyArrowLeft:
-			v.MoveCursor(-1, 0)
+			v.MoveCursor(-1, 0) // удалить 3-й булевой параметр для форка
 		// Перемещение курсора вправо
 		case key == gocui.KeyArrowRight:
 			v.MoveCursor(1, 0)
@@ -414,6 +448,8 @@ func (app *App) createFilterEditor() gocui.Editor {
 		app.applyFilter()
 	})
 }
+
+// ---------------------------------------- Binding ----------------------------------------
 
 // Функция для биндинга клавиш
 func (app *App) setupKeybindings() error {
@@ -426,9 +462,9 @@ func (app *App) setupKeybindings() error {
 		return err
 	}
 	// Shift+Tab
-	if err := app.gui.SetKeybinding("", gocui.KeyTab, gocui.ModShift, app.backView); err != nil {
-		return err
-	}
+	// if err := app.gui.SetKeybinding("", gocui.KeyTab, gocui.ModShift, app.backView); err != nil {
+	// 	return err
+	// }
 	// Enter для выбора службы и загрузки журналов
 	if err := app.gui.SetKeybinding("services", gocui.KeyEnter, gocui.ModNone, app.selectService); err != nil {
 		return err
@@ -471,6 +507,14 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		log.Panicln(err)
 	}
+	selectVarLog, err := g.View("varLogs")
+	if err != nil {
+		log.Panicln(err)
+	}
+	selectDocker, err := g.View("docker")
+	if err != nil {
+		log.Panicln(err)
+	}
 	selectFilter, err := g.View("filter")
 	if err != nil {
 		log.Panicln(err)
@@ -488,9 +532,37 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 		switch currentView.Name() {
 		// Если текущее окно services, переходим к filter
 		case "services":
+			nextView = "varLogs"
+			selectServices.FrameColor = gocui.ColorDefault
+			selectServices.TitleColor = gocui.ColorDefault
+			selectVarLog.FrameColor = gocui.ColorGreen
+			selectVarLog.TitleColor = gocui.ColorGreen
+			selectDocker.FrameColor = gocui.ColorDefault
+			selectDocker.TitleColor = gocui.ColorDefault
+			selectFilter.FrameColor = gocui.ColorDefault
+			selectFilter.TitleColor = gocui.ColorDefault
+			selectLogs.FrameColor = gocui.ColorDefault
+			selectLogs.TitleColor = gocui.ColorDefault
+		case "varLogs":
+			nextView = "docker"
+			selectServices.FrameColor = gocui.ColorDefault
+			selectServices.TitleColor = gocui.ColorDefault
+			selectVarLog.FrameColor = gocui.ColorDefault
+			selectVarLog.TitleColor = gocui.ColorDefault
+			selectDocker.FrameColor = gocui.ColorGreen
+			selectDocker.TitleColor = gocui.ColorGreen
+			selectFilter.FrameColor = gocui.ColorDefault
+			selectFilter.TitleColor = gocui.ColorDefault
+			selectLogs.FrameColor = gocui.ColorDefault
+			selectLogs.TitleColor = gocui.ColorDefault
+		case "docker":
 			nextView = "filter"
 			selectServices.FrameColor = gocui.ColorDefault
 			selectServices.TitleColor = gocui.ColorDefault
+			selectVarLog.FrameColor = gocui.ColorDefault
+			selectVarLog.TitleColor = gocui.ColorDefault
+			selectDocker.FrameColor = gocui.ColorDefault
+			selectDocker.TitleColor = gocui.ColorDefault
 			selectFilter.FrameColor = gocui.ColorGreen
 			selectFilter.TitleColor = gocui.ColorGreen
 			selectLogs.FrameColor = gocui.ColorDefault
@@ -499,6 +571,10 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			nextView = "logs"
 			selectServices.FrameColor = gocui.ColorDefault
 			selectServices.TitleColor = gocui.ColorDefault
+			selectVarLog.FrameColor = gocui.ColorDefault
+			selectVarLog.TitleColor = gocui.ColorDefault
+			selectDocker.FrameColor = gocui.ColorDefault
+			selectDocker.TitleColor = gocui.ColorDefault
 			selectFilter.FrameColor = gocui.ColorDefault
 			selectFilter.TitleColor = gocui.ColorDefault
 			selectLogs.FrameColor = gocui.ColorGreen
@@ -507,6 +583,10 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			nextView = "services"
 			selectServices.FrameColor = gocui.ColorGreen
 			selectServices.TitleColor = gocui.ColorGreen
+			selectVarLog.FrameColor = gocui.ColorDefault
+			selectVarLog.TitleColor = gocui.ColorDefault
+			selectDocker.FrameColor = gocui.ColorDefault
+			selectDocker.TitleColor = gocui.ColorDefault
 			selectFilter.FrameColor = gocui.ColorDefault
 			selectFilter.TitleColor = gocui.ColorDefault
 			selectLogs.FrameColor = gocui.ColorDefault
@@ -521,56 +601,56 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 }
 
 // Функция для обратного переключения окон через Shift+Tab
-func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
-	selectServices, err := g.View("services")
-	if err != nil {
-		log.Panicln(err)
-	}
-	selectFilter, err := g.View("filter")
-	if err != nil {
-		log.Panicln(err)
-	}
-	selectLogs, err := g.View("logs")
-	if err != nil {
-		log.Panicln(err)
-	}
-	currentView := g.CurrentView()
-	var nextView string
-	if currentView == nil {
-		nextView = "services"
-	} else {
-		switch currentView.Name() {
-		case "services":
-			nextView = "logs"
-			selectServices.FrameColor = gocui.ColorDefault
-			selectServices.TitleColor = gocui.ColorDefault
-			selectFilter.FrameColor = gocui.ColorDefault
-			selectFilter.TitleColor = gocui.ColorDefault
-			selectLogs.FrameColor = gocui.ColorGreen
-			selectLogs.TitleColor = gocui.ColorGreen
-		case "logs":
-			nextView = "filter"
-			selectServices.FrameColor = gocui.ColorDefault
-			selectServices.TitleColor = gocui.ColorDefault
-			selectFilter.FrameColor = gocui.ColorGreen
-			selectFilter.TitleColor = gocui.ColorGreen
-			selectLogs.FrameColor = gocui.ColorDefault
-			selectLogs.TitleColor = gocui.ColorDefault
-		case "filter":
-			nextView = "services"
-			selectServices.FrameColor = gocui.ColorGreen
-			selectServices.TitleColor = gocui.ColorGreen
-			selectFilter.FrameColor = gocui.ColorDefault
-			selectFilter.TitleColor = gocui.ColorDefault
-			selectLogs.FrameColor = gocui.ColorDefault
-			selectLogs.TitleColor = gocui.ColorDefault
-		}
-	}
-	if _, err := g.SetCurrentView(nextView); err != nil {
-		return err
-	}
-	return nil
-}
+// func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
+// 	selectServices, err := g.View("services")
+// 	if err != nil {
+// 		log.Panicln(err)
+// 	}
+// 	selectFilter, err := g.View("filter")
+// 	if err != nil {
+// 		log.Panicln(err)
+// 	}
+// 	selectLogs, err := g.View("logs")
+// 	if err != nil {
+// 		log.Panicln(err)
+// 	}
+// 	currentView := g.CurrentView()
+// 	var nextView string
+// 	if currentView == nil {
+// 		nextView = "services"
+// 	} else {
+// 		switch currentView.Name() {
+// 		case "services":
+// 			nextView = "logs"
+// 			selectServices.FrameColor = gocui.ColorDefault
+// 			selectServices.TitleColor = gocui.ColorDefault
+// 			selectFilter.FrameColor = gocui.ColorDefault
+// 			selectFilter.TitleColor = gocui.ColorDefault
+// 			selectLogs.FrameColor = gocui.ColorGreen
+// 			selectLogs.TitleColor = gocui.ColorGreen
+// 		case "logs":
+// 			nextView = "filter"
+// 			selectServices.FrameColor = gocui.ColorDefault
+// 			selectServices.TitleColor = gocui.ColorDefault
+// 			selectFilter.FrameColor = gocui.ColorGreen
+// 			selectFilter.TitleColor = gocui.ColorGreen
+// 			selectLogs.FrameColor = gocui.ColorDefault
+// 			selectLogs.TitleColor = gocui.ColorDefault
+// 		case "filter":
+// 			nextView = "services"
+// 			selectServices.FrameColor = gocui.ColorGreen
+// 			selectServices.TitleColor = gocui.ColorGreen
+// 			selectFilter.FrameColor = gocui.ColorDefault
+// 			selectFilter.TitleColor = gocui.ColorDefault
+// 			selectLogs.FrameColor = gocui.ColorDefault
+// 			selectLogs.TitleColor = gocui.ColorDefault
+// 		}
+// 	}
+// 	if _, err := g.SetCurrentView(nextView); err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
 
 // Функция для выхода
 func quit(g *gocui.Gui, v *gocui.View) error {
