@@ -3,11 +3,15 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"math"
+	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/awesome-gocui/gocui"
 )
@@ -18,16 +22,26 @@ type Journal struct {
 	content []string // содержимое журнала (массив строк)
 }
 
+type Logfile struct {
+	name string
+	path string
+}
+
 // Структура основного приложения (графический интерфейс и данные журналов)
 type App struct {
-	gui             *gocui.Gui // графический интерфейс (gocui)
-	selectUnits     string     // фиксируем, какой список журналов выводить
-	journals        []Journal  // список (массив) журналов для отображения
-	selectedJournal int        // индекс выбранного журнала
+	gui *gocui.Gui // графический интерфейс (gocui)
 
-	maxVisibleServices int // максимальное количество видимых элементов в окне списка служб
-	startServices      int // индекс первого видимого элемента
-	endServices        int // индекс последнего видимого элемента
+	selectUnits        string    // фиксируем, какой список журналов выводить
+	journals           []Journal // список (массив/срез) журналов для отображения
+	maxVisibleServices int       // максимальное количество видимых элементов в окне списка служб
+	startServices      int       // индекс первого видимого элемента
+	selectedJournal    int       // индекс выбранного журнала
+
+	logfiles        []Logfile
+	selectPath      string
+	maxVisibleFiles int
+	startFiles      int
+	selectedFile    int
 
 	filterText       string   // текст для фильтрации записей журнала
 	currentLogLines  []string // набор строк (срез) для хранения журнала без фильтрации
@@ -38,9 +52,10 @@ type App struct {
 func main() {
 	app := &App{
 		journals:        make([]Journal, 0), // инициализация списка журналов (пустой массив)
+		startServices:   0,                  // Начальная позиция списка юнитов
 		selectedJournal: 0,                  // начальный индекс выбранного журнала
-		startServices:   0,
-		endServices:     0,
+		startFiles:      0,
+		selectedFile:    0,
 	}
 
 	// Создаем GUI
@@ -66,7 +81,7 @@ func main() {
 		log.Panicln(err)
 	}
 
-	// Выполняем layout для инициализации окна services
+	// Выполняем layout для инициализации интерфейса
 	if err := app.layout(g); err != nil {
 		log.Panicln(err)
 	}
@@ -81,8 +96,17 @@ func main() {
 	app.selectUnits = "UNIT" // "USER_UNIT"
 	// Загрузка списков журналов
 	app.loadServices(app.selectUnits)
+
 	// Устанавливаем фокус на окно с журналами по умолчанию
 	g.SetCurrentView("services")
+
+	if v, err := g.View("varLogs"); err == nil {
+		_, viewHeight := v.Size()
+		app.maxVisibleFiles = viewHeight - 1
+	}
+
+	app.selectPath = "/var/log/"
+	app.loadFiles(app.selectPath)
 
 	// Запус GUI
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
@@ -100,8 +124,8 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Units"  // заголовок окна
-		v.Highlight = true // выделение активного элемента
+		v.Title = "System units" // заголовок окна
+		v.Highlight = true       // выделение активного элемента
 		// Цветовая схема из форка awesome-gocui/gocui
 		v.FrameColor = gocui.ColorGreen // Цвет границ окна
 		v.TitleColor = gocui.ColorGreen // Цвет заголовка
@@ -125,6 +149,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		v.SelFgColor = gocui.ColorBlack
 		v.Wrap = false
 		v.Autoscroll = true
+		app.updateLogsList()
 	}
 
 	// Окно для списка контейнеров Docker
@@ -251,7 +276,7 @@ func (app *App) nextService(v *gocui.View, step int) error {
 			// Обновляем отображение списка служб
 			app.updateServicesList()
 		}
-		// Если сдвинули видимую область, корректируем индекс
+		// Если сдвинули видимую область, корректируем индекс для смещения курсора в интерфейсе
 		if app.selectedJournal < app.startServices+app.maxVisibleServices {
 			// Выбираем журнал по скорректированному индексу
 			return app.selectServiceByIndex(app.selectedJournal - app.startServices)
@@ -289,7 +314,7 @@ func (app *App) prevService(v *gocui.View, step int) error {
 	return nil
 }
 
-// Функция для выбора журнала по индексу
+// Функция для визуального выбора журнала по индексу (смещение курсора выделения)
 func (app *App) selectServiceByIndex(index int) error {
 	// Получаем доступ к представлению списка служб
 	v, err := app.gui.View("services")
@@ -332,6 +357,218 @@ func (app *App) loadJournalLogs(serviceName string) {
 	// Очищаем поле ввода для фильтрации
 	app.filterText = ""
 	// Применяем текущий фильтр к записям для обновления вывода
+	app.applyFilter()
+}
+
+// ---------------------------------------- Var Logs ----------------------------------------
+
+func (app *App) loadFiles(logPath string) {
+	cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log", "-o", "-name", "*.gz")
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("Error getting log files: %v", err)
+		return
+	}
+	serviceMap := make(map[string]bool)
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		// Получаем строку полного пути
+		logFullPath := scanner.Text()
+		// Удаляем префикс пути и расширение файла в конце
+		logName := strings.TrimPrefix(logFullPath, logPath)
+		logName = strings.TrimSuffix(logName, ".log")
+		logName = strings.TrimSuffix(logName, ".gz")
+		logName = strings.ReplaceAll(logName, "/", " ")
+		logName = strings.ReplaceAll(logName, ".log.", " ")
+		// Получаем дату изменения файла
+		// 	cmd := exec.Command("bash", "-c", "stat --format='%y' /var/log/apache2/access.log | awk '{print $1}' | awk -F- '{print $3\".\"$2\".\"$1}'")
+		// Получаем информацию о файле
+		fileInfo, err := os.Stat(logFullPath)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return
+		}
+		// Получаем дату изменения
+		modTime := fileInfo.ModTime()
+		// Форматирование даты в формат DD.MM.YYYY
+		formattedDate := modTime.Format("02.01.2006")
+		// Проверяем, если такого имени ещё нет
+		if logName != "" && !serviceMap[logName] {
+			serviceMap[logName] = true
+			// Добавляем в список
+			app.logfiles = append(app.logfiles, Logfile{
+				name: "[" + formattedDate + "] " + logName,
+				path: logFullPath,
+			})
+		}
+	}
+	// Сортируем по дате
+	sort.Slice(app.logfiles, func(i, j int) bool {
+		// Извлечение дат из имени
+		layout := "02.01.2006"
+		dateI, _ := time.Parse(layout, extractDate(app.logfiles[i].name))
+		dateJ, _ := time.Parse(layout, extractDate(app.logfiles[j].name))
+		// return dateI.Before(dateJ)
+		// Сортировка в обратном порядке
+		return dateI.After(dateJ)
+	})
+
+	// Обновляем отображение списка журналов
+	app.updateLogsList()
+}
+
+// Функция для извлечения первой втречающейся даты в формате DD.MM.YYYY
+func extractDate(name string) string {
+	re := regexp.MustCompile(`\d{2}\.\d{2}\.\d{4}`)
+	return re.FindString(name)
+}
+
+func (app *App) updateLogsList() {
+	v, err := app.gui.View("varLogs")
+	if err != nil {
+		return
+	}
+	v.Clear()
+	visibleEnd := app.startFiles + app.maxVisibleFiles
+	if visibleEnd > len(app.logfiles) {
+		visibleEnd = len(app.logfiles)
+	}
+	for i := app.startFiles; i < visibleEnd; i++ {
+		fmt.Fprintln(v, app.logfiles[i].name)
+	}
+}
+
+func (app *App) nextFileName(v *gocui.View, step int) error {
+	_, viewHeight := v.Size()
+	app.maxVisibleFiles = viewHeight - 1
+	if len(app.logfiles) == 0 {
+		return nil
+	}
+	if app.selectedFile < len(app.logfiles)-1 {
+		app.selectedFile += step
+		if app.selectedFile >= len(app.logfiles) {
+			app.selectedFile = len(app.logfiles) - 1
+		}
+		if app.selectedFile >= app.startFiles+app.maxVisibleFiles {
+			app.startFiles += step
+			if app.startFiles > len(app.logfiles)-app.maxVisibleFiles {
+				app.startFiles = len(app.logfiles) - app.maxVisibleFiles
+			}
+			app.updateLogsList()
+		}
+		if app.selectedFile < app.startFiles+app.maxVisibleFiles {
+			return app.selectFileByIndex(app.selectedFile - app.startFiles)
+		}
+	}
+	return nil
+}
+
+func (app *App) prevFileName(v *gocui.View, step int) error {
+	_, viewHeight := v.Size()
+	app.maxVisibleFiles = viewHeight - 1
+	if len(app.logfiles) == 0 {
+		return nil
+	}
+	if app.selectedFile > 0 {
+		app.selectedFile -= step
+		if app.selectedFile < 0 {
+			app.selectedFile = 0
+		}
+		if app.selectedFile < app.startFiles {
+			app.startFiles -= step
+			if app.startFiles < 0 {
+				app.startFiles = 0
+			}
+			app.updateLogsList()
+		}
+		if app.selectedFile >= app.startFiles {
+			return app.selectFileByIndex(app.selectedFile - app.startFiles)
+		}
+	}
+	return nil
+}
+
+func (app *App) selectFileByIndex(index int) error {
+	v, err := app.gui.View("varLogs")
+	if err != nil {
+		return err
+	}
+	v.SetCursor(0, index)
+	return nil
+}
+
+func (app *App) selectFile(g *gocui.Gui, v *gocui.View) error {
+	if v == nil || len(app.logfiles) == 0 {
+		return nil
+	}
+	_, cy := v.Cursor()
+	line, err := v.Line(cy)
+	if err != nil {
+		return err
+	}
+	app.loadFileLogs(strings.TrimSpace(line))
+	return nil
+}
+
+func (app *App) loadFileLogs(logName string) {
+	// Парсим имя обратно
+	// logName = strings.ReplaceAll(logName, " ", "/")
+	// logFullPath := app.selectPath + logName + ".log"
+	// Получаем путь из массива по имени
+	var logFullPath string
+	for _, logfile := range app.logfiles {
+		if logfile.name == logName {
+			logFullPath = logfile.path
+		}
+	}
+	// Читаем архивные логи (decompress + stdout)
+	// gzip -dc access.log.10.gz
+	// zcat access.log.10.gz
+	// gunzip -c access.log.10.gz
+	if strings.HasSuffix(logFullPath, ".gz") {
+		cmdGzip := exec.Command("gzip", "-dc", logFullPath)
+		cmdTail := exec.Command("tail", "-n", "5000")
+		pipe, err := cmdGzip.StdoutPipe()
+		if err != nil {
+			log.Fatalf("Error creating pipe: %v", err)
+		}
+		// Стандартный вывод gzip передаем в stdin tail
+		cmdTail.Stdin = pipe
+		out, err := cmdTail.StdoutPipe()
+		if err != nil {
+			log.Fatalf("Error creating stdout pipe for tail: %v", err)
+		}
+		// Запуск команд
+		if err := cmdGzip.Start(); err != nil {
+			log.Fatalf("Error starting gzip: %v", err)
+		}
+		if err := cmdTail.Start(); err != nil {
+			log.Fatalf("Error starting tail: %v", err)
+		}
+		// Чтение вывода
+		output, err := io.ReadAll(out)
+		if err != nil {
+			log.Fatalf("Error reading output from tail: %v", err)
+		}
+		// Ожидание завершения команд
+		if err := cmdGzip.Wait(); err != nil {
+			log.Fatalf("Error waiting for gzip: %v", err)
+		}
+		if err := cmdTail.Wait(); err != nil {
+			log.Fatalf("Error waiting for tail: %v", err)
+		}
+		// Выводим содержимое
+		app.currentLogLines = strings.Split(string(output), "\n")
+	} else {
+		cmd := exec.Command("tail", logFullPath, "-n", "5000")
+		output, err := cmd.Output()
+		if err != nil {
+			log.Printf("Error getting logs: %v", err)
+			return
+		}
+		app.currentLogLines = strings.Split(string(output), "\n")
+	}
+	app.filterText = ""
 	app.applyFilter()
 }
 
@@ -383,7 +620,7 @@ func (app *App) updateLogsView() {
 			v.Title = fmt.Sprintf("Logs: %d%% (%d/%d)", percentage, startLine+1+viewHeight, len(app.filteredLogLines))
 		}
 	} else {
-		v.Title = "Logs: 0% (0)" // Если нет строк, устанавливаем 0%
+		v.Title = "Logs: 0% (0)"
 	}
 }
 
@@ -469,21 +706,36 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("services", gocui.KeyEnter, gocui.ModNone, app.selectService); err != nil {
 		return err
 	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyEnter, gocui.ModNone, app.selectFile); err != nil {
+		return err
+	}
 	// Вниз (KeyArrowDown) для перемещения к следующей службе в списке журналов (функция nextService)
 	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 1)
+	})
+	app.gui.SetKeybinding("varLogs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextFileName(v, 1)
 	})
 	// Быстрое пролистывание (через 10 записей) Shift+Down
 	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 10)
 	})
+	app.gui.SetKeybinding("varLogs", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextFileName(v, 10)
+	})
 	// Пролистывание вверх
 	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 1)
 	})
+	app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevFileName(v, 1)
+	})
 	// Shift+Up
 	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 10)
+	})
+	app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevFileName(v, 10)
 	})
 	// Пролистывание вывода журнала
 	app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
@@ -503,23 +755,23 @@ func (app *App) setupKeybindings() error {
 
 // Функция для переключения окон через Tab
 func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
-	selectServices, err := g.View("services")
+	selectedServices, err := g.View("services")
 	if err != nil {
 		log.Panicln(err)
 	}
-	selectVarLog, err := g.View("varLogs")
+	selectedVarLog, err := g.View("varLogs")
 	if err != nil {
 		log.Panicln(err)
 	}
-	selectDocker, err := g.View("docker")
+	selectedDocker, err := g.View("docker")
 	if err != nil {
 		log.Panicln(err)
 	}
-	selectFilter, err := g.View("filter")
+	selectedFilter, err := g.View("filter")
 	if err != nil {
 		log.Panicln(err)
 	}
-	selectLogs, err := g.View("logs")
+	selectedLogs, err := g.View("logs")
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -533,64 +785,64 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 		// Если текущее окно services, переходим к filter
 		case "services":
 			nextView = "varLogs"
-			selectServices.FrameColor = gocui.ColorDefault
-			selectServices.TitleColor = gocui.ColorDefault
-			selectVarLog.FrameColor = gocui.ColorGreen
-			selectVarLog.TitleColor = gocui.ColorGreen
-			selectDocker.FrameColor = gocui.ColorDefault
-			selectDocker.TitleColor = gocui.ColorDefault
-			selectFilter.FrameColor = gocui.ColorDefault
-			selectFilter.TitleColor = gocui.ColorDefault
-			selectLogs.FrameColor = gocui.ColorDefault
-			selectLogs.TitleColor = gocui.ColorDefault
+			selectedServices.FrameColor = gocui.ColorDefault
+			selectedServices.TitleColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = gocui.ColorGreen
+			selectedVarLog.TitleColor = gocui.ColorGreen
+			selectedDocker.FrameColor = gocui.ColorDefault
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
 		case "varLogs":
 			nextView = "docker"
-			selectServices.FrameColor = gocui.ColorDefault
-			selectServices.TitleColor = gocui.ColorDefault
-			selectVarLog.FrameColor = gocui.ColorDefault
-			selectVarLog.TitleColor = gocui.ColorDefault
-			selectDocker.FrameColor = gocui.ColorGreen
-			selectDocker.TitleColor = gocui.ColorGreen
-			selectFilter.FrameColor = gocui.ColorDefault
-			selectFilter.TitleColor = gocui.ColorDefault
-			selectLogs.FrameColor = gocui.ColorDefault
-			selectLogs.TitleColor = gocui.ColorDefault
+			selectedServices.FrameColor = gocui.ColorDefault
+			selectedServices.TitleColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = gocui.ColorDefault
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = gocui.ColorGreen
+			selectedDocker.TitleColor = gocui.ColorGreen
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
 		case "docker":
 			nextView = "filter"
-			selectServices.FrameColor = gocui.ColorDefault
-			selectServices.TitleColor = gocui.ColorDefault
-			selectVarLog.FrameColor = gocui.ColorDefault
-			selectVarLog.TitleColor = gocui.ColorDefault
-			selectDocker.FrameColor = gocui.ColorDefault
-			selectDocker.TitleColor = gocui.ColorDefault
-			selectFilter.FrameColor = gocui.ColorGreen
-			selectFilter.TitleColor = gocui.ColorGreen
-			selectLogs.FrameColor = gocui.ColorDefault
-			selectLogs.TitleColor = gocui.ColorDefault
+			selectedServices.FrameColor = gocui.ColorDefault
+			selectedServices.TitleColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = gocui.ColorDefault
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = gocui.ColorDefault
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorGreen
+			selectedFilter.TitleColor = gocui.ColorGreen
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
 		case "filter":
 			nextView = "logs"
-			selectServices.FrameColor = gocui.ColorDefault
-			selectServices.TitleColor = gocui.ColorDefault
-			selectVarLog.FrameColor = gocui.ColorDefault
-			selectVarLog.TitleColor = gocui.ColorDefault
-			selectDocker.FrameColor = gocui.ColorDefault
-			selectDocker.TitleColor = gocui.ColorDefault
-			selectFilter.FrameColor = gocui.ColorDefault
-			selectFilter.TitleColor = gocui.ColorDefault
-			selectLogs.FrameColor = gocui.ColorGreen
-			selectLogs.TitleColor = gocui.ColorGreen
+			selectedServices.FrameColor = gocui.ColorDefault
+			selectedServices.TitleColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = gocui.ColorDefault
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = gocui.ColorDefault
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorGreen
+			selectedLogs.TitleColor = gocui.ColorGreen
 		case "logs":
 			nextView = "services"
-			selectServices.FrameColor = gocui.ColorGreen
-			selectServices.TitleColor = gocui.ColorGreen
-			selectVarLog.FrameColor = gocui.ColorDefault
-			selectVarLog.TitleColor = gocui.ColorDefault
-			selectDocker.FrameColor = gocui.ColorDefault
-			selectDocker.TitleColor = gocui.ColorDefault
-			selectFilter.FrameColor = gocui.ColorDefault
-			selectFilter.TitleColor = gocui.ColorDefault
-			selectLogs.FrameColor = gocui.ColorDefault
-			selectLogs.TitleColor = gocui.ColorDefault
+			selectedServices.FrameColor = gocui.ColorGreen
+			selectedServices.TitleColor = gocui.ColorGreen
+			selectedVarLog.FrameColor = gocui.ColorDefault
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = gocui.ColorDefault
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
 		}
 	}
 	// Устанавливаем новое активное окно
@@ -602,15 +854,15 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 
 // Функция для обратного переключения окон через Shift+Tab
 // func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
-// 	selectServices, err := g.View("services")
+// 	selectedServices, err := g.View("services")
 // 	if err != nil {
 // 		log.Panicln(err)
 // 	}
-// 	selectFilter, err := g.View("filter")
+// 	selectedFilter, err := g.View("filter")
 // 	if err != nil {
 // 		log.Panicln(err)
 // 	}
-// 	selectLogs, err := g.View("logs")
+// 	selectedLogs, err := g.View("logs")
 // 	if err != nil {
 // 		log.Panicln(err)
 // 	}
@@ -622,28 +874,28 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 // 		switch currentView.Name() {
 // 		case "services":
 // 			nextView = "logs"
-// 			selectServices.FrameColor = gocui.ColorDefault
-// 			selectServices.TitleColor = gocui.ColorDefault
-// 			selectFilter.FrameColor = gocui.ColorDefault
-// 			selectFilter.TitleColor = gocui.ColorDefault
-// 			selectLogs.FrameColor = gocui.ColorGreen
-// 			selectLogs.TitleColor = gocui.ColorGreen
+// 			selectedServices.FrameColor = gocui.ColorDefault
+// 			selectedServices.TitleColor = gocui.ColorDefault
+// 			selectedFilter.FrameColor = gocui.ColorDefault
+// 			selectedFilter.TitleColor = gocui.ColorDefault
+// 			selectedLogs.FrameColor = gocui.ColorGreen
+// 			selectedLogs.TitleColor = gocui.ColorGreen
 // 		case "logs":
 // 			nextView = "filter"
-// 			selectServices.FrameColor = gocui.ColorDefault
-// 			selectServices.TitleColor = gocui.ColorDefault
-// 			selectFilter.FrameColor = gocui.ColorGreen
-// 			selectFilter.TitleColor = gocui.ColorGreen
-// 			selectLogs.FrameColor = gocui.ColorDefault
-// 			selectLogs.TitleColor = gocui.ColorDefault
+// 			selectedServices.FrameColor = gocui.ColorDefault
+// 			selectedServices.TitleColor = gocui.ColorDefault
+// 			selectedFilter.FrameColor = gocui.ColorGreen
+// 			selectedFilter.TitleColor = gocui.ColorGreen
+// 			selectedLogs.FrameColor = gocui.ColorDefault
+// 			selectedLogs.TitleColor = gocui.ColorDefault
 // 		case "filter":
 // 			nextView = "services"
-// 			selectServices.FrameColor = gocui.ColorGreen
-// 			selectServices.TitleColor = gocui.ColorGreen
-// 			selectFilter.FrameColor = gocui.ColorDefault
-// 			selectFilter.TitleColor = gocui.ColorDefault
-// 			selectLogs.FrameColor = gocui.ColorDefault
-// 			selectLogs.TitleColor = gocui.ColorDefault
+// 			selectedServices.FrameColor = gocui.ColorGreen
+// 			selectedServices.TitleColor = gocui.ColorGreen
+// 			selectedFilter.FrameColor = gocui.ColorDefault
+// 			selectedFilter.TitleColor = gocui.ColorDefault
+// 			selectedLogs.FrameColor = gocui.ColorDefault
+// 			selectedLogs.TitleColor = gocui.ColorDefault
 // 		}
 // 	}
 // 	if _, err := g.SetCurrentView(nextView); err != nil {
