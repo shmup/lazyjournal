@@ -27,6 +27,11 @@ type Logfile struct {
 	path string
 }
 
+type DockerContainers struct {
+	name string
+	id   string
+}
+
 // Структура основного приложения (графический интерфейс и данные журналов)
 type App struct {
 	gui *gocui.Gui // графический интерфейс (gocui)
@@ -43,6 +48,12 @@ type App struct {
 	startFiles      int
 	selectedFile    int
 
+	dockerContainers           []DockerContainers
+	selectDockerContainer      string
+	maxVisibleDockerContainers int
+	startDockerContainers      int
+	selectedDockerContainer    int
+
 	filterText       string   // текст для фильтрации записей журнала
 	currentLogLines  []string // набор строк (срез) для хранения журнала без фильтрации
 	filteredLogLines []string // набор строк (срез) для хранения журнала после фильтра
@@ -50,12 +61,16 @@ type App struct {
 }
 
 func main() {
+	// Инициализация значений по умолчанию
 	app := &App{
-		journals:        make([]Journal, 0), // инициализация списка журналов (пустой массив)
-		startServices:   0,                  // Начальная позиция списка юнитов
-		selectedJournal: 0,                  // начальный индекс выбранного журнала
-		startFiles:      0,
-		selectedFile:    0,
+		startServices:           0, // начальная позиция списка юнитов
+		selectedJournal:         0, // начальный индекс выбранного журнала
+		startFiles:              0,
+		selectedFile:            0,
+		startDockerContainers:   0,
+		selectedDockerContainer: 0,
+		selectUnits:             "UNIT", // "USER_UNIT"
+		selectPath:              "/var/log/",
 	}
 
 	// Создаем GUI
@@ -91,22 +106,25 @@ func main() {
 		_, viewHeight := v.Size()
 		app.maxVisibleServices = viewHeight - 1
 	}
-
-	// Список журналов по умолчанию
-	app.selectUnits = "UNIT" // "USER_UNIT"
 	// Загрузка списков журналов
 	app.loadServices(app.selectUnits)
 
-	// Устанавливаем фокус на окно с журналами по умолчанию
-	g.SetCurrentView("services")
-
+	// /var/logs
 	if v, err := g.View("varLogs"); err == nil {
 		_, viewHeight := v.Size()
 		app.maxVisibleFiles = viewHeight - 1
 	}
-
-	app.selectPath = "/var/log/"
 	app.loadFiles(app.selectPath)
+
+	// Docker
+	if v, err := g.View("docker"); err == nil {
+		_, viewHeight := v.Size()
+		app.maxVisibleDockerContainers = viewHeight - 1
+	}
+	app.loadDockerContainer()
+
+	// Устанавливаем фокус на окно с журналами по умолчанию
+	g.SetCurrentView("services")
 
 	// Запус GUI
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
@@ -412,7 +430,6 @@ func (app *App) loadFiles(logPath string) {
 		// Сортировка в обратном порядке
 		return dateI.After(dateJ)
 	})
-
 	// Обновляем отображение списка журналов
 	app.updateLogsList()
 }
@@ -572,6 +589,53 @@ func (app *App) loadFileLogs(logName string) {
 	app.applyFilter()
 }
 
+// ---------------------------------------- Docker ----------------------------------------
+
+// docker ps --format "{{.ID}} {{.Names}}"
+// docker logs --tail 5000 b0162b642643
+
+func (app *App) loadDockerContainer() {
+	cmd := exec.Command("docker", "ps", "--format", "{{.ID}} {{.Names}}")
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("Error getting docker containers: %v", err)
+		return
+	}
+	serviceMap := make(map[string]bool)
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		// Разбить строку на массив из слов (через пробел)
+		idName := scanner.Text()
+		parts := strings.Fields(idName)
+		if idName != "" && !serviceMap[idName] {
+			serviceMap[idName] = true
+			app.dockerContainers = append(app.dockerContainers, DockerContainers{
+				name: parts[1],
+				id:   parts[0],
+			})
+		}
+	}
+	sort.Slice(app.dockerContainers, func(i, j int) bool {
+		return app.dockerContainers[i].name < app.dockerContainers[j].name
+	})
+	app.updateDockerContainerList()
+}
+
+func (app *App) updateDockerContainerList() {
+	v, err := app.gui.View("docker")
+	if err != nil {
+		return
+	}
+	v.Clear()
+	visibleEnd := app.startDockerContainers + app.maxVisibleDockerContainers
+	if visibleEnd > len(app.dockerContainers) {
+		visibleEnd = len(app.dockerContainers)
+	}
+	for i := app.startDockerContainers; i < visibleEnd; i++ {
+		fmt.Fprintln(v, app.dockerContainers[i].name)
+	}
+}
+
 // ---------------------------------------- Filter/Logs ----------------------------------------
 
 // Функция для фильтрации записей текущего журнала
@@ -698,10 +762,6 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("", gocui.KeyTab, gocui.ModNone, app.nextView); err != nil {
 		return err
 	}
-	// Shift+Tab
-	// if err := app.gui.SetKeybinding("", gocui.KeyTab, gocui.ModShift, app.backView); err != nil {
-	// 	return err
-	// }
 	// Enter для выбора службы и загрузки журналов
 	if err := app.gui.SetKeybinding("services", gocui.KeyEnter, gocui.ModNone, app.selectService); err != nil {
 		return err
@@ -851,58 +911,6 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 	}
 	return nil
 }
-
-// Функция для обратного переключения окон через Shift+Tab
-// func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
-// 	selectedServices, err := g.View("services")
-// 	if err != nil {
-// 		log.Panicln(err)
-// 	}
-// 	selectedFilter, err := g.View("filter")
-// 	if err != nil {
-// 		log.Panicln(err)
-// 	}
-// 	selectedLogs, err := g.View("logs")
-// 	if err != nil {
-// 		log.Panicln(err)
-// 	}
-// 	currentView := g.CurrentView()
-// 	var nextView string
-// 	if currentView == nil {
-// 		nextView = "services"
-// 	} else {
-// 		switch currentView.Name() {
-// 		case "services":
-// 			nextView = "logs"
-// 			selectedServices.FrameColor = gocui.ColorDefault
-// 			selectedServices.TitleColor = gocui.ColorDefault
-// 			selectedFilter.FrameColor = gocui.ColorDefault
-// 			selectedFilter.TitleColor = gocui.ColorDefault
-// 			selectedLogs.FrameColor = gocui.ColorGreen
-// 			selectedLogs.TitleColor = gocui.ColorGreen
-// 		case "logs":
-// 			nextView = "filter"
-// 			selectedServices.FrameColor = gocui.ColorDefault
-// 			selectedServices.TitleColor = gocui.ColorDefault
-// 			selectedFilter.FrameColor = gocui.ColorGreen
-// 			selectedFilter.TitleColor = gocui.ColorGreen
-// 			selectedLogs.FrameColor = gocui.ColorDefault
-// 			selectedLogs.TitleColor = gocui.ColorDefault
-// 		case "filter":
-// 			nextView = "services"
-// 			selectedServices.FrameColor = gocui.ColorGreen
-// 			selectedServices.TitleColor = gocui.ColorGreen
-// 			selectedFilter.FrameColor = gocui.ColorDefault
-// 			selectedFilter.TitleColor = gocui.ColorDefault
-// 			selectedLogs.FrameColor = gocui.ColorDefault
-// 			selectedLogs.TitleColor = gocui.ColorDefault
-// 		}
-// 	}
-// 	if _, err := g.SetCurrentView(nextView); err != nil {
-// 		return err
-// 	}
-// 	return nil
-// }
 
 // Функция для выхода
 func quit(g *gocui.Gui, v *gocui.View) error {
