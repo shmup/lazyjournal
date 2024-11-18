@@ -591,9 +591,6 @@ func (app *App) loadFileLogs(logName string) {
 
 // ---------------------------------------- Docker ----------------------------------------
 
-// docker ps --format "{{.ID}} {{.Names}}"
-// docker logs --tail 5000 b0162b642643
-
 func (app *App) loadDockerContainer() {
 	cmd := exec.Command("docker", "ps", "--format", "{{.ID}} {{.Names}}")
 	output, err := cmd.Output()
@@ -604,7 +601,6 @@ func (app *App) loadDockerContainer() {
 	serviceMap := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
-		// Разбить строку на массив из слов (через пробел)
 		idName := scanner.Text()
 		parts := strings.Fields(idName)
 		if idName != "" && !serviceMap[idName] {
@@ -634,6 +630,96 @@ func (app *App) updateDockerContainerList() {
 	for i := app.startDockerContainers; i < visibleEnd; i++ {
 		fmt.Fprintln(v, app.dockerContainers[i].name)
 	}
+}
+
+func (app *App) nextDockerContainer(v *gocui.View, step int) error {
+	_, viewHeight := v.Size()
+	app.maxVisibleDockerContainers = viewHeight - 1
+	if len(app.dockerContainers) == 0 {
+		return nil
+	}
+	if app.selectedDockerContainer < len(app.dockerContainers)-1 {
+		app.selectedDockerContainer += step
+		if app.selectedDockerContainer >= len(app.dockerContainers) {
+			app.selectedDockerContainer = len(app.dockerContainers) - 1
+		}
+		if app.selectedDockerContainer >= app.startDockerContainers+app.maxVisibleDockerContainers {
+			app.startDockerContainers += step
+			if app.startDockerContainers > len(app.dockerContainers)-app.maxVisibleDockerContainers {
+				app.startDockerContainers = len(app.dockerContainers) - app.maxVisibleDockerContainers
+			}
+			app.updateDockerContainerList()
+		}
+		if app.selectedDockerContainer < app.startDockerContainers+app.maxVisibleDockerContainers {
+			return app.selectDockerByIndex(app.selectedDockerContainer - app.startDockerContainers)
+		}
+	}
+	return nil
+}
+
+func (app *App) prevDockerContainer(v *gocui.View, step int) error {
+	_, viewHeight := v.Size()
+	app.maxVisibleDockerContainers = viewHeight - 1
+	if len(app.dockerContainers) == 0 {
+		return nil
+	}
+	if app.selectedDockerContainer > 0 {
+		app.selectedDockerContainer -= step
+		if app.selectedDockerContainer < 0 {
+			app.selectedDockerContainer = 0
+		}
+		if app.selectedDockerContainer < app.startDockerContainers {
+			app.startDockerContainers -= step
+			if app.startDockerContainers < 0 {
+				app.startDockerContainers = 0
+			}
+			app.updateDockerContainerList()
+		}
+		if app.selectedDockerContainer >= app.startDockerContainers {
+			return app.selectDockerByIndex(app.selectedDockerContainer - app.startDockerContainers)
+		}
+	}
+	return nil
+}
+
+func (app *App) selectDockerByIndex(index int) error {
+	v, err := app.gui.View("docker")
+	if err != nil {
+		return err
+	}
+	v.SetCursor(0, index)
+	return nil
+}
+
+func (app *App) selectDocker(g *gocui.Gui, v *gocui.View) error {
+	if v == nil || len(app.dockerContainers) == 0 {
+		return nil
+	}
+	_, cy := v.Cursor()
+	line, err := v.Line(cy)
+	if err != nil {
+		return err
+	}
+	app.loadDockerLogs(strings.TrimSpace(line))
+	return nil
+}
+
+func (app *App) loadDockerLogs(containerName string) {
+	var containerId string
+	for _, dockerContainer := range app.dockerContainers {
+		if dockerContainer.name == containerName {
+			containerId = dockerContainer.id
+		}
+	}
+	cmd := exec.Command("docker", "logs", containerId, "--tail", "5000")
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("Error getting logs: %v", err)
+		return
+	}
+	app.currentLogLines = strings.Split(string(output), "\n")
+	app.filterText = ""
+	app.applyFilter()
 }
 
 // ---------------------------------------- Filter/Logs ----------------------------------------
@@ -769,12 +855,18 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyEnter, gocui.ModNone, app.selectFile); err != nil {
 		return err
 	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyEnter, gocui.ModNone, app.selectDocker); err != nil {
+		return err
+	}
 	// Вниз (KeyArrowDown) для перемещения к следующей службе в списке журналов (функция nextService)
 	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 1)
 	})
 	app.gui.SetKeybinding("varLogs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextFileName(v, 1)
+	})
+	app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextDockerContainer(v, 1)
 	})
 	// Быстрое пролистывание (через 10 записей) Shift+Down
 	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
@@ -783,6 +875,9 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("varLogs", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextFileName(v, 10)
 	})
+	app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextDockerContainer(v, 10)
+	})
 	// Пролистывание вверх
 	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 1)
@@ -790,12 +885,18 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevFileName(v, 1)
 	})
+	app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevDockerContainer(v, 1)
+	})
 	// Shift+Up
 	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 10)
 	})
 	app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevFileName(v, 10)
+	})
+	app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevDockerContainer(v, 10)
 	})
 	// Пролистывание вывода журнала
 	app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
