@@ -36,20 +36,22 @@ type DockerContainers struct {
 type App struct {
 	gui *gocui.Gui // графический интерфейс (gocui)
 
-	selectUnits        string    // фиксируем, какой список журналов выводить
+	selectUnits      string // Название журнала (UNIT/USER_UNIT)
+	selectPath       string // Путь к логам (/var/log/)
+	selectFilterMode string // Режим фильтрации (default/fuzzy/regex)
+	logViewCount     string // Количество логов для просмотра (5000)
+
 	journals           []Journal // список (массив/срез) журналов для отображения
 	maxVisibleServices int       // максимальное количество видимых элементов в окне списка служб
 	startServices      int       // индекс первого видимого элемента
 	selectedJournal    int       // индекс выбранного журнала
 
 	logfiles        []Logfile
-	selectPath      string
 	maxVisibleFiles int
 	startFiles      int
 	selectedFile    int
 
 	dockerContainers           []DockerContainers
-	selectDockerContainer      string
 	maxVisibleDockerContainers int
 	startDockerContainers      int
 	selectedDockerContainer    int
@@ -71,6 +73,8 @@ func main() {
 		selectedDockerContainer: 0,
 		selectUnits:             "UNIT", // "USER_UNIT"
 		selectPath:              "/var/log/",
+		selectFilterMode:        "default", // "fuzzy" || "regex"
+		logViewCount:            "5000",
 	}
 
 	// Создаем GUI
@@ -188,7 +192,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Filter"
+		v.Title = "Filter [Default]"
 		v.Editable = true                   // включить окно редактируемым для ввода текста
 		v.Editor = app.createFilterEditor() // редактор для обработки ввода
 		v.Wrap = true
@@ -364,7 +368,7 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 
 // Функция для загрузки записей журнала выбранной службы через journalctl
 func (app *App) loadJournalLogs(serviceName string) {
-	cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", "5000")
+	cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", app.logViewCount)
 	output, err := cmd.Output()
 	if err != nil {
 		log.Printf("Error getting logs: %v", err)
@@ -544,7 +548,7 @@ func (app *App) loadFileLogs(logName string) {
 	// gunzip -c access.log.10.gz
 	if strings.HasSuffix(logFullPath, ".gz") {
 		cmdGzip := exec.Command("gzip", "-dc", logFullPath)
-		cmdTail := exec.Command("tail", "-n", "5000")
+		cmdTail := exec.Command("tail", "-n", app.logViewCount)
 		pipe, err := cmdGzip.StdoutPipe()
 		if err != nil {
 			log.Fatalf("Error creating pipe: %v", err)
@@ -577,7 +581,7 @@ func (app *App) loadFileLogs(logName string) {
 		// Выводим содержимое
 		app.currentLogLines = strings.Split(string(output), "\n")
 	} else {
-		cmd := exec.Command("tail", logFullPath, "-n", "5000")
+		cmd := exec.Command("tail", logFullPath, "-n", app.logViewCount)
 		output, err := cmd.Output()
 		if err != nil {
 			log.Printf("Error getting logs: %v", err)
@@ -711,7 +715,7 @@ func (app *App) loadDockerLogs(containerName string) {
 			containerId = dockerContainer.id
 		}
 	}
-	cmd := exec.Command("docker", "logs", containerId, "--tail", "5000")
+	cmd := exec.Command("docker", "logs", containerId, "--tail", app.logViewCount)
 	output, err := cmd.Output()
 	if err != nil {
 		log.Printf("Error getting logs: %v", err)
@@ -727,11 +731,46 @@ func (app *App) loadDockerLogs(containerName string) {
 // Функция для фильтрации записей текущего журнала
 func (app *App) applyFilter() {
 	app.filteredLogLines = make([]string, 0)
-	// Опускаем регистр
+	// Опускаем регистр ввода текста для фильтра
 	filter := strings.ToLower(app.filterText)
 	for _, line := range app.currentLogLines {
-		if filter == "" || strings.Contains(strings.ToLower(line), filter) {
-			app.filteredLogLines = append(app.filteredLogLines, line) // сохраняем строки, соответствующие фильтру
+		// Fuzzy
+		if app.selectFilterMode == "fuzzy" {
+			// Разбиваем на массив из строк
+			filterWords := strings.Fields(filter)
+			// Опускаем регистр текущей строки цикла
+			lineLower := strings.ToLower(line)
+			match := true
+			// Проверяем, если строка не содержит хотя бы одно слово из фильтра, то пропускаем строку
+			for _, word := range filterWords {
+				if !strings.Contains(lineLower, word) {
+					match = false
+					break
+				}
+			}
+			// Если строка подходит под фильтр, возвращаем её
+			if match {
+				originalLine := line
+				// Подсветка с использованием ANSI escape-последовательностей
+				// for _, word := range filterWords {
+				// 	originalLine = strings.ReplaceAll(strings.ToLower(originalLine), word, "\033[1;33m"+word+"\033[0m")
+				// }
+				app.filteredLogLines = append(app.filteredLogLines, originalLine)
+			}
+		} else if app.selectFilterMode == "regex" {
+			// Добавляем флаг для нечувствительности к регистру
+			filter = "(?i)" + filter
+			regex, err := regexp.Compile(filter)
+			if err != nil {
+				continue
+			}
+			if regex.MatchString(line) {
+				app.filteredLogLines = append(app.filteredLogLines, line)
+			}
+		} else {
+			if filter == "" || strings.Contains(strings.ToLower(line), filter) {
+				app.filteredLogLines = append(app.filteredLogLines, line)
+			}
 		}
 	}
 	app.logScrollPos = 0
@@ -806,7 +845,7 @@ func (app *App) scrollUpLogs(step int) error {
 	return nil
 }
 
-// Функция редактора обработки ввода текста для фильтрации
+// Редактор обработки ввода текста для фильтрации
 func (app *App) createFilterEditor() gocui.Editor {
 	return gocui.EditorFunc(func(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
 		switch {
@@ -836,7 +875,7 @@ func (app *App) createFilterEditor() gocui.Editor {
 	})
 }
 
-// ---------------------------------------- Binding ----------------------------------------
+// ---------------------------------------- Key Binding ----------------------------------------
 
 // Функция для биндинга клавиш
 func (app *App) setupKeybindings() error {
@@ -898,6 +937,19 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevDockerContainer(v, 10)
 	})
+	// Переключение между режимами фильтрации <Shift/Alt>+<Left/Right>
+	if err := app.gui.SetKeybinding("", gocui.KeyArrowRight, gocui.ModShift, app.setFilterModeRight); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("", gocui.KeyArrowRight, gocui.ModAlt, app.setFilterModeRight); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("", gocui.KeyArrowLeft, gocui.ModShift, app.setFilterModeLeft); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("", gocui.KeyArrowLeft, gocui.ModAlt, app.setFilterModeLeft); err != nil {
+		return err
+	}
 	// Пролистывание вывода журнала
 	app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollDownLogs(1)
@@ -911,6 +963,48 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollUpLogs(10)
 	})
+	return nil
+}
+
+// Функции для переключения режима фильтрации
+
+func (app *App) setFilterModeRight(g *gocui.Gui, v *gocui.View) error {
+	selectedFilter, err := g.View("filter")
+	if err != nil {
+		log.Panicln(err)
+	}
+	switch selectedFilter.Title {
+	case "Filter [Default]":
+		selectedFilter.Title = "Filter [Fuzzy]"
+		app.selectFilterMode = "fuzzy"
+	case "Filter [Fuzzy]":
+		selectedFilter.Title = "Filter [Regex]"
+		app.selectFilterMode = "regex"
+	case "Filter [Regex]":
+		selectedFilter.Title = "Filter [Default]"
+		app.selectFilterMode = "default"
+	}
+	app.applyFilter()
+	return nil
+}
+
+func (app *App) setFilterModeLeft(g *gocui.Gui, v *gocui.View) error {
+	selectedFilter, err := g.View("filter")
+	if err != nil {
+		log.Panicln(err)
+	}
+	switch selectedFilter.Title {
+	case "Filter [Default]":
+		selectedFilter.Title = "Filter [Regex]"
+		app.selectFilterMode = "regex"
+	case "Filter [Regex]":
+		selectedFilter.Title = "Filter [Fuzzy]"
+		app.selectFilterMode = "fuzzy"
+	case "Filter [Fuzzy]":
+		selectedFilter.Title = "Filter [Default]"
+		app.selectFilterMode = "default"
+	}
+	app.applyFilter()
 	return nil
 }
 
