@@ -24,7 +24,7 @@
 ```
 -->
 
-Terminal user interface for `journalctl` (tool for reading logs from [systemd](https://github.com/systemd/systemd)), logs in the file system (including archival, for example, apache or nginx) and docker containers for quick viewing and filtering with regex support (like grep), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
+Terminal user interface for `journalctl` (tool for reading logs from [systemd](https://github.com/systemd/systemd)), logs in the file system (including archival, for example, apache or nginx) and docker containers for quick viewing and filtering with fuzzy find and regex support (like `fzf` and `grep`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
 This tool is inspired by and with love for [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
 
@@ -53,11 +53,14 @@ GOOS=linux GOARCH=amd64 go build -o bin/
 bin/lazyjournal
 ```
 
-## Backlog
+## Roadmap
 
-- Backgound of the found word when filtering
-- Filter for log lists
-- Scrolling interface
-- Background checking and updating the log when data changes
-- Syntax coloring for systemctl output
-- Add a switch to load other logs (e.g. `USER_UNIT`), other paths to logs on the file system, and support for reading logs from Podman containers
+- [ ] Support for fuzzy find and regex
+- [ ] Backgound color of the found word when filtering
+- [ ] Filter for log lists
+- [ ] Scrolling interface
+- [ ] Background checking and updating the log when data changes
+- [ ] Syntax coloring for systemctl output
+- [ ] Add a switch to load other logs (for example, USER_UNIT) and other log paths in the file system
+- [ ] Windows support via PowerShell (events and logs from program files)
+- [ ] Podman log support
