@@ -42,16 +42,21 @@ For a quick installation, download the executable from the GitHub repository to 
 ```shell
 version="0.1.0"
 arch="amd64" # or "arm64"
+
 mkdir -p ~/.local/bin
-curl -s https://github.com/Lifailon/lazyjournal/releases/download/$version/lazyjorunal-$version-linux-$arch -o ~/.local/bin/lazyjorunal
-chmod +x ~/.local/bin/lazyjorunal
+grep -F 'export PATH=$PATH:~/.local/bin' ~/.bashrc || echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc && source ~/.bashrc
+
+curl -L -s https://github.com/Lifailon/lazyjournal/releases/download/$version/lazyjournal-$version-linux-$arch -o ~/.local/bin/lazyjournal
+chmod +x ~/.local/bin/lazyjournal
 ```
 
 You can launch the interface anywhere:
 
 ```shell
-lazyjorunal
+lazyjournal
 ```
+
+If the current user does not have rights to read logs in the /var/log directory or access to Docker containers, then these windows will be empty.
 
 ## Build
 
@@ -59,6 +64,7 @@ Go must be installed on the system, for example, for Ubuntu you can use the Snap
 
 ```shell
 snap install go --classic
+# grep -F 'export PATH=$PATH:/snap/bin' ~/.bashrc || echo 'export PATH=$PATH:/snap/bin' >> ~/.bashrc && source ~/.bashrc
 go version
 ```
 
@@ -67,15 +73,21 @@ Clone the repository, install dependencies from `go.mod` and run the project:
 ```shell
 git clone https://github.com/Lifailon/lazyjournal
 cd lazyjournal/src
+
 go mod tidy
 go run main.go
 ```
 
-Building the executable file:
+Building the executable files:
 
 ```shell
-GOOS=linux GOARCH=amd64 go build -o bin/
-bin/lazyjournal
+version="0.1.0"
+arch="amd64"
+for arch in amd64 arm64; do
+    GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
+done
+
+./bin/lazyjournal-0.1.0-linux-amd64
 ```
 
 ## Hotkeys
