@@ -35,12 +35,15 @@ Supported 3 filtering modes:
 
 Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
+> Development is done on the Ubuntu system, also tested in WSL environment on Debian system (amd64 platform).
+
 For a quick installation, download the executable from the GitHub repository to your home directory with other executables for the current user and grant execute permissions:
 
 ```shell
 version="0.1.0"
+arch="amd64" # or "arm64"
 mkdir -p ~/.local/bin
-curl -s https://github.com/Lifailon/lazyjournal/releases/download/$version/lazyjorunal-$version-linux-arm64 -o ~/.local/bin/lazyjorunal
+curl -s https://github.com/Lifailon/lazyjournal/releases/download/$version/lazyjorunal-$version-linux-$arch -o ~/.local/bin/lazyjorunal
 chmod +x ~/.local/bin/lazyjorunal
 ```
 
