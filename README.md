@@ -8,11 +8,19 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 
 ![interface](/img/interface.png)
 
+## Filter
+
+Supported 3 filtering modes:
+
+- **[Default]** - case sensitive exact search.
+- **[Fuzzy]** - imprecise case-insensitive search (searches for all phrases separated by a space anywhere in the string).
+- **[Regex]** - search with regular expression support, case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
+
 ## Roadmap
 
 - [X] Sorting logs by modification date and support archived logs from `/var/log` directory.
 - [X] Support fuzzy find and regular expression to filter output.
-- [ ] Backgound color of the found word when filtering.
+- [X] Backgound color of the found word when filtering.
 - [ ] Filter for log lists.
 - [ ] Background checking and updating the log when data changes.
 - [ ] Syntax coloring for logging output.
@@ -23,7 +31,7 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 - [ ] Podman log support.
 - [ ] Support remote machines via `ssh` protocol.
 
-<!-- ## Install
+## Install
 
 Download the executable from the GitHub repository to the current user's home directory, and grant execution permissions:
 
@@ -32,7 +40,7 @@ version="0.1.0"
 mkdir -p ~/.local/bin
 curl -s https://github.com/Lifailon/lazyjournal/releases/download/$version/lazyjorunal-$version-linux-arm64 -o ~/.local/bin/lazyjorunal
 chmod +x ~/.local/bin/lazyjorunal
-``` -->
+```
 
 ## Build
 
@@ -62,10 +70,10 @@ bin/lazyjournal
 ## Hotkeys
 
 - `Tab` - Switch between windows.
+- `Enter` - Select a journal from the list to display logs.
 - `Up/Down` - Move up or down through all journal lists and log output.
 - `Shift+<Up/Down>` - Quickly move up or down (every 10 lines) through all journal lists and log output.
-- `Enter` - Select a journal from the list to display logs.
-- `<Shift/Alt>+<Left/Right>` - Changing the mode in the filtering window. Available: **default**, **fuzzy** and **regex**.
+- `<Shift/Alt>+<Left/Right>` - Changing the mode in the filtering window. Available: **Default**, **Fuzzy** and **Regex**.
 - `Ctrl+C` - Exit.
 
 ## Alternatives
