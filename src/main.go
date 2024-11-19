@@ -730,6 +730,11 @@ func (app *App) loadDockerLogs(containerName string) {
 
 // Функция для фильтрации записей текущего журнала
 func (app *App) applyFilter() {
+	v, err := app.gui.View("filter")
+	if err != nil {
+		return
+	}
+	v.FrameColor = gocui.ColorGreen
 	app.filteredLogLines = make([]string, 0)
 	// Опускаем регистр ввода текста для фильтра
 	filter := strings.ToLower(app.filterText)
@@ -760,9 +765,12 @@ func (app *App) applyFilter() {
 		} else if app.selectFilterMode == "regex" {
 			// Добавляем флаг для нечувствительности к регистру
 			filter = "(?i)" + filter
+			// Компилируем регулярное выражение
 			regex, err := regexp.Compile(filter)
 			if err != nil {
-				continue
+				// В случае синтаксической ошибки регулярного выражения, красим окно красным цветом
+				v.FrameColor = gocui.ColorRed
+				return
 			}
 			if regex.MatchString(line) {
 				app.filteredLogLines = append(app.filteredLogLines, line)
@@ -775,11 +783,11 @@ func (app *App) applyFilter() {
 	}
 	app.logScrollPos = 0
 	// Обновляем окно для отображения отфильтрованных записей
-	app.updateLogsView()
+	app.updateLogsView(true)
 }
 
-// Функция для обновления вывода журнала
-func (app *App) updateLogsView() {
+// Функция для обновления вывода журнала (параметр для прокрутки в самый вниз)
+func (app *App) updateLogsView(lowerDown bool) {
 	// Получаем доступ к выводу журнала
 	v, err := app.gui.View("logs")
 	if err != nil {
@@ -789,6 +797,14 @@ func (app *App) updateLogsView() {
 	v.Clear()
 	// Получаем размер окна
 	_, viewHeight := v.Size()
+	// Опускаем в самый низ, только если это не ручной скролл
+	if lowerDown {
+		if len(app.filteredLogLines) > viewHeight-1 {
+			app.logScrollPos = len(app.filteredLogLines) - viewHeight - 1
+		} else {
+			app.logScrollPos = 0
+		}
+	}
 	// Определяем количество строк для отображения, начиная с позиции logScrollPos
 	startLine := app.logScrollPos
 	endLine := startLine + viewHeight
@@ -830,7 +846,7 @@ func (app *App) scrollDownLogs(step int) error {
 			app.logScrollPos = len(app.filteredLogLines) - 1 - viewHeight
 		}
 		// Вызываем функцию для обновления отображения журнала
-		app.updateLogsView()
+		app.updateLogsView(false)
 	}
 	return nil
 }
@@ -841,7 +857,7 @@ func (app *App) scrollUpLogs(step int) error {
 	if app.logScrollPos < 0 {
 		app.logScrollPos = 0
 	}
-	app.updateLogsView()
+	app.updateLogsView(false)
 	return nil
 }
 
