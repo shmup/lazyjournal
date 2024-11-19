@@ -739,13 +739,13 @@ func (app *App) applyFilter() {
 	// Опускаем регистр ввода текста для фильтра
 	filter := strings.ToLower(app.filterText)
 	for _, line := range app.currentLogLines {
-		// Fuzzy
+		// Fuzzy (неточный поиск без учета регистра)
 		if app.selectFilterMode == "fuzzy" {
-			// Разбиваем на массив из строк
+			// Разбиваем текст фильтра на массив из строк
 			filterWords := strings.Fields(filter)
 			// Опускаем регистр текущей строки цикла
 			lineLower := strings.ToLower(line)
-			match := true
+			var match bool = true
 			// Проверяем, если строка не содержит хотя бы одно слово из фильтра, то пропускаем строку
 			for _, word := range filterWords {
 				if !strings.Contains(lineLower, word) {
@@ -753,15 +753,36 @@ func (app *App) applyFilter() {
 					break
 				}
 			}
-			// Если строка подходит под фильтр, возвращаем её
+			// Если строка подходит под фильтр, возвращаем её с покраской
 			if match {
+				// Временные символы для обозначения начала и конца покраски найденных символов
+				startColor := "►"
+				endColor := "◄"
 				originalLine := line
-				// Подсветка с использованием ANSI escape-последовательностей
-				// for _, word := range filterWords {
-				// 	originalLine = strings.ReplaceAll(strings.ToLower(originalLine), word, "\033[1;33m"+word+"\033[0m")
-				// }
+				// Проходимся по всем словосочетаниям фильтра (массив через пробел) для позиционирования покраски
+				for _, word := range filterWords {
+					wordLower := strings.ToLower(word)
+					start := 0
+					// Ищем все вхождения слова в строке с учётом регистра
+					for {
+						// Находим индекс вхождения с учетом регистра
+						idx := strings.Index(strings.ToLower(originalLine[start:]), wordLower)
+						if idx == -1 {
+							break // Если больше нет вхождений, выходим
+						}
+						start += idx // корректируем индекс с учетом текущей позиции
+						// Вставляем временные символы для покраски
+						originalLine = originalLine[:start] + startColor + originalLine[start:start+len(word)] + endColor + originalLine[start+len(word):]
+						// Сдвигаем индекс для поиска в оставшейся части строки
+						start += len(startColor) + len(word) + len(endColor)
+					}
+				}
+				// Заменяем временные символы на ANSI escape-последовательности
+				originalLine = strings.ReplaceAll(originalLine, startColor, "\x1b[0;33m")
+				originalLine = strings.ReplaceAll(originalLine, endColor, "\033[0m")
 				app.filteredLogLines = append(app.filteredLogLines, originalLine)
 			}
+			// Regex (с использованием регулярных выражений Go и без учета регистра по умолчанию)
 		} else if app.selectFilterMode == "regex" {
 			// Добавляем флаг для нечувствительности к регистру
 			filter = "(?i)" + filter
@@ -775,9 +796,12 @@ func (app *App) applyFilter() {
 			if regex.MatchString(line) {
 				app.filteredLogLines = append(app.filteredLogLines, line)
 			}
+			// Default (точный поиск с учетом регистра)
 		} else {
-			if filter == "" || strings.Contains(strings.ToLower(line), filter) {
-				app.filteredLogLines = append(app.filteredLogLines, line)
+			filter = app.filterText
+			if filter == "" || strings.Contains(line, filter) {
+				lineColor := strings.ReplaceAll(line, filter, "\x1b[0;33m"+filter+"\033[0m")
+				app.filteredLogLines = append(app.filteredLogLines, lineColor)
 			}
 		}
 	}
