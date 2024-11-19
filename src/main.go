@@ -784,17 +784,23 @@ func (app *App) applyFilter() {
 			}
 			// Regex (с использованием регулярных выражений Go и без учета регистра по умолчанию)
 		} else if app.selectFilterMode == "regex" {
-			// Добавляем флаг для нечувствительности к регистру
+			// Добавляем флаг для нечувствительности к регистру по умолчанию
 			filter = "(?i)" + filter
 			// Компилируем регулярное выражение
 			regex, err := regexp.Compile(filter)
 			if err != nil {
-				// В случае синтаксической ошибки регулярного выражения, красим окно красным цветом
+				// В случае синтаксической ошибки регулярного выражения, красим окно красным цветом и завершаем цикл
 				v.FrameColor = gocui.ColorRed
-				return
+				break
 			}
+			// Проверяем, что строка подходит под регулярное выражение
 			if regex.MatchString(line) {
-				app.filteredLogLines = append(app.filteredLogLines, line)
+				originalLine := line
+				// Находим все найденные совпадени
+				matches := regex.FindAllString(originalLine, -1)
+				// Красим только первое найденное совпадение
+				originalLine = strings.ReplaceAll(originalLine, matches[0], "\x1b[0;33m"+matches[0]+"\033[0m")
+				app.filteredLogLines = append(app.filteredLogLines, originalLine)
 			}
 			// Default (точный поиск с учетом регистра)
 		} else {

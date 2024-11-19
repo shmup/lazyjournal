@@ -33,13 +33,21 @@ Supported 3 filtering modes:
 
 ## Install
 
-Download the executable from the GitHub repository to the current user's home directory, and grant execution permissions:
+Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
+
+For a quick installation, download the executable from the GitHub repository to your home directory with other executables for the current user and grant execute permissions:
 
 ```shell
 version="0.1.0"
 mkdir -p ~/.local/bin
 curl -s https://github.com/Lifailon/lazyjournal/releases/download/$version/lazyjorunal-$version-linux-arm64 -o ~/.local/bin/lazyjorunal
 chmod +x ~/.local/bin/lazyjorunal
+```
+
+You can launch the interface anywhere:
+
+```shell
+lazyjorunal
 ```
 
 ## Build
