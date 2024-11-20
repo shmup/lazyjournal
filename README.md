@@ -16,26 +16,28 @@ Supported 3 filtering modes:
 - **[Fuzzy]** - imprecise case-insensitive search (searches for all phrases separated by a space anywhere in the string).
 - **[Regex]** - search with regular expression support, case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
 
+There is currently a 5000 line limit for outputting any log from the end.
+
 ## Roadmap
 
 - [X] Sorting logs by modification date and support archived logs from `/var/log` directory.
 - [X] Support fuzzy find and regular expression to filter output.
-- [X] Backgound color of the found word when filtering.
-- [ ] Filter for log lists.
+- [X] Highlighting of found words and phrases during filtering..
+- [ ] Filter for log lists and change the number of lines for log output.
+- [ ] Add a switch to load other logs (for example, `USER_UNIT`) and other log paths in the file system.
+- [ ] Podman log support.
 - [ ] Background checking and updating the log when data changes.
-- [ ] Syntax coloring for logging output.
+- [ ] Windows support via PowerShell (events and logs from Program Files and others).
 - [ ] Scrolling interface.
 - [ ] Mouse support.
-- [ ] Add a switch to load other logs (for example, `USER_UNIT`) and other log paths in the file system.
-- [ ] Windows support via PowerShell (events and logs from program files).
-- [ ] Podman log support.
+- [ ] Syntax coloring for logging output.
 - [ ] Support remote machines via `ssh` protocol.
 
 ## Install
 
 Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
-> Development is done on the Ubuntu system, also tested in WSL environment on Debian system (amd64 platform).
+> Development is done on the Ubuntu system, also tested in WSL environment on Debian system (`amd64` platform) and Raspberry Pi (`arm64` platform).
 
 For a quick installation, download the executable from the GitHub repository to your home directory with other executables for the current user and grant execute permissions:
 
@@ -56,7 +58,7 @@ You can launch the interface anywhere:
 lazyjournal
 ```
 
-If the current user does not have rights to read logs in the /var/log directory or access to Docker containers, then these windows will be empty.
+If the current user does not have rights to read logs in the `/var/log` directory or access to Docker containers (or the containerization system is not installed), then these windows will be empty.
 
 ## Build
 
