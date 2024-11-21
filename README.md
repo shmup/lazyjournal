@@ -39,17 +39,19 @@ Binaries for the Linux operating system are available on the [releases](https://
 
 > Development is done on the Ubuntu system, also tested in WSL environment on Debian system (`amd64` platform) and Raspberry Pi (`arm64` platform).
 
-For a quick installation, download the executable from the GitHub repository to your home directory with other executables for the current user and grant execute permissions:
+Run the command in your console to quickly install or update:
 
 ```shell
-version="0.1.0"
-arch="amd64" # or "arm64"
+curl https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | bash
+```
 
-mkdir -p ~/.local/bin
-grep -F 'export PATH=$PATH:~/.local/bin' ~/.bashrc || echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc && source ~/.bashrc
+This command will run a script that will download the latest executable from the GitHub repository into your current user's home directory along with other executables (or create one) and grant execution permission.
 
-curl -L -s https://github.com/Lifailon/lazyjournal/releases/download/$version/lazyjournal-$version-linux-$arch -o ~/.local/bin/lazyjournal
-chmod +x ~/.local/bin/lazyjournal
+You can also use Go for installation. To do this, the Go interpreter must be installed on the system, for example, for Ubuntu you can use the SnapCraft package manager:
+
+```shell
+sudo snap install go --classic
+go install github.com/Lifailon/lazyjournal/src@latest
 ```
 
 You can launch the interface anywhere:
@@ -62,20 +64,11 @@ If the current user does not have rights to read logs in the `/var/log` director
 
 ## Build
 
-Go must be installed on the system, for example, for Ubuntu you can use the SnapCraft package manager:
-
-```shell
-snap install go --classic
-# grep -F 'export PATH=$PATH:/snap/bin' ~/.bashrc || echo 'export PATH=$PATH:/snap/bin' >> ~/.bashrc && source ~/.bashrc
-go version
-```
-
 Clone the repository, install dependencies from `go.mod` and run the project:
 
 ```shell
 git clone https://github.com/Lifailon/lazyjournal
 cd lazyjournal/src
-
 go mod tidy
 go run main.go
 ```
@@ -88,9 +81,28 @@ arch="amd64"
 for arch in amd64 arm64; do
     GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
 done
-
-./bin/lazyjournal-0.1.0-linux-amd64
 ```
+
+<!--
+### Build deb package
+
+```shell
+mkdir -p lazyjournal/DEBIAN lazyjournal/usr/local/bin
+cp bin/lazyjournal-$version-linux-$arch lazyjournal/usr/local/bin/lazyjournal
+```
+
+`vim lazyjournal/DEBIAN/control`
+
+```
+Package: lazyjournal
+Version: 0.1.0
+Architecture: amd64
+Maintainer: https://github.com/Lifailon
+Description: TUI for journalctl, logs in the file system and docker containers for quick viewing and filtering with fuzzy find and regex support.
+```
+
+`dpkg-deb --build lazyjournal`
+-->
 
 ## Hotkeys
 
