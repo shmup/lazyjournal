@@ -77,31 +77,17 @@ go run main.go
 Building the executable files:
 
 ```shell
-for arch in amd64 arm64; do
-    GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$arch
-done
+arch="amd64" # or "arm64"
+GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$arch
 ```
 
-<!-- 
-### Build deb package
+<!--
+Building the `snap` and `deb` packages:
 
 ```shell
-mkdir -p DEBIAN usr/local/bin
-cp bin/lazyjournal-$version-linux-$arch lazyjournal/usr/local/bin/lazyjournal
+bash build.sh "0.1.0" true true
 ```
-
-`vim DEBIAN/control`
-
-```
-Package: lazyjournal
-Version: 0.1.0
-Architecture: amd64
-Maintainer: https://github.com/Lifailon
-Description: TUI for journalctl, logs in the file system and docker containers for quick viewing and filtering with fuzzy find and regex support.
-```
-
-`cd .. && dpkg-deb --build lazyjournal`
- -->
+-->
 
 ## Hotkeys
 

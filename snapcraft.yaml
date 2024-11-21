@@ -1,0 +1,25 @@
+name: lazyjournal
+version: '0.1.0'
+summary: TUI for journalctl, logs in the file system and docker containers
+description: |
+  Terminal user interface for journalctl, logs in the file system and docker containers for quick viewing and filtering with fuzzy find and regex support.
+
+base: core20
+confinement: strict
+
+architectures:
+  - amd64
+
+apps:
+  lazyjournal:
+    command: bin/lazyjournal
+    plugs: [system-observe, home, docker-support]
+
+parts:
+  lazyjournal:
+    plugin: dump
+    source: .
+    stage-packages: []
+    override-build: |
+      mkdir -p $SNAPCRAFT_PART_INSTALL/bin
+      cp ./bin/lazyjournal-0.1.0-linux-amd64 $SNAPCRAFT_PART_INSTALL/bin/lazyjournal

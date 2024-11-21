@@ -1,2 +1,5 @@
 # Build
 /bin/
+/DEBIAN/
+/usr/
+*.snap
