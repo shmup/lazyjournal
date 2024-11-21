@@ -45,7 +45,7 @@ Run the command in your console to quickly install or update:
 curl https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | bash
 ```
 
-This command will run a script that will download the latest executable from the GitHub repository into your current user's home directory along with other executables (or create one) and grant execution permission.
+This command will run a script that will download the latest executable from the GitHub repository into your current user's home directory along with other executables (or create a directory) and grant execution permission.
 
 You can also use Go for installation. To do this, the Go interpreter must be installed on the system, for example, for Ubuntu you can use the SnapCraft package manager:
 
