@@ -37,7 +37,7 @@ There is currently a 5000 line limit for outputting any log from the end.
 
 Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
-> Development is done on the Ubuntu system, also tested in WSL environment on Debian system (`amd64` platform) and Raspberry Pi (`arm64` platform).
+> Development is done on the Ubuntu system, also tested in WSL environment on Debian system (`x64` platform) and Raspberry Pi (`aarch64` platform).
 
 Run the command in your console to quickly install or update:
 
@@ -51,7 +51,7 @@ You can also use Go for installation. To do this, the Go interpreter must be ins
 
 ```shell
 sudo snap install go --classic
-go install github.com/Lifailon/lazyjournal/src@latest
+go install github.com/Lifailon/lazyjournal@latest
 ```
 
 You can launch the interface anywhere:
@@ -68,7 +68,7 @@ Clone the repository, install dependencies from `go.mod` and run the project:
 
 ```shell
 git clone https://github.com/Lifailon/lazyjournal
-cd lazyjournal/src
+cd lazyjournal
 go mod tidy
 go run main.go
 ```
@@ -77,21 +77,20 @@ Building the executable files:
 
 ```shell
 version="0.1.0"
-arch="amd64"
 for arch in amd64 arm64; do
     GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
 done
 ```
 
-<!--
+<!-- 
 ### Build deb package
 
 ```shell
-mkdir -p lazyjournal/DEBIAN lazyjournal/usr/local/bin
+mkdir -p DEBIAN usr/local/bin
 cp bin/lazyjournal-$version-linux-$arch lazyjournal/usr/local/bin/lazyjournal
 ```
 
-`vim lazyjournal/DEBIAN/control`
+`vim DEBIAN/control`
 
 ```
 Package: lazyjournal
@@ -101,8 +100,8 @@ Maintainer: https://github.com/Lifailon
 Description: TUI for journalctl, logs in the file system and docker containers for quick viewing and filtering with fuzzy find and regex support.
 ```
 
-`dpkg-deb --build lazyjournal`
--->
+`cd .. && dpkg-deb --build lazyjournal`
+ -->
 
 ## Hotkeys
 

@@ -1,4 +1,4 @@
-module github.com/Lifailon/lazyjournal/src
+module github.com/Lifailon/lazyjournal
 
 go 1.18
 
