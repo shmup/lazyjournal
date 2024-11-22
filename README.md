@@ -2,7 +2,7 @@
     <img src="/img/logo.jpg">
 </p>
 
-Terminal user interface for `journalctl` (tool for reading logs from [systemd](https://github.com/systemd/systemd)), logs in the file system (including archival, for example, apache or nginx) and docker containers for quick viewing and filtering with fuzzy find and regex support (like `fzf` and `grep`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
+Terminal user interface for `journalctl` (tool for reading units and kernel logs from [systemd](https://github.com/systemd/systemd)), logs in the file system (including syslog and archival logs, for example, apache, nginx or databases) and docker containers for quick viewing and filtering with fuzzy find and regex support (like `fzf` and `grep`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
 This tool is inspired by and with love for [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
 
@@ -20,12 +20,12 @@ There is currently a 5000 line limit for outputting any log from the end.
 
 ## Roadmap
 
-- [X] Sorting logs by modification date and support archived logs from `/var/log` directory.
 - [X] Support fuzzy find and regular expression to filter output.
 - [X] Highlighting of found words and phrases during filtering..
-- [ ] Filter for log lists and change the number of lines for log output.
-- [ ] Add a switch to load other logs (for example, `USER_UNIT`) and other log paths in the file system.
+- [X] Sorting logs by modification date and support archived logs from `/var/log` directory.
+- [ ] Add a switch to load other log lists for journalctl (`USER_UNIT` and Kernel boot) and directories on the filesystem.
 - [ ] Podman log support.
+- [ ] Filter for log lists and change the number of lines for log output.
 - [ ] Background checking and updating the log when data changes.
 - [ ] Windows support via PowerShell (events and logs from Program Files and others).
 - [ ] Scrolling interface.
@@ -92,10 +92,11 @@ bash build.sh "0.1.0" true true
 ## Hotkeys
 
 - `Tab` - Switch between windows.
-- `Enter` - Select a journal from the list to display logs.
+- `Left/Right` - Switch between log lists in the selected window.
+- `Enter` - Select a journal from the list to display log.
 - `Up/Down` - Move up or down through all journal lists and log output.
 - `Shift+<Up/Down>` - Quickly move up or down (every 10 lines) through all journal lists and log output.
-- `<Shift/Alt>+<Left/Right>` - Changing the mode in the filtering window. Available: **Default**, **Fuzzy** and **Regex**.
+- `<Shift/Alt>+<Left/Right>` - Changing the mode in the filtering window.
 - `Ctrl+C` - Exit.
 
 ## Alternatives

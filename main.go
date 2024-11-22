@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -18,8 +19,8 @@ import (
 
 // Структура хранения информации о журналах
 type Journal struct {
-	name    string   // название журнала (имя службы)
-	content []string // содержимое журнала (массив строк)
+	name    string // название журнала (имя службы) или дата загрузки
+	boot_id string // id загрузки системы
 }
 
 type Logfile struct {
@@ -146,8 +147,8 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "System units" // заголовок окна
-		v.Highlight = true       // выделение активного элемента
+		v.Title = " < System units > " // заголовок окна
+		v.Highlight = true             // выделение активного элемента
 		// Цветовая схема из форка awesome-gocui/gocui
 		v.FrameColor = gocui.ColorGreen // Цвет границ окна
 		v.TitleColor = gocui.ColorGreen // Цвет заголовка
@@ -221,31 +222,77 @@ func (app *App) layout(g *gocui.Gui) error {
 
 // ---------------------------------------- journalctl ----------------------------------------
 
-// Функция для загрузки списка журналов служб из journalctl
+// Функция для загрузки списка журналов служб или загрузок системы из journalctl
 func (app *App) loadServices(journalName string) {
-	cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
-	output, err := cmd.Output()
-	if err != nil {
-		log.Printf("Error getting services: %v", err)
-		return
-	}
-	// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
-	serviceMap := make(map[string]bool)
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
-	for scanner.Scan() {
-		serviceName := strings.TrimSpace(scanner.Text())
-		if serviceName != "" && !serviceMap[serviceName] {
-			serviceMap[serviceName] = true
+	if journalName == "kernel" {
+		// Получаем список загрузок с помощью journalctl
+		bootCmd := exec.Command("journalctl", "--list-boots", "-o", "json")
+		bootOutput, err := bootCmd.Output()
+		if err != nil {
+			log.Printf("Error getting boot information: %v", err)
+			return
+		}
+		// Структура для парсинга JSON
+		type BootInfo struct {
+			BootID     string `json:"boot_id"`
+			FirstEntry int64  `json:"first_entry"`
+			LastEntry  int64  `json:"last_entry"`
+		}
+		var bootRecords []BootInfo
+		err = json.Unmarshal(bootOutput, &bootRecords)
+		if err != nil {
+			log.Printf("Error parsing JSON: %v", err)
+			return
+		}
+		// Добавляем информацию о загрузках в app.journals
+		for _, bootRecord := range bootRecords {
+			// Преобразуем наносекунды в секунды
+			firstEntryTime := time.Unix(bootRecord.FirstEntry/1000000, bootRecord.FirstEntry%1000000)
+			lastEntryTime := time.Unix(bootRecord.LastEntry/1000000, bootRecord.LastEntry%1000000)
+			// Форматируем строку в формате "DD.MM.YYYY HH:MM:SS"
+			const dateFormat = "02.01.2006 15:04:05"
+			name := fmt.Sprintf("%s - %s", firstEntryTime.Format(dateFormat), lastEntryTime.Format(dateFormat))
+			// Добавляем в массив
 			app.journals = append(app.journals, Journal{
-				name:    serviceName,
-				content: make([]string, 0),
+				name:    name,
+				boot_id: bootRecord.BootID,
+			})
+			// Сортируем по второй дате
+			sort.Slice(app.journals, func(i, j int) bool {
+				// Разделяем строки на части (до и после дефиса)
+				dateFormat := "02.01.2006 15:04:05"
+				// Получаем вторую дату (после дефиса) и парсим её
+				endDate1, _ := time.Parse(dateFormat, app.journals[i].name[22:])
+				endDate2, _ := time.Parse(dateFormat, app.journals[j].name[22:])
+				// Сравниваем по второй дате в обратном порядке
+				return endDate1.After(endDate2) // Используем After для сортировки по убыванию
 			})
 		}
+	} else {
+		cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
+		output, err := cmd.Output()
+		if err != nil {
+			log.Printf("Error getting services: %v", err)
+			return
+		}
+		// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
+		serviceMap := make(map[string]bool)
+		scanner := bufio.NewScanner(strings.NewReader(string(output)))
+		for scanner.Scan() {
+			serviceName := strings.TrimSpace(scanner.Text())
+			if serviceName != "" && !serviceMap[serviceName] {
+				serviceMap[serviceName] = true
+				app.journals = append(app.journals, Journal{
+					name:    serviceName,
+					boot_id: "",
+				})
+			}
+		}
+		// Сортируем список служб по алфавиту
+		sort.Slice(app.journals, func(i, j int) bool {
+			return app.journals[i].name < app.journals[j].name
+		})
 	}
-	// Сортируем список служб по алфавиту
-	sort.Slice(app.journals, func(i, j int) bool {
-		return app.journals[i].name < app.journals[j].name
-	})
 	// Обновляем список служб в интерфейсе
 	app.updateServicesList()
 }
@@ -366,13 +413,33 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+// journalctl -k -b 1804d9623b6d4d73b3c12fcd96e8ac31 --no-pager -n 5000
+
 // Функция для загрузки записей журнала выбранной службы через journalctl
 func (app *App) loadJournalLogs(serviceName string) {
-	cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", app.logViewCount)
-	output, err := cmd.Output()
-	if err != nil {
-		log.Printf("Error getting logs: %v", err)
-		return
+	var output []byte
+	var err error
+	if app.selectUnits == "kernel" {
+		var boot_id string
+		for _, journal := range app.journals {
+			if journal.name == serviceName {
+				boot_id = journal.boot_id
+				break
+			}
+		}
+		cmd := exec.Command("journalctl", "-k", "-b", boot_id, "--no-pager", "-n", app.logViewCount)
+		output, err = cmd.Output()
+		if err != nil {
+			log.Printf("Error getting logs: %v", err)
+			return
+		}
+	} else {
+		cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", app.logViewCount)
+		output, err = cmd.Output()
+		if err != nil {
+			log.Printf("Error getting logs: %v", err)
+			return
+		}
 	}
 	// Сохраняем строки журнала в массив
 	app.currentLogLines = strings.Split(string(output), "\n")
@@ -996,6 +1063,13 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("", gocui.KeyArrowLeft, gocui.ModAlt, app.setFilterModeLeft); err != nil {
 		return err
 	}
+	// Переключение выбора журналов для journalctl
+	if err := app.gui.SetKeybinding("services", gocui.KeyArrowRight, gocui.ModNone, app.setUnitListRight); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("services", gocui.KeyArrowLeft, gocui.ModNone, app.setUnitListLeft); err != nil {
+		return err
+	}
 	// Пролистывание вывода журнала
 	app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollDownLogs(1)
@@ -1051,6 +1125,60 @@ func (app *App) setFilterModeLeft(g *gocui.Gui, v *gocui.View) error {
 		app.selectFilterMode = "default"
 	}
 	app.applyFilter()
+	return nil
+}
+
+// Функции для переключения выбора журналов
+
+func (app *App) setUnitListRight(g *gocui.Gui, v *gocui.View) error {
+	selectedServices, err := g.View("services")
+	if err != nil {
+		log.Panicln(err)
+	}
+	// Сбрасываем содержимое массива и положение курсора
+	app.journals = app.journals[:0]
+	app.startServices = 0
+	app.selectedJournal = 0
+	// Меняем журнал и обновляем список
+	switch selectedServices.Title {
+	case " < System units > ":
+		selectedServices.Title = " < User units > "
+		app.selectUnits = "USER_UNIT"
+		app.loadServices(app.selectUnits)
+	case " < User units > ":
+		selectedServices.Title = " < Kernel boot > "
+		app.selectUnits = "kernel"
+		app.loadServices(app.selectUnits)
+	case " < Kernel boot > ":
+		selectedServices.Title = " < System units > "
+		app.selectUnits = "UNIT"
+		app.loadServices(app.selectUnits)
+	}
+	return nil
+}
+
+func (app *App) setUnitListLeft(g *gocui.Gui, v *gocui.View) error {
+	selectedServices, err := g.View("services")
+	if err != nil {
+		log.Panicln(err)
+	}
+	app.journals = app.journals[:0]
+	app.startServices = 0
+	app.selectedJournal = 0
+	switch selectedServices.Title {
+	case " < System units > ":
+		selectedServices.Title = " < Kernel boot > "
+		app.selectUnits = "kernel"
+		app.loadServices(app.selectUnits)
+	case " < Kernel boot > ":
+		selectedServices.Title = " < User units > "
+		app.selectUnits = "USER_UNIT"
+		app.loadServices(app.selectUnits)
+	case " < User units > ":
+		selectedServices.Title = " < System units > "
+		app.selectUnits = "UNIT"
+		app.loadServices(app.selectUnits)
+	}
 	return nil
 }
 
