@@ -166,7 +166,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Var logs"
+		v.Title = " < Var logs > "
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -452,23 +452,34 @@ func (app *App) loadJournalLogs(serviceName string) {
 // ---------------------------------------- Var Logs ----------------------------------------
 
 func (app *App) loadFiles(logPath string) {
-	cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log", "-o", "-name", "*.gz")
-	output, err := cmd.Output()
-	if err != nil {
-		log.Printf("Error getting log files: %v", err)
-		return
-	}
-	// Добавляем пути по умолчанию
-	logPaths := []string{
-		"/var/log/syslog\n",
-		"/var/log/dmesg\n",
-		// Информация о входах и выходах пользователей, перезагрузках и остановках системы
-		"/var/log/wtmp\n",
-		// Информация о неудачных попытках входа в систему (например, неправильные пароли)
-		"/var/log/btmp\n",
-	}
-	for _, path := range logPaths {
-		output = append([]byte(path), output...)
+	var output []byte
+	var err error
+	if logPath == "/var/log/" {
+		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log", "-o", "-name", "*.gz")
+		output, err = cmd.Output()
+		if err != nil {
+			log.Printf("Error getting log files: %v", err)
+			return
+		}
+		// Добавляем пути по умолчанию для /var/log
+		logPaths := []string{
+			"/var/log/syslog\n",
+			"/var/log/dmesg\n",
+			// Информация о входах и выходах пользователей, перезагрузках и остановках системы
+			"/var/log/wtmp\n",
+			// Информация о неудачных попытках входа в систему (например, неправильные пароли)
+			"/var/log/btmp\n",
+		}
+		for _, path := range logPaths {
+			output = append([]byte(path), output...)
+		}
+	} else {
+		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log")
+		output, err = cmd.Output()
+		if err != nil {
+			log.Printf("Error getting log files: %v", err)
+			return
+		}
 	}
 	serviceMap := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
@@ -481,6 +492,14 @@ func (app *App) loadFiles(logPath string) {
 		logName = strings.TrimSuffix(logName, ".gz")
 		logName = strings.ReplaceAll(logName, "/", " ")
 		logName = strings.ReplaceAll(logName, ".log.", " ")
+		if logPath == "/home/" {
+			// Разбиваем строку на слова
+			words := strings.Fields(logName)
+			// Берем первое и последнее слово
+			firstWord := words[0]
+			lastWord := words[len(words)-1]
+			logName = firstWord + ": " + lastWord
+		}
 		// Получаем дату изменения файла
 		// cmd := exec.Command("bash", "-c", "stat --format='%y' /var/log/apache2/access.log | awk '{print $1}' | awk -F- '{print $3\".\"$2\".\"$1}'")
 		// Получаем информацию о файле
@@ -1099,6 +1118,13 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowLeft, gocui.ModNone, app.setUnitListLeft); err != nil {
 		return err
 	}
+	// Переключение выбора журналов для filesystem
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowRight, gocui.ModNone, app.setLogFilesList); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowLeft, gocui.ModNone, app.setLogFilesList); err != nil {
+		return err
+	}
 	// Пролистывание вывода журнала
 	app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollDownLogs(1)
@@ -1157,7 +1183,7 @@ func (app *App) setFilterModeLeft(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-// Функции для переключения выбора журналов
+// Функции для переключения выбора журналов из journalctl
 
 func (app *App) setUnitListRight(g *gocui.Gui, v *gocui.View) error {
 	selectedServices, err := g.View("services")
@@ -1207,6 +1233,31 @@ func (app *App) setUnitListLeft(g *gocui.Gui, v *gocui.View) error {
 		selectedServices.Title = " < System units > "
 		app.selectUnits = "UNIT"
 		app.loadServices(app.selectUnits)
+	}
+	return nil
+}
+
+// Функции для переключения выбора журналов из файловой системы
+
+func (app *App) setLogFilesList(g *gocui.Gui, v *gocui.View) error {
+	selectedVarLog, err := g.View("varLogs")
+	if err != nil {
+		log.Panicln(err)
+	}
+	// Сбрасываем содержимое массива и положение курсора
+	app.logfiles = app.logfiles[:0]
+	app.startFiles = 0
+	app.selectedFile = 0
+	// Меняем журнал и обновляем список
+	switch selectedVarLog.Title {
+	case " < Var logs > ":
+		selectedVarLog.Title = " < Home logs > "
+		app.selectPath = "/home/"
+		app.loadFiles(app.selectPath)
+	case " < Home logs > ":
+		selectedVarLog.Title = " < Var logs > "
+		app.selectPath = "/var/log/"
+		app.loadFiles(app.selectPath)
 	}
 	return nil
 }
