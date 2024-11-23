@@ -458,6 +458,18 @@ func (app *App) loadFiles(logPath string) {
 		log.Printf("Error getting log files: %v", err)
 		return
 	}
+	// Добавляем пути по умолчанию
+	logPaths := []string{
+		"/var/log/syslog\n",
+		"/var/log/dmesg\n",
+		// Информация о входах и выходах пользователей, перезагрузках и остановках системы
+		"/var/log/wtmp\n",
+		// Информация о неудачных попытках входа в систему (например, неправильные пароли)
+		"/var/log/btmp\n",
+	}
+	for _, path := range logPaths {
+		output = append([]byte(path), output...)
+	}
 	serviceMap := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
@@ -470,7 +482,7 @@ func (app *App) loadFiles(logPath string) {
 		logName = strings.ReplaceAll(logName, "/", " ")
 		logName = strings.ReplaceAll(logName, ".log.", " ")
 		// Получаем дату изменения файла
-		// 	cmd := exec.Command("bash", "-c", "stat --format='%y' /var/log/apache2/access.log | awk '{print $1}' | awk -F- '{print $3\".\"$2\".\"$1}'")
+		// cmd := exec.Command("bash", "-c", "stat --format='%y' /var/log/apache2/access.log | awk '{print $1}' | awk -F- '{print $3\".\"$2\".\"$1}'")
 		// Получаем информацию о файле
 		fileInfo, err := os.Stat(logFullPath)
 		if err != nil {
@@ -646,6 +658,23 @@ func (app *App) loadFileLogs(logName string) {
 			log.Fatalf("Error waiting for tail: %v", err)
 		}
 		// Выводим содержимое
+		app.currentLogLines = strings.Split(string(output), "\n")
+		// Читаем бинарные файлы с помощью last/lastb
+	} else if strings.HasSuffix(logFullPath, "wtmp") {
+		cmd := exec.Command("last", "-f", logFullPath)
+		output, err := cmd.Output()
+		if err != nil {
+			log.Printf("Error getting logs: %v", err)
+			return
+		}
+		app.currentLogLines = strings.Split(string(output), "\n")
+	} else if strings.HasSuffix(logFullPath, "btmp") {
+		cmd := exec.Command("lastb", "-f", logFullPath)
+		output, err := cmd.Output()
+		if err != nil {
+			log.Printf("Error getting logs: %v", err)
+			return
+		}
 		app.currentLogLines = strings.Split(string(output), "\n")
 	} else {
 		cmd := exec.Command("tail", logFullPath, "-n", app.logViewCount)
