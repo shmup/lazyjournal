@@ -2,7 +2,7 @@
     <img src="/img/logo.jpg">
 </p>
 
-Terminal user interface for `journalctl` (tool for reading units and kernel logs from [systemd](https://github.com/systemd/systemd)), logs in the file system (including syslog and archival logs, for example, apache or nginx), Docker and Podman containers for quick viewing and filtering with fuzzy find and regex support (like `fzf` and `grep`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
+Terminal user interface for `journalctl` (tool for reading logs from [systemd](https://github.com/systemd/systemd)), logs in the file system (including syslog and archival logs, for example, apache or nginx), Docker and Podman containers for quick viewing and filtering with fuzzy find and regex support (like `fzf` and `grep`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
 This tool is inspired by and with love for [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
 
@@ -22,10 +22,11 @@ There is currently a 5000 line limit for outputting any log from the end.
 
 - [X] Support fuzzy find and regular expression to filter output.
 - [X] Highlighting of found words and phrases during filtering.
-- [X] Sorting logs by modification date and support archived logs from `/var/log` directory.
-- [X] Add switch to load other log lists for journalctl and directories on the file system.
-- [X] Add kernel, syslog and authorization log output.
-- [ ] Podman log support.
+- [X] Sorting logs by modification date and support archived logs from file system.
+- [X] Add switch to load a list of user units and system loads for kernel logs
+- [X] Add support for syslog, dmesg, authorization logs and downloading logs from user directories.
+- [X] Podman log support.
+- [ ] Swarm log support.
 - [ ] Background update of selected log.
 - [ ] Filter for log lists and change the number of lines for log output.
 - [ ] Windows support via PowerShell (events and logs from Program Files and others).

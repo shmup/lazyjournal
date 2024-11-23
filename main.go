@@ -37,10 +37,11 @@ type DockerContainers struct {
 type App struct {
 	gui *gocui.Gui // графический интерфейс (gocui)
 
-	selectUnits      string // Название журнала (UNIT/USER_UNIT)
-	selectPath       string // Путь к логам (/var/log/)
-	selectFilterMode string // Режим фильтрации (default/fuzzy/regex)
-	logViewCount     string // Количество логов для просмотра (5000)
+	selectUnits                  string // Название журнала (UNIT/USER_UNIT)
+	selectPath                   string // Путь к логам (/var/log/)
+	selectContainerizationSystem string // Название системы контейнеризации (docker/podman)
+	selectFilterMode             string // Режим фильтрации (default/fuzzy/regex)
+	logViewCount                 string // Количество логов для просмотра (5000)
 
 	journals           []Journal // список (массив/срез) журналов для отображения
 	maxVisibleServices int       // максимальное количество видимых элементов в окне списка служб
@@ -66,16 +67,17 @@ type App struct {
 func main() {
 	// Инициализация значений по умолчанию
 	app := &App{
-		startServices:           0, // начальная позиция списка юнитов
-		selectedJournal:         0, // начальный индекс выбранного журнала
-		startFiles:              0,
-		selectedFile:            0,
-		startDockerContainers:   0,
-		selectedDockerContainer: 0,
-		selectUnits:             "UNIT", // "USER_UNIT"
-		selectPath:              "/var/log/",
-		selectFilterMode:        "default", // "fuzzy" || "regex"
-		logViewCount:            "5000",
+		startServices:                0, // начальная позиция списка юнитов
+		selectedJournal:              0, // начальный индекс выбранного журнала
+		startFiles:                   0,
+		selectedFile:                 0,
+		startDockerContainers:        0,
+		selectedDockerContainer:      0,
+		selectUnits:                  "UNIT", // "USER_UNIT"
+		selectPath:                   "/var/log/",
+		selectContainerizationSystem: "docker",
+		selectFilterMode:             "default", // "fuzzy" || "regex"
+		logViewCount:                 "5000",
 	}
 
 	// Создаем GUI
@@ -126,7 +128,7 @@ func main() {
 		_, viewHeight := v.Size()
 		app.maxVisibleDockerContainers = viewHeight - 1
 	}
-	app.loadDockerContainer()
+	app.loadDockerContainer(app.selectContainerizationSystem)
 
 	// Устанавливаем фокус на окно с журналами по умолчанию
 	g.SetCurrentView("services")
@@ -180,7 +182,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Docker containers"
+		v.Title = " < Docker containers > "
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -710,8 +712,8 @@ func (app *App) loadFileLogs(logName string) {
 
 // ---------------------------------------- Docker ----------------------------------------
 
-func (app *App) loadDockerContainer() {
-	cmd := exec.Command("docker", "ps", "--format", "{{.ID}} {{.Names}}")
+func (app *App) loadDockerContainer(ContainerizationSystem string) {
+	cmd := exec.Command(ContainerizationSystem, "ps", "--format", "{{.ID}} {{.Names}}")
 	output, err := cmd.Output()
 	if err != nil {
 		log.Printf("Error getting docker containers: %v", err)
@@ -824,13 +826,14 @@ func (app *App) selectDocker(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (app *App) loadDockerLogs(containerName string) {
+	var ContainerizationSystem string = app.selectContainerizationSystem
 	var containerId string
 	for _, dockerContainer := range app.dockerContainers {
 		if dockerContainer.name == containerName {
 			containerId = dockerContainer.id
 		}
 	}
-	cmd := exec.Command("docker", "logs", containerId, "--tail", app.logViewCount)
+	cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
 	output, err := cmd.Output()
 	if err != nil {
 		log.Printf("Error getting logs: %v", err)
@@ -1111,18 +1114,25 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("", gocui.KeyArrowLeft, gocui.ModAlt, app.setFilterModeLeft); err != nil {
 		return err
 	}
-	// Переключение выбора журналов для journalctl
+	// Переключение выбора журналов для journalctl (systemd)
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowRight, gocui.ModNone, app.setUnitListRight); err != nil {
 		return err
 	}
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowLeft, gocui.ModNone, app.setUnitListLeft); err != nil {
 		return err
 	}
-	// Переключение выбора журналов для filesystem
+	// Переключение выбора журналов для File System
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowRight, gocui.ModNone, app.setLogFilesList); err != nil {
 		return err
 	}
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowLeft, gocui.ModNone, app.setLogFilesList); err != nil {
+		return err
+	}
+	// Переключение выбора журналов для Containerization System
+	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowRight, gocui.ModNone, app.setContainersList); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowLeft, gocui.ModNone, app.setContainersList); err != nil {
 		return err
 	}
 	// Пролистывание вывода журнала
@@ -1237,18 +1247,15 @@ func (app *App) setUnitListLeft(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-// Функции для переключения выбора журналов из файловой системы
-
+// Функция для переключения выбора журналов из файловой системы
 func (app *App) setLogFilesList(g *gocui.Gui, v *gocui.View) error {
 	selectedVarLog, err := g.View("varLogs")
 	if err != nil {
 		log.Panicln(err)
 	}
-	// Сбрасываем содержимое массива и положение курсора
 	app.logfiles = app.logfiles[:0]
 	app.startFiles = 0
 	app.selectedFile = 0
-	// Меняем журнал и обновляем список
 	switch selectedVarLog.Title {
 	case " < Var logs > ":
 		selectedVarLog.Title = " < Home logs > "
@@ -1258,6 +1265,28 @@ func (app *App) setLogFilesList(g *gocui.Gui, v *gocui.View) error {
 		selectedVarLog.Title = " < Var logs > "
 		app.selectPath = "/var/log/"
 		app.loadFiles(app.selectPath)
+	}
+	return nil
+}
+
+// Функция для переключения выбора системы контейнеризации (Docker/Podman)
+func (app *App) setContainersList(g *gocui.Gui, v *gocui.View) error {
+	selectedDocker, err := g.View("docker")
+	if err != nil {
+		log.Panicln(err)
+	}
+	app.dockerContainers = app.dockerContainers[:0]
+	app.startDockerContainers = 0
+	app.selectedDockerContainer = 0
+	switch selectedDocker.Title {
+	case " < Docker containers > ":
+		selectedDocker.Title = " < Podman containers > "
+		app.selectContainerizationSystem = "podman"
+		app.loadDockerContainer(app.selectContainerizationSystem)
+	case " < Podman containers > ":
+		selectedDocker.Title = " < Docker containers > "
+		app.selectContainerizationSystem = "docker"
+		app.loadDockerContainer(app.selectContainerizationSystem)
 	}
 	return nil
 }
