@@ -37,11 +37,11 @@ type DockerContainers struct {
 type App struct {
 	gui *gocui.Gui // графический интерфейс (gocui)
 
-	selectUnits                  string // Название журнала (UNIT/USER_UNIT)
-	selectPath                   string // Путь к логам (/var/log/)
-	selectContainerizationSystem string // Название системы контейнеризации (docker/podman)
-	selectFilterMode             string // Режим фильтрации (default/fuzzy/regex)
-	logViewCount                 string // Количество логов для просмотра (5000)
+	selectUnits                  string // название журнала (UNIT/USER_UNIT)
+	selectPath                   string // путь к логам (/var/log/)
+	selectContainerizationSystem string // название системы контейнеризации (docker/podman)
+	selectFilterMode             string // режим фильтрации (default/fuzzy/regex)
+	logViewCount                 string // количество логов для просмотра (5000)
 
 	journals           []Journal // список (массив/срез) журналов для отображения
 	maxVisibleServices int       // максимальное количество видимых элементов в окне списка служб
@@ -62,6 +62,9 @@ type App struct {
 	currentLogLines  []string // набор строк (срез) для хранения журнала без фильтрации
 	filteredLogLines []string // набор строк (срез) для хранения журнала после фильтра
 	logScrollPos     int      // позиция прокрутки для отображаемых строк журнала
+
+	lastWindow   string // фиксируем последний используемый источник для вывода логов
+	lastSelected string // фиксируем название последнего выбранного журнала или контейнера
 }
 
 func main() {
@@ -132,6 +135,9 @@ func main() {
 
 	// Устанавливаем фокус на окно с журналами по умолчанию
 	g.SetCurrentView("services")
+
+	// Горутина для автоматического обновления вывода журнала
+	// go app.updateLogOutput(2)
 
 	// Запус GUI
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
@@ -412,10 +418,11 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 	}
 	// Загружаем журналы выбранной службы, обрезая пробелы в названии
 	app.loadJournalLogs(strings.TrimSpace(line))
+	// Фиксируем для ручного или автоматического обновления вывода журнала
+	app.lastWindow = "services"
+	app.lastSelected = strings.TrimSpace(line)
 	return nil
 }
-
-// journalctl -k -b 1804d9623b6d4d73b3c12fcd96e8ac31 --no-pager -n 5000
 
 // Функция для загрузки записей журнала выбранной службы через journalctl
 func (app *App) loadJournalLogs(serviceName string) {
@@ -628,6 +635,8 @@ func (app *App) selectFile(g *gocui.Gui, v *gocui.View) error {
 		return err
 	}
 	app.loadFileLogs(strings.TrimSpace(line))
+	app.lastWindow = "varLogs"
+	app.lastSelected = strings.TrimSpace(line)
 	return nil
 }
 
@@ -822,6 +831,8 @@ func (app *App) selectDocker(g *gocui.Gui, v *gocui.View) error {
 		return err
 	}
 	app.loadDockerLogs(strings.TrimSpace(line))
+	app.lastWindow = "docker"
+	app.lastSelected = strings.TrimSpace(line)
 	return nil
 }
 
@@ -943,10 +954,11 @@ func (app *App) updateLogsView(lowerDown bool) {
 	}
 	// Очищаем окно для отображения новых строк
 	v.Clear()
-	// Получаем размер окна
-	_, viewHeight := v.Size()
-	// Опускаем в самый низ, только если это не ручной скролл
+	// Получаем ширину и высоту окна
+	viewWidth, viewHeight := v.Size()
+	// Опускаем в самый низ, только если это не ручной скролл (отключается параметром)
 	if lowerDown {
+		// Если количество строк больше высоты окна, опускаем в самый низ
 		if len(app.filteredLogLines) > viewHeight-1 {
 			app.logScrollPos = len(app.filteredLogLines) - viewHeight - 1
 		} else {
@@ -959,8 +971,22 @@ func (app *App) updateLogsView(lowerDown bool) {
 	if endLine > len(app.filteredLogLines) {
 		endLine = len(app.filteredLogLines)
 	}
+	// Учитываем auto wrap
+	var steps int
+	if app.logScrollPos >= len(app.filteredLogLines)-viewHeight-1 {
+		for i := startLine; i < endLine; i++ {
+			// Получаем длинну видимых символов в строке
+			var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+			lengthLine := len([]rune(ansiEscape.ReplaceAllString(app.filteredLogLines[i], "")))
+			// Если длинна строки больше ширины окна
+			if lengthLine > viewWidth {
+				// Добавляем количество дополнительных строк в позицию для сдвига вниз
+				steps += lengthLine / viewWidth
+			}
+		}
+	}
 	// Проходим по отфильтрованным строкам и выводим их
-	for i := startLine; i < endLine; i++ {
+	for i := startLine + steps; i < endLine; i++ {
 		fmt.Fprintln(v, app.filteredLogLines[i])
 	}
 	// Вычисляем процент прокрутки и обновляем заголовок
@@ -1148,6 +1174,30 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollUpLogs(10)
 	})
+	// Ручное обновление вывода журнала (Ctrl+R)
+	app.gui.SetKeybinding("", gocui.KeyCtrlR, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.updateLogOutput(0)
+	})
+	return nil
+}
+
+// Функция для обновления последнего выбранного вывода лога
+func (app *App) updateLogOutput(seconds int) error {
+	for {
+		switch app.lastWindow {
+		case "services":
+			app.loadJournalLogs(app.lastSelected)
+		case "varLogs":
+			app.loadFileLogs(app.lastSelected)
+		case "docker":
+			app.loadDockerLogs(app.lastSelected)
+		}
+		if seconds == 0 {
+			break
+		}
+		timer := time.Duration(seconds) * time.Second
+		time.Sleep(timer)
+	}
 	return nil
 }
 

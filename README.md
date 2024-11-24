@@ -96,6 +96,7 @@ bash build.sh "0.1.0" true true
 - `Tab` - Switch between windows.
 - `Left/Right` - Switch between log lists in the selected window.
 - `Enter` - Select a journal from the list to display log.
+- `Ctrl+R` - Refresh current log to show changes.
 - `Up/Down` - Move up or down through all journal lists and log output.
 - `Shift+<Up/Down>` - Quickly move up or down (every 10 lines) through all journal lists and log output.
 - `<Shift/Alt>+<Left/Right>` - Changing the mode in the filtering window.
