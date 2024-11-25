@@ -253,38 +253,67 @@ func (app *App) loadServices(journalName string) {
 		}
 		var bootRecords []BootInfo
 		err = json.Unmarshal(bootOutput, &bootRecords)
+		// Если JSON невалидный
 		if err != nil {
-			vCurrent, _ := app.gui.View("services")
-			vCurrent.Clear()
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError parsing JSON.", err, "\033[0m")
-			return
+			// Парсим вывод построчно
+			lines := strings.Split(string(bootOutput), "\n")
+			for _, line := range lines {
+				// Разбиваем строку на массив
+				wordsArray := strings.Fields(line)
+				// 0 d914ebeb67c6428a87f9cfe3861c295d Mon 2024-11-25 12:15:07 MSK—Mon 2024-11-25 18:34:53 MSK
+				if len(wordsArray) >= 8 {
+					bootId := wordsArray[1]
+					// Забираем дату, проверяем и изменяем формат
+					var parseDate []string
+					var bootDate string
+					parseDate = strings.Split(wordsArray[3], "-")
+					if len(parseDate) == 3 {
+						bootDate = fmt.Sprintf("%s.%s.%s", parseDate[2], parseDate[1], parseDate[0])
+					} else {
+						continue
+					}
+					var stopDate string
+					parseDate = strings.Split(wordsArray[6], "-")
+					if len(parseDate) == 3 {
+						stopDate = fmt.Sprintf("%s.%s.%s", parseDate[2], parseDate[1], parseDate[0])
+					} else {
+						continue
+					}
+					// Заполняем массив
+					bootDateTime := bootDate + " " + wordsArray[4]
+					stopDateTime := stopDate + " " + wordsArray[7]
+					app.journals = append(app.journals, Journal{
+						name:    fmt.Sprintf(bootDateTime + " - " + stopDateTime),
+						boot_id: bootId,
+					})
+				}
+			}
+		} else {
+			// Добавляем информацию о загрузках в app.journals
+			for _, bootRecord := range bootRecords {
+				// Преобразуем наносекунды в секунды
+				firstEntryTime := time.Unix(bootRecord.FirstEntry/1000000, bootRecord.FirstEntry%1000000)
+				lastEntryTime := time.Unix(bootRecord.LastEntry/1000000, bootRecord.LastEntry%1000000)
+				// Форматируем строку в формате "DD.MM.YYYY HH:MM:SS"
+				const dateFormat = "02.01.2006 15:04:05"
+				name := fmt.Sprintf("%s - %s", firstEntryTime.Format(dateFormat), lastEntryTime.Format(dateFormat))
+				// Добавляем в массив
+				app.journals = append(app.journals, Journal{
+					name:    name,
+					boot_id: bootRecord.BootID,
+				})
+			}
 		}
-		// Добавляем информацию о загрузках в app.journals
-		for _, bootRecord := range bootRecords {
-			// Преобразуем наносекунды в секунды
-			firstEntryTime := time.Unix(bootRecord.FirstEntry/1000000, bootRecord.FirstEntry%1000000)
-			lastEntryTime := time.Unix(bootRecord.LastEntry/1000000, bootRecord.LastEntry%1000000)
-			// Форматируем строку в формате "DD.MM.YYYY HH:MM:SS"
-			const dateFormat = "02.01.2006 15:04:05"
-			name := fmt.Sprintf("%s - %s", firstEntryTime.Format(dateFormat), lastEntryTime.Format(dateFormat))
-			// Добавляем в массив
-			app.journals = append(app.journals, Journal{
-				name:    name,
-				boot_id: bootRecord.BootID,
-			})
-			// Сортируем по второй дате
-			sort.Slice(app.journals, func(i, j int) bool {
-				// Разделяем строки на части (до и после дефиса)
-				dateFormat := "02.01.2006 15:04:05"
-				// Получаем вторую дату (после дефиса) и парсим её
-				endDate1, _ := time.Parse(dateFormat, app.journals[i].name[22:])
-				endDate2, _ := time.Parse(dateFormat, app.journals[j].name[22:])
-				// Сравниваем по второй дате в обратном порядке
-				return endDate1.After(endDate2) // Используем After для сортировки по убыванию
-			})
-		}
+		// Сортируем по второй дате
+		sort.Slice(app.journals, func(i, j int) bool {
+			// Разделяем строки на части (до и после дефиса)
+			dateFormat := "02.01.2006 15:04:05"
+			// Получаем вторую дату (после дефиса) и парсим её
+			endDate1, _ := time.Parse(dateFormat, app.journals[i].name[22:])
+			endDate2, _ := time.Parse(dateFormat, app.journals[j].name[22:])
+			// Сравниваем по второй дате в обратном порядке
+			return endDate1.After(endDate2) // Используем After для сортировки по убыванию
+		})
 	} else {
 		cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
 		output, err := cmd.Output()
