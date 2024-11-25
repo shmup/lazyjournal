@@ -235,9 +235,14 @@ func (app *App) loadServices(journalName string) {
 	if journalName == "kernel" {
 		// Получаем список загрузок с помощью journalctl
 		bootCmd := exec.Command("journalctl", "--list-boots", "-o", "json")
+		// Проверяем на ошибки (очищаем список служб и выводим ошибку в поле вывода логов)
 		bootOutput, err := bootCmd.Output()
 		if err != nil {
-			log.Printf("Error getting boot information: %v", err)
+			vCurrent, _ := app.gui.View("services")
+			vCurrent.Clear()
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting boot information.", err, "\033[0m")
 			return
 		}
 		// Структура для парсинга JSON
@@ -249,7 +254,11 @@ func (app *App) loadServices(journalName string) {
 		var bootRecords []BootInfo
 		err = json.Unmarshal(bootOutput, &bootRecords)
 		if err != nil {
-			log.Printf("Error parsing JSON: %v", err)
+			vCurrent, _ := app.gui.View("services")
+			vCurrent.Clear()
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError parsing JSON.", err, "\033[0m")
 			return
 		}
 		// Добавляем информацию о загрузках в app.journals
@@ -280,7 +289,11 @@ func (app *App) loadServices(journalName string) {
 		cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
 		output, err := cmd.Output()
 		if err != nil {
-			log.Printf("Error getting services: %v", err)
+			vCurrent, _ := app.gui.View("services")
+			vCurrent.Clear()
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting services.", err, "\033[0m")
 			return
 		}
 		// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
@@ -439,14 +452,18 @@ func (app *App) loadJournalLogs(serviceName string) {
 		cmd := exec.Command("journalctl", "-k", "-b", boot_id, "--no-pager", "-n", app.logViewCount)
 		output, err = cmd.Output()
 		if err != nil {
-			log.Printf("Error getting logs: %v", err)
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
 			return
 		}
 	} else {
 		cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", app.logViewCount)
 		output, err = cmd.Output()
 		if err != nil {
-			log.Printf("Error getting logs: %v", err)
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
 			return
 		}
 	}
@@ -467,7 +484,11 @@ func (app *App) loadFiles(logPath string) {
 		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log", "-o", "-name", "*.gz")
 		output, err = cmd.Output()
 		if err != nil {
-			log.Printf("Error getting log files: %v", err)
+			vCurrent, _ := app.gui.View("varLogs")
+			vCurrent.Clear()
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting log files to", logPath, "path.", err, "\033[0m")
 			return
 		}
 		// Добавляем пути по умолчанию для /var/log
@@ -486,7 +507,11 @@ func (app *App) loadFiles(logPath string) {
 		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log")
 		output, err = cmd.Output()
 		if err != nil {
-			log.Printf("Error getting log files: %v", err)
+			vCurrent, _ := app.gui.View("varLogs")
+			vCurrent.Clear()
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting log files to", logPath, "path.", err, "\033[0m")
 			return
 		}
 	}
@@ -514,7 +539,11 @@ func (app *App) loadFiles(logPath string) {
 		// Получаем информацию о файле
 		fileInfo, err := os.Stat(logFullPath)
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			vCurrent, _ := app.gui.View("varLogs")
+			vCurrent.Clear()
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting file information.", err, "\033[0m")
 			return
 		}
 		// Получаем дату изменения
@@ -682,10 +711,16 @@ func (app *App) loadFileLogs(logName string) {
 		}
 		// Ожидание завершения команд
 		if err := cmdGzip.Wait(); err != nil {
-			log.Fatalf("Error waiting for gzip: %v", err)
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError reading archive log with tool: gzip.", err, "\033[0m")
+			return
 		}
 		if err := cmdTail.Wait(); err != nil {
-			log.Fatalf("Error waiting for tail: %v", err)
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError reading log with tool: tail.", err, "\033[0m")
+			return
 		}
 		// Выводим содержимое
 		app.currentLogLines = strings.Split(string(output), "\n")
@@ -694,7 +729,9 @@ func (app *App) loadFileLogs(logName string) {
 		cmd := exec.Command("last", "-f", logFullPath)
 		output, err := cmd.Output()
 		if err != nil {
-			log.Printf("Error getting logs: %v", err)
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError reading log with tool: last.", err, "\033[0m")
 			return
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
@@ -702,7 +739,9 @@ func (app *App) loadFileLogs(logName string) {
 		cmd := exec.Command("lastb", "-f", logFullPath)
 		output, err := cmd.Output()
 		if err != nil {
-			log.Printf("Error getting logs: %v", err)
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError reading log with tool: lastb.", err, "\033[0m")
 			return
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
@@ -710,7 +749,9 @@ func (app *App) loadFileLogs(logName string) {
 		cmd := exec.Command("tail", logFullPath, "-n", app.logViewCount)
 		output, err := cmd.Output()
 		if err != nil {
-			log.Printf("Error getting logs: %v", err)
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError reading log with tool: tail.", err, "\033[0m")
 			return
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
@@ -725,7 +766,11 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 	cmd := exec.Command(ContainerizationSystem, "ps", "--format", "{{.ID}} {{.Names}}")
 	output, err := cmd.Output()
 	if err != nil {
-		log.Printf("Error getting docker containers: %v", err)
+		vCurrent, _ := app.gui.View("docker")
+		vCurrent.Clear()
+		v, _ := app.gui.View("logs")
+		v.Clear()
+		fmt.Fprintln(v, "\033[31mError getting", ContainerizationSystem, "containers.", err, "\033[0m")
 		return
 	}
 	serviceMap := make(map[string]bool)
@@ -847,7 +892,9 @@ func (app *App) loadDockerLogs(containerName string) {
 	cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
 	output, err := cmd.Output()
 	if err != nil {
-		log.Printf("Error getting logs: %v", err)
+		v, _ := app.gui.View("logs")
+		v.Clear()
+		fmt.Fprintln(v, "\033[31mError getting logs from", containerName, "(", containerId, ")", "container.", err, "\033[0m")
 		return
 	}
 	app.currentLogLines = strings.Split(string(output), "\n")
@@ -1087,10 +1134,7 @@ func (app *App) createFilterEditor() gocui.Editor {
 
 // Функция для очистки поля ввода фильтра
 func (app *App) clearFilterEditor(g *gocui.Gui) {
-	v, err := g.View("filter")
-	if err != nil {
-		log.Panicln(err)
-	}
+	v, _ := g.View("filter")
 	// Очищаем содержимое View
 	v.Clear()
 	// Устанавливаем курсор на начальную позицию

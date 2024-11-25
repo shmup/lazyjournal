@@ -65,6 +65,8 @@ lazyjournal
 
 If the current user does not have rights to read logs in the `/var/log` directory or access to Docker containers (or the containerization system is not installed), then these windows will be empty.
 
+Windows is not currently supported, but you can still run a project to access Docker and Postman container logs.
+
 ## Build
 
 Clone the repository, install dependencies from `go.mod` and run the project:
@@ -100,7 +102,7 @@ bash build.sh "0.1.0" true true
 - `Up/Down` - Move up or down through all journal lists and log output.
 - `Shift+<Up/Down>` - Quickly move up or down (every 10 lines) through all journal lists and log output.
 - `<Shift/Alt>+<Left/Right>` - Changing the mode in the filtering window.
-- `Ctrl+<D/W>` - Clearing the text input field for the filter (available while focused on any window for quick access to the log without filtering).
+- `Ctrl+<D/W>` - Clearing the text input field for the filter (available while focused on any window to quickly update the current log output without filtering).
 - `Ctrl+C` - Exit.
 
 ## Alternatives
