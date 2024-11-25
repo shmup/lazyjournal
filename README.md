@@ -61,6 +61,7 @@ You can also use Go for installation. To do this, the Go interpreter must be ins
 ```shell
 sudo snap install go --classic
 grep -F 'export PATH=$PATH:$HOME/go/bin' $HOME/.bashrc || echo 'export PATH=$PATH:$HOME/go/bin' >> $HOME/.bashrc && source $HOME/.bashrc
+
 go install github.com/Lifailon/lazyjournal@latest
 ```
 
@@ -85,20 +86,11 @@ go mod tidy
 go run main.go
 ```
 
-Building the executable files:
+Building the executable files for different platforms:
 
 ```shell
-arch="amd64" # or "arm64"
-GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$arch
+bash build.sh
 ```
-
-<!--
-Building the `snap` and `deb` packages:
-
-```shell
-bash build.sh "0.1.0" true true
-```
--->
 
 ## Hotkeys
 
