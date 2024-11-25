@@ -1,11 +1,11 @@
 name: lazyjournal
 version: '0.2.0'
-summary: TUI for journalctl, logs in the file system and docker containers
+summary: TUI for journalctl, logs in the file system, Docker and Podman containers
 description: |
-  Terminal user interface for journalctl, logs in the file system and docker containers for quick viewing and filtering with fuzzy find and regex support.
+  Terminal user interface for journalctl (tool for reading logs from systemd), logs in the file system, syslog, kernel, Docker and Podman containers for quick viewing and filtering with fuzzy find and regex support (like fzf and grep).
 
 base: core20
-confinement: strict
+confinement: classic
 
 architectures:
   - amd64
@@ -13,7 +13,6 @@ architectures:
 apps:
   lazyjournal:
     command: bin/lazyjournal
-    plugs: [system-observe, home, docker-support]
 
 parts:
   lazyjournal:
