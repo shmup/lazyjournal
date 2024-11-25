@@ -4,10 +4,8 @@
 
 <p align="center">
     <a href="https://github.com/Lifailon/lazyjournal"><img title="Go Version"src="https://img.shields.io/github/go-mod/go-version/Lifailon/lazyjournal?logo=go"></a>
-    <a href="https://github.com/Lifailon/lazyjournal/releases/latest"><img title="GitHub Release"src="https://img.shields.io/github/v/release/Lifailon/lazyjournal
-?label=Latest release&logo=git&color=coral"></a>
-    <a href="https://github.com/Lifailon/lazyjournal/releases"><img title="GitHub Downloads"src="https://img.shields.io/github/downloads/Lifailon/lazyjournal/total
-?label=Downloads&logo=github&color=green"></a>
+    <a href="https://github.com/Lifailon/lazyjournal/releases/latest"><img title="GitHub Release"src="https://img.shields.io/github/v/release/Lifailon/lazyjournal?label=Latest release&logo=git&color=coral"></a>
+    <a href="https://github.com/Lifailon/lazyjournal/releases"><img title="GitHub Downloads"src="https://img.shields.io/github/downloads/Lifailon/lazyjournal/total?label=Downloads&logo=github&color=green"></a>
     <a href="https://github.com/Lifailon/Kinozal-Bot/blob/rsa/LICENSE"><img title="License"src="https://img.shields.io/github/license/Lifailon/Kinozal-Bot?logo=readme&color=white"></a>
 </p>
 
@@ -48,7 +46,7 @@ There is currently a 5000 line limit for outputting any log from the end.
 
 Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
-> Development is done on the Ubuntu system, also tested in WSL environment on Debian system (`x64` platform) and Raspberry Pi (`aarch64` platform).
+> Development is done on the Ubuntu Server system, also tested in WSL environment on Debian system (`x64` platform) and Raspberry Pi (`aarch64` platform).
 
 Run the command in your console to quickly install or update:
 
@@ -74,7 +72,7 @@ lazyjournal
 
 If the current user does not have rights to read logs in the `/var/log` directory or access to Docker containers (or the containerization system is not installed), then these windows will be empty.
 
-Windows is not currently supported, but you can still run a project to access Docker and Podman container logs.
+> Windows is not currently supported, but the project will work to access Docker and Podman container logs.
 
 ## Build
 

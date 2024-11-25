@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version=${1:-"0.1.0"}
+version=${1:-"0.2.0"}
 mkdir -p bin
 rm -rf bin/*
 
