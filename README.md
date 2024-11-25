@@ -2,6 +2,15 @@
     <img src="/img/logo.jpg">
 </p>
 
+<p align="center">
+    <a href="https://github.com/Lifailon/lazyjournal"><img title="Go Version"src="https://img.shields.io/github/go-mod/go-version/Lifailon/lazyjournal?logo=go"></a>
+    <a href="https://github.com/Lifailon/lazyjournal/releases/latest"><img title="GitHub Release"src="https://img.shields.io/github/v/release/Lifailon/lazyjournal
+?label=Latest release&logo=git&color=coral"></a>
+    <a href="https://github.com/Lifailon/lazyjournal/releases"><img title="GitHub Downloads"src="https://img.shields.io/github/downloads/Lifailon/lazyjournal/total
+?label=Downloads&logo=github&color=green"></a>
+    <a href="https://github.com/Lifailon/Kinozal-Bot/blob/rsa/LICENSE"><img title="License"src="https://img.shields.io/github/license/Lifailon/Kinozal-Bot?logo=readme&color=white"></a>
+</p>
+
 Terminal user interface for `journalctl` (tool for reading logs from [systemd](https://github.com/systemd/systemd)), logs in the file system (including syslog and archival logs, for example, apache or nginx), Docker and Podman containers for quick viewing and filtering with fuzzy find and regex support (like `fzf` and `grep`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
 This tool is inspired by and with love for [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
@@ -65,7 +74,7 @@ lazyjournal
 
 If the current user does not have rights to read logs in the `/var/log` directory or access to Docker containers (or the containerization system is not installed), then these windows will be empty.
 
-Windows is not currently supported, but you can still run a project to access Docker and Postman container logs.
+Windows is not currently supported, but you can still run a project to access Docker and Podman container logs.
 
 ## Build
 
