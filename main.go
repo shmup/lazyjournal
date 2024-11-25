@@ -452,10 +452,10 @@ func (app *App) loadJournalLogs(serviceName string) {
 	}
 	// Сохраняем строки журнала в массив
 	app.currentLogLines = strings.Split(string(output), "\n")
-	// Очищаем поле ввода для фильтрации
-	app.filterText = ""
+	// Очищаем поле ввода для фильтрации, что бы не применять фильтрацию к новому журналу
+	// app.filterText = ""
 	// Применяем текущий фильтр к записям для обновления вывода
-	app.applyFilter()
+	app.applyFilter(false)
 }
 
 // ---------------------------------------- Var Logs ----------------------------------------
@@ -715,8 +715,8 @@ func (app *App) loadFileLogs(logName string) {
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
 	}
-	app.filterText = ""
-	app.applyFilter()
+	// app.filterText = ""
+	app.applyFilter(false)
 }
 
 // ---------------------------------------- Docker ----------------------------------------
@@ -851,19 +851,21 @@ func (app *App) loadDockerLogs(containerName string) {
 		return
 	}
 	app.currentLogLines = strings.Split(string(output), "\n")
-	app.filterText = ""
-	app.applyFilter()
+	// app.filterText = ""
+	app.applyFilter(false)
 }
 
 // ---------------------------------------- Filter/Logs ----------------------------------------
 
 // Функция для фильтрации записей текущего журнала
-func (app *App) applyFilter() {
+func (app *App) applyFilter(color bool) {
 	v, err := app.gui.View("filter")
 	if err != nil {
 		return
 	}
-	v.FrameColor = gocui.ColorGreen
+	if color {
+		v.FrameColor = gocui.ColorGreen
+	}
 	app.filteredLogLines = make([]string, 0)
 	// Опускаем регистр ввода текста для фильтра
 	filter := strings.ToLower(app.filterText)
@@ -1061,8 +1063,23 @@ func (app *App) createFilterEditor() gocui.Editor {
 		// Обновляем текст в буфере
 		app.filterText = strings.TrimSpace(v.Buffer())
 		// Применяем функцию фильтрации к выводу записей журнала
-		app.applyFilter()
+		app.applyFilter(true)
 	})
+}
+
+// Функция для очистки поля ввода фильтра
+func (app *App) clearFilterEditor(g *gocui.Gui) {
+	v, err := g.View("filter")
+	if err != nil {
+		log.Panicln(err)
+	}
+	// Очищаем содержимое View
+	v.Clear()
+	// Устанавливаем курсор на начальную позицию
+	v.SetCursor(0, 0)
+	// Очищаем буфер фильтра
+	app.filterText = ""
+	app.applyFilter(false)
 }
 
 // ---------------------------------------- Key Binding ----------------------------------------
@@ -1178,6 +1195,21 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("", gocui.KeyCtrlR, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.updateLogOutput(0)
 	})
+	// Очистка поля ввода для фильтра (Ctrl+L)
+	app.gui.SetKeybinding("", gocui.KeyCtrlL, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		app.clearFilterEditor(g)
+		return nil
+	})
+	// Очистка поля ввода для фильтра (Ctrl+W)
+	app.gui.SetKeybinding("", gocui.KeyCtrlW, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		app.clearFilterEditor(g)
+		return nil
+	})
+	// Очистка поля ввода для фильтра (Ctrl+Q)
+	app.gui.SetKeybinding("", gocui.KeyCtrlQ, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		app.clearFilterEditor(g)
+		return nil
+	})
 	return nil
 }
 
@@ -1219,7 +1251,7 @@ func (app *App) setFilterModeRight(g *gocui.Gui, v *gocui.View) error {
 		selectedFilter.Title = "Filter [Default]"
 		app.selectFilterMode = "default"
 	}
-	app.applyFilter()
+	app.applyFilter(false)
 	return nil
 }
 
@@ -1239,7 +1271,7 @@ func (app *App) setFilterModeLeft(g *gocui.Gui, v *gocui.View) error {
 		selectedFilter.Title = "Filter [Default]"
 		app.selectFilterMode = "default"
 	}
-	app.applyFilter()
+	app.applyFilter(false)
 	return nil
 }
 
