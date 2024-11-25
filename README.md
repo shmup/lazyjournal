@@ -100,6 +100,7 @@ bash build.sh "0.1.0" true true
 - `Up/Down` - Move up or down through all journal lists and log output.
 - `Shift+<Up/Down>` - Quickly move up or down (every 10 lines) through all journal lists and log output.
 - `<Shift/Alt>+<Left/Right>` - Changing the mode in the filtering window.
+- `Ctrl+<D/W>` - Clearing the text input field for the filter (available while focused on any window for quick access to the log without filtering).
 - `Ctrl+C` - Exit.
 
 ## Alternatives

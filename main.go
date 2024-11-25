@@ -1213,18 +1213,13 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("", gocui.KeyCtrlR, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.updateLogOutput(0)
 	})
-	// Очистка поля ввода для фильтра (Ctrl+L)
-	app.gui.SetKeybinding("", gocui.KeyCtrlL, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+	// Очистка поля ввода для фильтра (Ctrl+D)
+	app.gui.SetKeybinding("", gocui.KeyCtrlD, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		app.clearFilterEditor(g)
 		return nil
 	})
 	// Очистка поля ввода для фильтра (Ctrl+W)
 	app.gui.SetKeybinding("", gocui.KeyCtrlW, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		app.clearFilterEditor(g)
-		return nil
-	})
-	// Очистка поля ввода для фильтра (Ctrl+Q)
-	app.gui.SetKeybinding("", gocui.KeyCtrlQ, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		app.clearFilterEditor(g)
 		return nil
 	})
