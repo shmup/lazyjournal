@@ -973,23 +973,41 @@ func (app *App) updateLogsView(lowerDown bool) {
 	if endLine > len(app.filteredLogLines) {
 		endLine = len(app.filteredLogLines)
 	}
-	// Учитываем auto wrap
-	var steps int
-	if app.logScrollPos >= len(app.filteredLogLines)-viewHeight-1 {
-		for i := startLine; i < endLine; i++ {
-			// Получаем длинну видимых символов в строке
+	// Учитываем auto wrap (только в конце лога)
+	if app.logScrollPos == len(app.filteredLogLines)-viewHeight-1 {
+		var viewLines int = 0                             // количество строк для вывода
+		var viewCounter int = 0                           // обратный счетчик видимых строк для остановки
+		var viewIndex int = len(app.filteredLogLines) - 1 // начальный индекс для строк с конца
+		for {
+			// Фиксируем текущую входную строку и счетчик
+			viewLines += 1
+			viewCounter += 1
+			// Получаем длинну видимых символов в строке с конца
 			var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-			lengthLine := len([]rune(ansiEscape.ReplaceAllString(app.filteredLogLines[i], "")))
-			// Если длинна строки больше ширины окна
+			lengthLine := len([]rune(ansiEscape.ReplaceAllString(app.filteredLogLines[viewIndex], "")))
+			// Если длинна строки больше ширины окна, получаем количество дополнительных строк
 			if lengthLine > viewWidth {
-				// Добавляем количество дополнительных строк в позицию для сдвига вниз
-				steps += lengthLine / viewWidth
+				// Увеличивая счетчик и пропускаем строки
+				viewCounter += lengthLine / viewWidth
 			}
+			// Если счетчик привысил количество видимых строк, вычетаем последнюю строку из видимости
+			if viewCounter > viewHeight {
+				viewLines -= 1
+			}
+			if viewCounter >= viewHeight {
+				break
+			}
+			// Уменьшаем индекс
+			viewIndex -= 1
 		}
-	}
-	// Проходим по отфильтрованным строкам и выводим их
-	for i := startLine + steps; i < endLine; i++ {
-		fmt.Fprintln(v, app.filteredLogLines[i])
+		for i := len(app.filteredLogLines) - viewLines - 1; i < endLine; i++ {
+			fmt.Fprintln(v, app.filteredLogLines[i])
+		}
+	} else {
+		// Проходим по отфильтрованным строкам и выводим их
+		for i := startLine; i < endLine; i++ {
+			fmt.Fprintln(v, app.filteredLogLines[i])
+		}
 	}
 	// Вычисляем процент прокрутки и обновляем заголовок
 	if len(app.filteredLogLines) > 0 {
