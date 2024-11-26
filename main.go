@@ -248,10 +248,16 @@ func (app *App) loadServices(journalName string) {
 		if err != nil {
 			vCurrent, _ := app.gui.View("services")
 			vCurrent.Clear()
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting boot information.", err, "\033[0m")
+			app.journalListFrameColor = gocui.ColorRed
+			vCurrent.FrameColor = app.journalListFrameColor
+			// v, _ := app.gui.View("logs")
+			// v.Clear()
+			// fmt.Fprintln(v, "\033[31mError getting boot information.", err, "\033[0m")
 			return
+		} else {
+			vCurrent, _ := app.gui.View("services")
+			app.journalListFrameColor = gocui.ColorDefault
+			vCurrent.FrameColor = gocui.ColorGreen
 		}
 		// Структура для парсинга JSON
 		type BootInfo struct {
@@ -328,10 +334,16 @@ func (app *App) loadServices(journalName string) {
 		if err != nil {
 			vCurrent, _ := app.gui.View("services")
 			vCurrent.Clear()
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting services.", err, "\033[0m")
+			app.journalListFrameColor = gocui.ColorRed
+			vCurrent.FrameColor = app.journalListFrameColor
+			// v, _ := app.gui.View("logs")
+			// v.Clear()
+			// fmt.Fprintln(v, "\033[31mError getting services.", err, "\033[0m")
 			return
+		} else {
+			vCurrent, _ := app.gui.View("services")
+			app.journalListFrameColor = gocui.ColorDefault
+			vCurrent.FrameColor = gocui.ColorGreen
 		}
 		// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
 		serviceMap := make(map[string]bool)
@@ -526,8 +538,8 @@ func (app *App) loadFiles(logPath string) {
 			// Если журнал недоступен, меняем цвет на красный
 			app.fileSystemFrameColor = gocui.ColorRed
 			vCurrent.FrameColor = app.fileSystemFrameColor
-			v, _ := app.gui.View("logs")
-			v.Clear()
+			// v, _ := app.gui.View("logs")
+			// v.Clear()
 			// Выводим ошибку в список логов
 			// fmt.Fprintln(v, "\033[31mError getting log files to", logPath, "path.", err, "\033[0m")
 			return
@@ -814,8 +826,8 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		vCurrent.Clear()
 		app.dockerFrameColor = gocui.ColorRed
 		vCurrent.FrameColor = app.dockerFrameColor
-		v, _ := app.gui.View("logs")
-		v.Clear()
+		// v, _ := app.gui.View("logs")
+		// v.Clear()
 		// fmt.Fprintln(v, "\033[31mError getting", ContainerizationSystem, "containers.", err, "\033[0m")
 		return
 	} else {
