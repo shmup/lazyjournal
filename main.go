@@ -534,14 +534,13 @@ func (app *App) loadFiles(logPath string) {
 		}
 	} else {
 		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log")
-		output, err = cmd.Output()
-		if err != nil {
-			vCurrent, _ := app.gui.View("varLogs")
-			vCurrent.Clear()
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting log files to", logPath, "path.", err, "\033[0m")
-			return
+		output, _ = cmd.Output()
+		// Получаем содержимое файлов из домашнего каталога пользователя root
+		cmdRootDir := exec.Command("find", "/root/", "-type", "f", "-name", "*.log")
+		outputRootDir, err := cmdRootDir.Output()
+		// Добавляем содержимое директории /root/ в общий массив, если есть доступ
+		if err == nil {
+			output = append(output, outputRootDir...)
 		}
 	}
 	serviceMap := make(map[string]bool)
@@ -563,17 +562,12 @@ func (app *App) loadFiles(logPath string) {
 			lastWord := words[len(words)-1]
 			logName = firstWord + ": " + lastWord
 		}
-		// Получаем дату изменения файла
-		// cmd := exec.Command("bash", "-c", "stat --format='%y' /var/log/apache2/access.log | awk '{print $1}' | awk -F- '{print $3\".\"$2\".\"$1}'")
 		// Получаем информацию о файле
+		// cmd := exec.Command("bash", "-c", "stat --format='%y' /var/log/apache2/access.log | awk '{print $1}' | awk -F- '{print $3\".\"$2\".\"$1}'")
 		fileInfo, err := os.Stat(logFullPath)
 		if err != nil {
-			vCurrent, _ := app.gui.View("varLogs")
-			vCurrent.Clear()
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting file information.", err, "\033[0m")
-			return
+			// Пропускаем файл, если к нему нет доступа (актуально для статических файлов из logPaths)
+			continue
 		}
 		// Получаем дату изменения
 		modTime := fileInfo.ModTime()
