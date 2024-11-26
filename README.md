@@ -30,17 +30,16 @@ There is currently a 5000 line limit for outputting any log from the end.
 - [X] Support fuzzy find and regular expression to filter output.
 - [X] Highlighting of found words and phrases during filtering.
 - [X] Sorting logs by modification date and support archived logs from file system.
-- [X] Add switch to load a list of user units and system loads for kernel logs
-- [X] Add support for syslog, dmesg, authorization logs and downloading logs from user directories.
-- [X] Podman log support.
-- [ ] Swarm log support.
+- [X] Add switch to load a list of user units and system loads for kernel logs.
+- [X] Add support for syslog, dmesg, authorization logs and downloading logs from user directories (home and root).
+- [X] Podman and Swarm log support.
 - [ ] Background update of selected log.
 - [ ] Filter for log lists and change the number of lines for log output.
 - [ ] Windows support via PowerShell (events and logs from Program Files and others).
 - [ ] Scrolling interface.
 - [ ] Mouse support.
 - [ ] Syntax coloring for logging output.
-- [ ] Support remote machines via `ssh` protocol.
+- [ ] Support remote machines via ssh protocol.
 
 ## Install
 

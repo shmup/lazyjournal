@@ -81,11 +81,11 @@ func main() {
 		selectedFile:                 0,
 		startDockerContainers:        0,
 		selectedDockerContainer:      0,
-		selectUnits:                  "UNIT",    // "USER_UNIT"
+		selectUnits:                  "UNIT",    // "USER_UNIT" || "kernel"
 		selectPath:                   "/home/",  // "/var/log/"
 		selectContainerizationSystem: "docker",  // "podman"
 		selectFilterMode:             "default", // "fuzzy" || "regex"
-		logViewCount:                 "5000",    // 5000
+		logViewCount:                 "5000",    // 10000
 		journalListFrameColor:        gocui.ColorDefault,
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
@@ -816,7 +816,11 @@ func (app *App) loadFileLogs(logName string) {
 	app.applyFilter(false)
 }
 
-// ---------------------------------------- Docker ----------------------------------------
+// ---------------------------------------- Docker/Podman ----------------------------------------
+
+// Swarm
+// docker service ls --format "{{.ID}} {{.Name}}"
+// docker service logs lmt7evz8xzc0
 
 func (app *App) loadDockerContainer(ContainerizationSystem string) {
 	cmd := exec.Command(ContainerizationSystem, "ps", "--format", "{{.ID}} {{.Names}}")
@@ -1494,6 +1498,14 @@ func (app *App) setContainersList(g *gocui.Gui, v *gocui.View) error {
 		selectedDocker.Title = " < Docker containers > "
 		app.selectContainerizationSystem = "docker"
 		app.loadDockerContainer(app.selectContainerizationSystem)
+		// case " < Podman containers > ":
+		// 	selectedDocker.Title = " < Swarm services > "
+		// 	app.selectContainerizationSystem = "swarm"
+		// 	app.loadDockerContainer(app.selectContainerizationSystem)
+		// case " < Swarm services > ":
+		// 	selectedDocker.Title = " < Docker containers > "
+		// 	app.selectContainerizationSystem = "docker"
+		// 	app.loadDockerContainer(app.selectContainerizationSystem)
 	}
 	return nil
 }
