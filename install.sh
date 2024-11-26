@@ -17,7 +17,7 @@ grep -F 'export PATH=$PATH:$HOME/.local/bin' $HOME/.bashrc > /dev/null || {
 }
 
 GITHUB_LATEST_VERSION=$(curl -L -s -H 'Accept: application/json' https://github.com/Lifailon/lazyjournal/releases/latest | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/')
-if [[ -z "$GITHUB_LATEST_VERSION" ]]; then
+if [ -z "$GITHUB_LATEST_VERSION" ]; then
     echo -e "\033[31mError.\033[0m Unable to get the latest version from GitHub repository, check your internet connection."
     exit 1
 else
