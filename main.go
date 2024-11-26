@@ -65,6 +65,11 @@ type App struct {
 
 	lastWindow   string // фиксируем последний используемый источник для вывода логов
 	lastSelected string // фиксируем название последнего выбранного журнала или контейнера
+
+	// Цвета окон по умолчанию (изменяется в зависимости от доступности журналов)
+	journalListFrameColor gocui.Attribute
+	fileSystemFrameColor  gocui.Attribute
+	dockerFrameColor      gocui.Attribute
 }
 
 func main() {
@@ -76,11 +81,14 @@ func main() {
 		selectedFile:                 0,
 		startDockerContainers:        0,
 		selectedDockerContainer:      0,
-		selectUnits:                  "UNIT", // "USER_UNIT"
-		selectPath:                   "/var/log/",
-		selectContainerizationSystem: "docker",
+		selectUnits:                  "UNIT",    // "USER_UNIT"
+		selectPath:                   "/home/",  // "/var/log/"
+		selectContainerizationSystem: "docker",  // "podman"
 		selectFilterMode:             "default", // "fuzzy" || "regex"
-		logViewCount:                 "5000",
+		logViewCount:                 "5000",    // 5000
+		journalListFrameColor:        gocui.ColorDefault,
+		fileSystemFrameColor:         gocui.ColorDefault,
+		dockerFrameColor:             gocui.ColorDefault,
 	}
 
 	// Создаем GUI
@@ -174,7 +182,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = " < Var logs > "
+		v.Title = " < Home logs > "
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -515,10 +523,18 @@ func (app *App) loadFiles(logPath string) {
 		if err != nil {
 			vCurrent, _ := app.gui.View("varLogs")
 			vCurrent.Clear()
+			// Если журнал недоступен, меняем цвет на красный
+			app.fileSystemFrameColor = gocui.ColorRed
+			vCurrent.FrameColor = app.fileSystemFrameColor
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting log files to", logPath, "path.", err, "\033[0m")
+			// Выводим ошибку в список логов
+			// fmt.Fprintln(v, "\033[31mError getting log files to", logPath, "path.", err, "\033[0m")
 			return
+		} else {
+			vCurrent, _ := app.gui.View("varLogs")
+			app.fileSystemFrameColor = gocui.ColorDefault
+			vCurrent.FrameColor = gocui.ColorGreen
 		}
 		// Добавляем пути по умолчанию для /var/log
 		logPaths := []string{
@@ -541,6 +557,11 @@ func (app *App) loadFiles(logPath string) {
 		// Добавляем содержимое директории /root/ в общий массив, если есть доступ
 		if err == nil {
 			output = append(output, outputRootDir...)
+		}
+		if app.fileSystemFrameColor == gocui.ColorRed {
+			vCurrent, _ := app.gui.View("varLogs")
+			app.fileSystemFrameColor = gocui.ColorDefault
+			vCurrent.FrameColor = gocui.ColorGreen
 		}
 	}
 	serviceMap := make(map[string]bool)
@@ -791,10 +812,18 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 	if err != nil {
 		vCurrent, _ := app.gui.View("docker")
 		vCurrent.Clear()
+		app.dockerFrameColor = gocui.ColorRed
+		vCurrent.FrameColor = app.dockerFrameColor
 		v, _ := app.gui.View("logs")
 		v.Clear()
-		fmt.Fprintln(v, "\033[31mError getting", ContainerizationSystem, "containers.", err, "\033[0m")
+		// fmt.Fprintln(v, "\033[31mError getting", ContainerizationSystem, "containers.", err, "\033[0m")
 		return
+	} else {
+		vCurrent, _ := app.gui.View("docker")
+		app.dockerFrameColor = gocui.ColorDefault
+		if vCurrent.FrameColor != gocui.ColorDefault {
+			vCurrent.FrameColor = gocui.ColorGreen
+		}
 	}
 	serviceMap := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
@@ -1485,11 +1514,11 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 		// Если текущее окно services, переходим к filter
 		case "services":
 			nextView = "varLogs"
-			selectedServices.FrameColor = gocui.ColorDefault
+			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = gocui.ColorGreen
 			selectedVarLog.TitleColor = gocui.ColorGreen
-			selectedDocker.FrameColor = gocui.ColorDefault
+			selectedDocker.FrameColor = app.dockerFrameColor
 			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
@@ -1497,9 +1526,9 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.TitleColor = gocui.ColorDefault
 		case "varLogs":
 			nextView = "docker"
-			selectedServices.FrameColor = gocui.ColorDefault
+			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
-			selectedVarLog.FrameColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
 			selectedDocker.FrameColor = gocui.ColorGreen
 			selectedDocker.TitleColor = gocui.ColorGreen
@@ -1509,11 +1538,11 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.TitleColor = gocui.ColorDefault
 		case "docker":
 			nextView = "filter"
-			selectedServices.FrameColor = gocui.ColorDefault
+			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
-			selectedVarLog.FrameColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = gocui.ColorDefault
+			selectedDocker.FrameColor = app.dockerFrameColor
 			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorGreen
 			selectedFilter.TitleColor = gocui.ColorGreen
@@ -1521,11 +1550,11 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.TitleColor = gocui.ColorDefault
 		case "filter":
 			nextView = "logs"
-			selectedServices.FrameColor = gocui.ColorDefault
+			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
-			selectedVarLog.FrameColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = gocui.ColorDefault
+			selectedDocker.FrameColor = app.dockerFrameColor
 			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
@@ -1535,9 +1564,9 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			nextView = "services"
 			selectedServices.FrameColor = gocui.ColorGreen
 			selectedServices.TitleColor = gocui.ColorGreen
-			selectedVarLog.FrameColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = gocui.ColorDefault
+			selectedDocker.FrameColor = app.dockerFrameColor
 			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault

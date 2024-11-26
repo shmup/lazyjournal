@@ -71,9 +71,9 @@ You can launch the interface anywhere:
 lazyjournal
 ```
 
-If the current user does not have rights to read logs in the `/var/log` directory or access to Docker containers (or the containerization system is not installed), then these windows will be empty.
+Windows is not currently supported, but the project will work to access Docker and Podman containers log.
 
-> Windows is not currently supported, but the project will work to access Docker and Podman container logs.
+If the current user does not have rights to read logs in the `/var/log` directory or access to Docker/Podman containers (or the containerization system is not installed), then these windows will be empty and highlighted in red.
 
 ## Build
 
