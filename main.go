@@ -1220,6 +1220,10 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("", gocui.KeyTab, gocui.ModNone, app.nextView); err != nil {
 		return err
 	}
+	// Shift+Tab для переключения между окнами в обратном порядке
+	if err := app.gui.SetKeybinding("", gocui.KeyBacktab, gocui.ModNone, app.backView); err != nil {
+		return err
+	}
 	// Enter для выбора службы и загрузки журналов
 	if err := app.gui.SetKeybinding("services", gocui.KeyEnter, gocui.ModNone, app.selectService); err != nil {
 		return err
@@ -1460,13 +1464,13 @@ func (app *App) setLogFilesList(g *gocui.Gui, v *gocui.View) error {
 	app.startFiles = 0
 	app.selectedFile = 0
 	switch selectedVarLog.Title {
-	case " < Var logs > ":
-		selectedVarLog.Title = " < Home logs > "
-		app.selectPath = "/home/"
-		app.loadFiles(app.selectPath)
 	case " < Home logs > ":
 		selectedVarLog.Title = " < Var logs > "
 		app.selectPath = "/var/log/"
+		app.loadFiles(app.selectPath)
+	case " < Var logs > ":
+		selectedVarLog.Title = " < Home logs > "
+		app.selectPath = "/home/"
 		app.loadFiles(app.selectPath)
 	}
 	return nil
@@ -1587,6 +1591,102 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 		}
 	}
 	// Устанавливаем новое активное окно
+	if _, err := g.SetCurrentView(nextView); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Функция для переключения окон в обратном порядке через Shift+Tab
+func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
+	selectedServices, err := g.View("services")
+	if err != nil {
+		log.Panicln(err)
+	}
+	selectedVarLog, err := g.View("varLogs")
+	if err != nil {
+		log.Panicln(err)
+	}
+	selectedDocker, err := g.View("docker")
+	if err != nil {
+		log.Panicln(err)
+	}
+	selectedFilter, err := g.View("filter")
+	if err != nil {
+		log.Panicln(err)
+	}
+	selectedLogs, err := g.View("logs")
+	if err != nil {
+		log.Panicln(err)
+	}
+	currentView := g.CurrentView()
+	var nextView string
+	if currentView == nil {
+		nextView = "services"
+	} else {
+		switch currentView.Name() {
+		case "services":
+			nextView = "logs"
+			selectedServices.FrameColor = app.journalListFrameColor
+			selectedServices.TitleColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = app.dockerFrameColor
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorGreen
+			selectedLogs.TitleColor = gocui.ColorGreen
+		case "logs":
+			nextView = "filter"
+			selectedServices.FrameColor = app.journalListFrameColor
+			selectedServices.TitleColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = app.dockerFrameColor
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorGreen
+			selectedFilter.TitleColor = gocui.ColorGreen
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
+		case "filter":
+			nextView = "docker"
+			selectedServices.FrameColor = app.journalListFrameColor
+			selectedServices.TitleColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = gocui.ColorGreen
+			selectedDocker.TitleColor = gocui.ColorGreen
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
+		case "docker":
+			nextView = "varLogs"
+			selectedServices.FrameColor = app.journalListFrameColor
+			selectedServices.TitleColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = gocui.ColorGreen
+			selectedVarLog.TitleColor = gocui.ColorGreen
+			selectedDocker.FrameColor = app.dockerFrameColor
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
+		case "varLogs":
+			nextView = "services"
+			selectedServices.FrameColor = gocui.ColorGreen
+			selectedServices.TitleColor = gocui.ColorGreen
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = app.dockerFrameColor
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
+		}
+	}
 	if _, err := g.SetCurrentView(nextView); err != nil {
 		return err
 	}
