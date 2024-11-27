@@ -122,7 +122,7 @@ func main() {
 	// Фиксируем текущее количество видимых строк в терминале (-1 заголовок)
 	if v, err := g.View("services"); err == nil {
 		_, viewHeight := v.Size()
-		app.maxVisibleServices = viewHeight - 1
+		app.maxVisibleServices = viewHeight
 	}
 	// Загрузка списков журналов
 	app.loadServices(app.selectUnits)
@@ -130,14 +130,14 @@ func main() {
 	// /var/logs
 	if v, err := g.View("varLogs"); err == nil {
 		_, viewHeight := v.Size()
-		app.maxVisibleFiles = viewHeight - 1
+		app.maxVisibleFiles = viewHeight
 	}
 	app.loadFiles(app.selectPath)
 
 	// Docker
 	if v, err := g.View("docker"); err == nil {
 		_, viewHeight := v.Size()
-		app.maxVisibleDockerContainers = viewHeight - 1
+		app.maxVisibleDockerContainers = viewHeight
 	}
 	app.loadDockerContainer(app.selectContainerizationSystem)
 
@@ -391,7 +391,7 @@ func (app *App) updateServicesList() {
 func (app *App) nextService(v *gocui.View, step int) error {
 	// Обновляем текущее количество видимых строк в терминале (-1 заголовок)
 	_, viewHeight := v.Size()
-	app.maxVisibleServices = viewHeight - 1
+	app.maxVisibleServices = viewHeight
 	// Если список журналов пустой, ничего не делаем
 	if len(app.journals) == 0 {
 		return nil
@@ -427,7 +427,7 @@ func (app *App) nextService(v *gocui.View, step int) error {
 // Функция для перемещения по списку журналов вверх
 func (app *App) prevService(v *gocui.View, step int) error {
 	_, viewHeight := v.Size()
-	app.maxVisibleServices = viewHeight - 1
+	app.maxVisibleServices = viewHeight
 	if len(app.journals) == 0 {
 		return nil
 	}
@@ -669,7 +669,7 @@ func (app *App) updateLogsList() {
 
 func (app *App) nextFileName(v *gocui.View, step int) error {
 	_, viewHeight := v.Size()
-	app.maxVisibleFiles = viewHeight - 1
+	app.maxVisibleFiles = viewHeight
 	if len(app.logfiles) == 0 {
 		return nil
 	}
@@ -694,7 +694,7 @@ func (app *App) nextFileName(v *gocui.View, step int) error {
 
 func (app *App) prevFileName(v *gocui.View, step int) error {
 	_, viewHeight := v.Size()
-	app.maxVisibleFiles = viewHeight - 1
+	app.maxVisibleFiles = viewHeight
 	if len(app.logfiles) == 0 {
 		return nil
 	}
@@ -839,7 +839,19 @@ func (app *App) loadFileLogs(logName string) {
 // docker service logs lmt7evz8xzc0
 
 func (app *App) loadDockerContainer(ContainerizationSystem string) {
-	cmd := exec.Command(ContainerizationSystem, "ps", "--format", "{{.ID}} {{.Names}}")
+	// Вначале проверяем версию для проверки, что система контейнеризации установлена
+	cmd := exec.Command(ContainerizationSystem, "--version")
+	_, err := cmd.Output()
+	if err != nil {
+		vError, _ := app.gui.View("docker")
+		vError.Clear()
+		app.dockerFrameColor = gocui.ColorRed
+		vError.FrameColor = app.dockerFrameColor
+		vError.Highlight = false
+		fmt.Fprintln(vError, "\033[31m"+ContainerizationSystem+" not installed\033[0m")
+		return
+	}
+	cmd = exec.Command(ContainerizationSystem, "ps", "--format", "{{.ID}} {{.Names}}")
 	output, err := cmd.Output()
 	if err != nil {
 		vError, _ := app.gui.View("docker")
@@ -847,7 +859,7 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		app.dockerFrameColor = gocui.ColorRed
 		vError.FrameColor = app.dockerFrameColor
 		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[31mAccess denied or containerization system not installed\033[0m")
+		fmt.Fprintln(vError, "\033[31mAccess denied\033[0m")
 		return
 	} else {
 		vError, _ := app.gui.View("docker")
@@ -906,7 +918,7 @@ func (app *App) updateDockerContainerList() {
 
 func (app *App) nextDockerContainer(v *gocui.View, step int) error {
 	_, viewHeight := v.Size()
-	app.maxVisibleDockerContainers = viewHeight - 1
+	app.maxVisibleDockerContainers = viewHeight
 	if len(app.dockerContainers) == 0 {
 		return nil
 	}
@@ -931,7 +943,7 @@ func (app *App) nextDockerContainer(v *gocui.View, step int) error {
 
 func (app *App) prevDockerContainer(v *gocui.View, step int) error {
 	_, viewHeight := v.Size()
-	app.maxVisibleDockerContainers = viewHeight - 1
+	app.maxVisibleDockerContainers = viewHeight
 	if len(app.dockerContainers) == 0 {
 		return nil
 	}
@@ -1527,14 +1539,6 @@ func (app *App) setContainersList(g *gocui.Gui, v *gocui.View) error {
 		selectedDocker.Title = " < Docker containers > "
 		app.selectContainerizationSystem = "docker"
 		app.loadDockerContainer(app.selectContainerizationSystem)
-		// case " < Podman containers > ":
-		// 	selectedDocker.Title = " < Swarm services > "
-		// 	app.selectContainerizationSystem = "swarm"
-		// 	app.loadDockerContainer(app.selectContainerizationSystem)
-		// case " < Swarm services > ":
-		// 	selectedDocker.Title = " < Docker containers > "
-		// 	app.selectContainerizationSystem = "docker"
-		// 	app.loadDockerContainer(app.selectContainerizationSystem)
 	}
 	return nil
 }
