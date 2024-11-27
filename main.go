@@ -81,11 +81,11 @@ func main() {
 		selectedFile:                 0,
 		startDockerContainers:        0,
 		selectedDockerContainer:      0,
-		selectUnits:                  "UNIT",    // "USER_UNIT" || "kernel"
-		selectPath:                   "/home/",  // "/var/log/"
-		selectContainerizationSystem: "docker",  // "podman"
-		selectFilterMode:             "default", // "fuzzy" || "regex"
-		logViewCount:                 "5000",    // 10000
+		selectUnits:                  "UNIT",      // "USER_UNIT" || "kernel"
+		selectPath:                   "/var/log/", // "/home/"
+		selectContainerizationSystem: "docker",    // "podman"
+		selectFilterMode:             "default",   // "fuzzy" || "regex"
+		logViewCount:                 "5000",      // 10000
 		journalListFrameColor:        gocui.ColorDefault,
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
@@ -182,7 +182,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = " < Home logs > "
+		v.Title = " < Var logs > "
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -243,21 +243,21 @@ func (app *App) loadServices(journalName string) {
 	if journalName == "kernel" {
 		// Получаем список загрузок с помощью journalctl
 		bootCmd := exec.Command("journalctl", "--list-boots", "-o", "json")
-		// Проверяем на ошибки (очищаем список служб и выводим ошибку в поле вывода логов)
+		// Проверяем на ошибки (очищаем список служб, отключаем курсор и выводим ошибку)
 		bootOutput, err := bootCmd.Output()
 		if err != nil {
-			vCurrent, _ := app.gui.View("services")
-			vCurrent.Clear()
+			vError, _ := app.gui.View("services")
+			vError.Clear()
 			app.journalListFrameColor = gocui.ColorRed
-			vCurrent.FrameColor = app.journalListFrameColor
-			// v, _ := app.gui.View("logs")
-			// v.Clear()
-			// fmt.Fprintln(v, "\033[31mError getting boot information.", err, "\033[0m")
+			vError.FrameColor = app.journalListFrameColor
+			vError.Highlight = false
+			fmt.Fprintln(vError, "\033[31mError getting boot information from journald\033[0m")
 			return
 		} else {
-			vCurrent, _ := app.gui.View("services")
+			vError, _ := app.gui.View("services")
 			app.journalListFrameColor = gocui.ColorDefault
-			vCurrent.FrameColor = gocui.ColorGreen
+			vError.FrameColor = gocui.ColorGreen
+			vError.Highlight = true
 		}
 		// Структура для парсинга JSON
 		type BootInfo struct {
@@ -332,18 +332,18 @@ func (app *App) loadServices(journalName string) {
 		cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
 		output, err := cmd.Output()
 		if err != nil {
-			vCurrent, _ := app.gui.View("services")
-			vCurrent.Clear()
+			vError, _ := app.gui.View("services")
+			vError.Clear()
 			app.journalListFrameColor = gocui.ColorRed
-			vCurrent.FrameColor = app.journalListFrameColor
-			// v, _ := app.gui.View("logs")
-			// v.Clear()
-			// fmt.Fprintln(v, "\033[31mError getting services.", err, "\033[0m")
+			vError.FrameColor = app.journalListFrameColor
+			vError.Highlight = false
+			fmt.Fprintln(vError, "\033[31mError getting services from journald\033[0m")
 			return
 		} else {
-			vCurrent, _ := app.gui.View("services")
+			vError, _ := app.gui.View("services")
 			app.journalListFrameColor = gocui.ColorDefault
-			vCurrent.FrameColor = gocui.ColorGreen
+			vError.FrameColor = gocui.ColorGreen
+			vError.Highlight = true
 		}
 		// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
 		serviceMap := make(map[string]bool)
@@ -528,25 +528,27 @@ func (app *App) loadJournalLogs(serviceName string) {
 
 func (app *App) loadFiles(logPath string) {
 	var output []byte
-	var err error
 	if logPath == "/var/log/" {
 		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log", "-o", "-name", "*.gz")
-		output, err = cmd.Output()
-		if err != nil {
-			vCurrent, _ := app.gui.View("varLogs")
-			vCurrent.Clear()
-			// Если журнал недоступен, меняем цвет на красный
+		output, _ = cmd.Output()
+		// Преобразуем вывод команды в строку и делим на массив строк
+		files := strings.Split(strings.TrimSpace(string(output)), "\n")
+		// Если список файлов пустой, возвращаем ошибку Permission denied
+		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+			vError, _ := app.gui.View("varLogs")
+			vError.Clear()
+			// Меняем цвет окна на красный
 			app.fileSystemFrameColor = gocui.ColorRed
-			vCurrent.FrameColor = app.fileSystemFrameColor
-			// v, _ := app.gui.View("logs")
-			// v.Clear()
-			// Выводим ошибку в список логов
-			// fmt.Fprintln(v, "\033[31mError getting log files to", logPath, "path.", err, "\033[0m")
+			vError.FrameColor = app.fileSystemFrameColor
+			// Отключаем курсор и выводим сообщение об ошибке
+			vError.Highlight = false
+			fmt.Fprintln(vError, "\033[31mPermission denied\033[0m")
 			return
 		} else {
-			vCurrent, _ := app.gui.View("varLogs")
+			vError, _ := app.gui.View("varLogs")
 			app.fileSystemFrameColor = gocui.ColorDefault
-			vCurrent.FrameColor = gocui.ColorGreen
+			vError.FrameColor = gocui.ColorGreen
+			vError.Highlight = true
 		}
 		// Добавляем пути по умолчанию для /var/log
 		logPaths := []string{
@@ -563,6 +565,19 @@ func (app *App) loadFiles(logPath string) {
 	} else {
 		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log")
 		output, _ = cmd.Output()
+		files := strings.Split(strings.TrimSpace(string(output)), "\n")
+		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+			vError, _ := app.gui.View("varLogs")
+			vError.Clear()
+			vError.Highlight = false
+			fmt.Fprintln(vError, "\033[32mNo logs available\033[0m")
+			return
+		} else {
+			vError, _ := app.gui.View("varLogs")
+			app.fileSystemFrameColor = gocui.ColorDefault
+			vError.FrameColor = gocui.ColorGreen
+			vError.Highlight = true
+		}
 		// Получаем содержимое файлов из домашнего каталога пользователя root
 		cmdRootDir := exec.Command("find", "/root/", "-type", "f", "-name", "*.log")
 		outputRootDir, err := cmdRootDir.Output()
@@ -571,9 +586,10 @@ func (app *App) loadFiles(logPath string) {
 			output = append(output, outputRootDir...)
 		}
 		if app.fileSystemFrameColor == gocui.ColorRed {
-			vCurrent, _ := app.gui.View("varLogs")
+			vError, _ := app.gui.View("varLogs")
 			app.fileSystemFrameColor = gocui.ColorDefault
-			vCurrent.FrameColor = gocui.ColorGreen
+			vError.FrameColor = gocui.ColorGreen
+			vError.Highlight = true
 		}
 	}
 	serviceMap := make(map[string]bool)
@@ -826,20 +842,33 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 	cmd := exec.Command(ContainerizationSystem, "ps", "--format", "{{.ID}} {{.Names}}")
 	output, err := cmd.Output()
 	if err != nil {
-		vCurrent, _ := app.gui.View("docker")
-		vCurrent.Clear()
+		vError, _ := app.gui.View("docker")
+		vError.Clear()
 		app.dockerFrameColor = gocui.ColorRed
-		vCurrent.FrameColor = app.dockerFrameColor
-		// v, _ := app.gui.View("logs")
-		// v.Clear()
-		// fmt.Fprintln(v, "\033[31mError getting", ContainerizationSystem, "containers.", err, "\033[0m")
+		vError.FrameColor = app.dockerFrameColor
+		vError.Highlight = false
+		fmt.Fprintln(vError, "\033[31mAccess denied or containerization system not installed\033[0m")
 		return
 	} else {
-		vCurrent, _ := app.gui.View("docker")
+		vError, _ := app.gui.View("docker")
 		app.dockerFrameColor = gocui.ColorDefault
-		if vCurrent.FrameColor != gocui.ColorDefault {
-			vCurrent.FrameColor = gocui.ColorGreen
+		vError.Highlight = true
+		if vError.FrameColor != gocui.ColorDefault {
+			vError.FrameColor = gocui.ColorGreen
 		}
+	}
+	containers := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(containers) == 0 || (len(containers) == 1 && containers[0] == "") {
+		vError, _ := app.gui.View("docker")
+		vError.Clear()
+		vError.Highlight = false
+		fmt.Fprintln(vError, "\033[32mNo running containers\033[0m")
+		return
+	} else {
+		vError, _ := app.gui.View("docker")
+		app.fileSystemFrameColor = gocui.ColorDefault
+		vError.FrameColor = gocui.ColorGreen
+		vError.Highlight = true
 	}
 	serviceMap := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
@@ -1468,13 +1497,13 @@ func (app *App) setLogFilesList(g *gocui.Gui, v *gocui.View) error {
 	app.startFiles = 0
 	app.selectedFile = 0
 	switch selectedVarLog.Title {
-	case " < Home logs > ":
-		selectedVarLog.Title = " < Var logs > "
-		app.selectPath = "/var/log/"
-		app.loadFiles(app.selectPath)
 	case " < Var logs > ":
 		selectedVarLog.Title = " < Home logs > "
 		app.selectPath = "/home/"
+		app.loadFiles(app.selectPath)
+	case " < Home logs > ":
+		selectedVarLog.Title = " < Var logs > "
+		app.selectPath = "/var/log/"
 		app.loadFiles(app.selectPath)
 	}
 	return nil

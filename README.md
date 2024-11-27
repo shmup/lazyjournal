@@ -36,8 +36,7 @@ There is currently a 5000 line limit for outputting any log from the end.
 - [ ] Background update of selected log.
 - [ ] Filter for log lists and change the number of lines for log output.
 - [ ] Windows support via PowerShell (events and logs from Program Files and others).
-- [ ] Scrolling interface.
-- [ ] Mouse support.
+- [ ] Scrolling interface and mouse support.
 - [ ] Syntax coloring for logging output.
 - [ ] Support remote machines via ssh protocol.
 
@@ -94,6 +93,7 @@ bash build.sh
 ## Hotkeys
 
 - `Tab` - Switch between windows.
+- `Shift+Tab` - Return to previous window.
 - `Left/Right` - Switch between log lists in the selected window.
 - `Enter` - Select a journal from the list to display log.
 - `Ctrl+R` - Refresh current log to show changes.
