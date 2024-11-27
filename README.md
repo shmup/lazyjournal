@@ -13,7 +13,7 @@ Terminal user interface for `journalctl` (tool for reading logs from [systemd](h
 
 This tool is inspired by and with love for [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
 
-![interface](/img/interface.png)
+![interface](/img/fuzzy.png)
 
 ## Filter
 
@@ -23,8 +23,6 @@ Supported 3 filtering modes:
 - **[Fuzzy]** - imprecise case-insensitive search (searches for all phrases separated by a space anywhere in the string).
 - **[Regex]** - search with regular expression support, case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
 
-There is currently a 5000 line limit for outputting any log from the end.
-
 ## Roadmap
 
 - [X] Support fuzzy find and regular expression to filter output.
@@ -33,9 +31,9 @@ There is currently a 5000 line limit for outputting any log from the end.
 - [X] Add switch to load a list of user units and system loads for kernel logs.
 - [X] Add support for syslog, dmesg, authorization logs and downloading logs from user directories (home and root).
 - [X] Podman and Swarm log support.
-- [ ] Background update of selected log.
-- [ ] Filter for log lists and change the number of lines for log output.
-- [ ] Windows support via PowerShell (events and logs from Program Files and others).
+- [ ] Filter for log lists and background update of selected log.
+- [ ] MacOS support for launchd (issue #1).
+- [ ] Windows support via PowerShell (Windows Events and log files from Program Files and others directories).
 - [ ] Scrolling interface and mouse support.
 - [ ] Syntax coloring for logging output.
 - [ ] Support remote machines via ssh protocol.
@@ -54,7 +52,7 @@ curl https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | ba
 
 This command will run a script that will download the latest executable from the GitHub repository into your current user's home directory along with other executables (or create a directory) and grant execution permission.
 
-You can also use Go for installation. To do this, the Go interpreter must be installed on the system, for example, for Ubuntu you can use the SnapCraft package manager:
+You can also use Go for installation. To do this, the Go interpreter must be installed on the system, for example, in Ubuntu you can use the SnapCraft package manager:
 
 ```shell
 sudo snap install go --classic
@@ -63,15 +61,15 @@ grep -F 'export PATH=$PATH:$HOME/go/bin' $HOME/.bashrc || echo 'export PATH=$PAT
 go install github.com/Lifailon/lazyjournal@latest
 ```
 
-You can launch the interface anywhere:
+You can launch the interface anywhere (no parameters are used):
 
 ```shell
 lazyjournal
 ```
 
-Windows is not currently supported, but the project will work to access Docker and Podman containers log.
+Access to all system logs and containers may require elevated privileges for the current user.
 
-If the current user does not have rights to read logs in the `/var/log` directory or access to Docker/Podman containers (or the containerization system is not installed), then these windows will be empty and highlighted in red.
+Windows and MacOS is not currently supported, but the project will work to access Docker and Podman containers logs.
 
 ## Build
 
@@ -98,14 +96,16 @@ bash build.sh
 - `Enter` - Select a journal from the list to display log.
 - `Ctrl+R` - Refresh current log to show changes.
 - `Up/Down` - Move up or down through all journal lists and log output.
-- `Shift+<Up/Down>` - Quickly move up or down (every 10 lines) through all journal lists and log output.
-- `<Shift/Alt>+<Left/Right>` - Changing the mode in the filtering window.
-- `Ctrl+<D/W>` - Clearing the text input field for the filter (available while focused on any window to quickly update the current log output without filtering).
+- `Shift+<Up/Down>` - Quickly move up or down (every `10` lines) through all journal lists and log output.
+- `Alt+<Up/Down>` - Change the number of lines for logging output (range: `1000-50000`, default: `5000`).
+- `Alt+<Left/Right>` - Changing the mode in the filtering window.
+- `Ctrl+<D/W>` - Clear text input field for filter to quickly update current log without filtering.
 - `Ctrl+C` - Exit.
 
 ## Alternatives
 
-- [Dozzle](https://github.com/amir20/dozzle) - is a small lightweight application with a web based interface to monitor Docker logs. It doesn’t store any log files. It is for live monitoring of your container logs only.
+- [lnav](https://github.com/tstack/lnav) - The Logfile Navigator is a **log file** viewer for the terminal.
+- [dozzle](https://github.com/amir20/dozzle) - is a small lightweight application with a web based interface to monitor **Docker logs**. It doesn’t store any log files. It is for live monitoring of your container logs only.
 
 If you like using TUI tools, try [multranslate](https://github.com/Lifailon/multranslate) for translating text in multiple translators simultaneously, with support for translation history and automatic language detection.
 
