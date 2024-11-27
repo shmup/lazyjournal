@@ -238,12 +238,27 @@ func (app *App) layout(g *gocui.Gui) error {
 
 // ---------------------------------------- journalctl ----------------------------------------
 
+// journald/systemd not supported
+// journalctl --version
+
 // Функция для загрузки списка журналов служб или загрузок системы из journalctl
 func (app *App) loadServices(journalName string) {
+	// Проверка, что в системе установлен/поддерживается утилита journalctl
+	checkJournald := exec.Command("journalctl", "--version")
+	// Проверяем на ошибки (очищаем список служб, отключаем курсор и выводим ошибку)
+	_, err := checkJournald.Output()
+	if err != nil {
+		vError, _ := app.gui.View("services")
+		vError.Clear()
+		app.journalListFrameColor = gocui.ColorRed
+		vError.FrameColor = app.journalListFrameColor
+		vError.Highlight = false
+		fmt.Fprintln(vError, "\033[31mjournald not supported\033[0m")
+		return
+	}
 	if journalName == "kernel" {
-		// Получаем список загрузок с помощью journalctl
+		// Получаем список загрузок системы
 		bootCmd := exec.Command("journalctl", "--list-boots", "-o", "json")
-		// Проверяем на ошибки (очищаем список служб, отключаем курсор и выводим ошибку)
 		bootOutput, err := bootCmd.Output()
 		if err != nil {
 			vError, _ := app.gui.View("services")
@@ -256,7 +271,9 @@ func (app *App) loadServices(journalName string) {
 		} else {
 			vError, _ := app.gui.View("services")
 			app.journalListFrameColor = gocui.ColorDefault
-			vError.FrameColor = gocui.ColorGreen
+			if vError.FrameColor != gocui.ColorDefault {
+				vError.FrameColor = gocui.ColorGreen
+			}
 			vError.Highlight = true
 		}
 		// Структура для парсинга JSON
@@ -342,7 +359,9 @@ func (app *App) loadServices(journalName string) {
 		} else {
 			vError, _ := app.gui.View("services")
 			app.journalListFrameColor = gocui.ColorDefault
-			vError.FrameColor = gocui.ColorGreen
+			if vError.FrameColor != gocui.ColorDefault {
+				vError.FrameColor = gocui.ColorGreen
+			}
 			vError.Highlight = true
 		}
 		// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
@@ -547,7 +566,9 @@ func (app *App) loadFiles(logPath string) {
 		} else {
 			vError, _ := app.gui.View("varLogs")
 			app.fileSystemFrameColor = gocui.ColorDefault
-			vError.FrameColor = gocui.ColorGreen
+			if vError.FrameColor != gocui.ColorDefault {
+				vError.FrameColor = gocui.ColorGreen
+			}
 			vError.Highlight = true
 		}
 		// Добавляем пути по умолчанию для /var/log
@@ -575,7 +596,9 @@ func (app *App) loadFiles(logPath string) {
 		} else {
 			vError, _ := app.gui.View("varLogs")
 			app.fileSystemFrameColor = gocui.ColorDefault
-			vError.FrameColor = gocui.ColorGreen
+			if vError.FrameColor != gocui.ColorDefault {
+				vError.FrameColor = gocui.ColorGreen
+			}
 			vError.Highlight = true
 		}
 		// Получаем содержимое файлов из домашнего каталога пользователя root
@@ -588,7 +611,9 @@ func (app *App) loadFiles(logPath string) {
 		if app.fileSystemFrameColor == gocui.ColorRed {
 			vError, _ := app.gui.View("varLogs")
 			app.fileSystemFrameColor = gocui.ColorDefault
-			vError.FrameColor = gocui.ColorGreen
+			if vError.FrameColor != gocui.ColorDefault {
+				vError.FrameColor = gocui.ColorGreen
+			}
 			vError.Highlight = true
 		}
 	}
@@ -839,7 +864,7 @@ func (app *App) loadFileLogs(logName string) {
 // docker service logs lmt7evz8xzc0
 
 func (app *App) loadDockerContainer(ContainerizationSystem string) {
-	// Вначале проверяем версию для проверки, что система контейнеризации установлена
+	// Получаем версию для проверки, что система контейнеризации установлена
 	cmd := exec.Command(ContainerizationSystem, "--version")
 	_, err := cmd.Output()
 	if err != nil {
@@ -870,6 +895,7 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		}
 	}
 	containers := strings.Split(strings.TrimSpace(string(output)), "\n")
+	// Проверяем, что список контейнеров не пустой
 	if len(containers) == 0 || (len(containers) == 1 && containers[0] == "") {
 		vError, _ := app.gui.View("docker")
 		vError.Clear()
@@ -879,7 +905,9 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 	} else {
 		vError, _ := app.gui.View("docker")
 		app.fileSystemFrameColor = gocui.ColorDefault
-		vError.FrameColor = gocui.ColorGreen
+		if vError.FrameColor != gocui.ColorDefault {
+			vError.FrameColor = gocui.ColorGreen
+		}
 		vError.Highlight = true
 	}
 	serviceMap := make(map[string]bool)
@@ -1340,18 +1368,30 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowLeft, gocui.ModNone, app.setContainersList); err != nil {
 		return err
 	}
-	// Переключение между режимами фильтрации Alt+<Left/Right>
+	// Переключение между режимами фильтрации Alt+<Left/Right> и Up/Down для выбранного окна (filter)
 	if err := app.gui.SetKeybinding("", gocui.KeyArrowRight, gocui.ModAlt, app.setFilterModeRight); err != nil {
 		return err
 	}
 	if err := app.gui.SetKeybinding("", gocui.KeyArrowLeft, gocui.ModAlt, app.setFilterModeLeft); err != nil {
 		return err
 	}
-	// Переключение между режимами фильтрации Alt+<Up/Down>
+	if err := app.gui.SetKeybinding("filter", gocui.KeyArrowUp, gocui.ModNone, app.setFilterModeRight); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("filter", gocui.KeyArrowDown, gocui.ModNone, app.setFilterModeLeft); err != nil {
+		return err
+	}
+	// Переключение между режимами фильтрации Alt+<Up/Down> и Left/Right для выбранного окна (logs)
 	if err := app.gui.SetKeybinding("", gocui.KeyArrowDown, gocui.ModAlt, app.setCountLogViewDown); err != nil {
 		return err
 	}
 	if err := app.gui.SetKeybinding("", gocui.KeyArrowUp, gocui.ModAlt, app.setCountLogViewUp); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowLeft, gocui.ModNone, app.setCountLogViewDown); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowRight, gocui.ModNone, app.setCountLogViewUp); err != nil {
 		return err
 	}
 	// Пролистывание вывода журнала
