@@ -62,6 +62,7 @@ type App struct {
 	currentLogLines  []string // набор строк (срез) для хранения журнала без фильтрации
 	filteredLogLines []string // набор строк (срез) для хранения журнала после фильтра
 	logScrollPos     int      // позиция прокрутки для отображаемых строк журнала
+	autoScroll       bool     // используется для автоматического скроллинга вниз при обновлении (если это не ручной скроллинг)
 
 	lastWindow   string // фиксируем последний используемый источник для вывода логов
 	lastSelected string // фиксируем название последнего выбранного журнала или контейнера
@@ -85,10 +86,11 @@ func main() {
 		selectPath:                   "/var/log/", // "/home/"
 		selectContainerizationSystem: "docker",    // "podman"
 		selectFilterMode:             "default",   // "fuzzy" || "regex"
-		logViewCount:                 "5000",      // 10000
+		logViewCount:                 "10000",     // 1000-50000
 		journalListFrameColor:        gocui.ColorDefault,
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
+		autoScroll:                   true,
 	}
 
 	// Создаем GUI
@@ -145,7 +147,7 @@ func main() {
 	g.SetCurrentView("services")
 
 	// Горутина для автоматического обновления вывода журнала
-	// go app.updateLogOutput(2)
+	go app.updateLogOutput(1)
 
 	// Запус GUI
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
@@ -1126,9 +1128,13 @@ func (app *App) applyFilter(color bool) {
 			}
 		}
 	}
-	app.logScrollPos = 0
 	// Обновляем окно для отображения отфильтрованных записей
-	app.updateLogsView(true)
+	if app.autoScroll {
+		app.logScrollPos = 0
+		app.updateLogsView(true)
+	} else {
+		app.updateLogsView(false)
+	}
 }
 
 // Функция для обновления вывода журнала (параметр для прокрутки в самый вниз)
@@ -1222,6 +1228,8 @@ func (app *App) scrollDownLogs(step int) error {
 		// Если достигнут конец списка, останавливаем на максимальной длинне с учетом высоты окна
 		if app.logScrollPos > len(app.filteredLogLines)-1-viewHeight {
 			app.logScrollPos = len(app.filteredLogLines) - 1 - viewHeight
+			// Включаем автоскролл
+			app.autoScroll = true
 		}
 		// Вызываем функцию для обновления отображения журнала
 		app.updateLogsView(false)
@@ -1235,6 +1243,8 @@ func (app *App) scrollUpLogs(step int) error {
 	if app.logScrollPos < 0 {
 		app.logScrollPos = 0
 	}
+	// Отключаем автоскролл
+	app.autoScroll = false
 	app.updateLogsView(false)
 	return nil
 }
@@ -1427,19 +1437,26 @@ func (app *App) setupKeybindings() error {
 // Функция для обновления последнего выбранного вывода лога
 func (app *App) updateLogOutput(seconds int) error {
 	for {
-		switch app.lastWindow {
-		case "services":
-			app.loadJournalLogs(app.lastSelected)
-		case "varLogs":
-			app.loadFileLogs(app.lastSelected)
-		case "docker":
-			app.loadDockerLogs(app.lastSelected)
-		}
+		// Выполняем обновление интерфейса через метод Update для иницилизации перерисовки интерфейса
+		app.gui.Update(func(g *gocui.Gui) error {
+			// Сбрасываем автоскролл, если это ручное обновление, что бы опустить журнал вниз
+			if seconds == 0 {
+				app.autoScroll = true
+			}
+			switch app.lastWindow {
+			case "services":
+				app.loadJournalLogs(app.lastSelected)
+			case "varLogs":
+				app.loadFileLogs(app.lastSelected)
+			case "docker":
+				app.loadDockerLogs(app.lastSelected)
+			}
+			return nil
+		})
 		if seconds == 0 {
 			break
 		}
-		timer := time.Duration(seconds) * time.Second
-		time.Sleep(timer)
+		time.Sleep(time.Duration(seconds) * time.Second)
 	}
 	return nil
 }
