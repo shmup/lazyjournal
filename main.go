@@ -68,6 +68,12 @@ type App struct {
 
 	lastWindow   string // фиксируем последний используемый источник для вывода логов
 	lastSelected string // фиксируем название последнего выбранного журнала или контейнера
+	// Переменные для хранения значений автообновления вывода при смене окна
+	lastSelectUnits            string
+	lastBootId                 string
+	lastLogPath                string
+	lastContainerizationSystem string
+	lastContainerId            string
 
 	// Цвета окон по умолчанию (изменяется в зависимости от доступности журналов)
 	journalListFrameColor gocui.Attribute
@@ -514,13 +520,24 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui) {
 	var output []byte
 	var err error
-	if app.selectUnits == "kernel" {
+	selectUnits := app.selectUnits
+	if newUpdate {
+		app.lastSelectUnits = app.selectUnits
+	} else {
+		selectUnits = app.lastSelectUnits
+	}
+	if selectUnits == "kernel" {
 		var boot_id string
 		for _, journal := range app.journals {
 			if journal.name == serviceName {
 				boot_id = journal.boot_id
 				break
 			}
+		}
+		if newUpdate {
+			app.lastBootId = boot_id
+		} else {
+			boot_id = app.lastBootId
 		}
 		cmd := exec.Command("journalctl", "-k", "-b", boot_id, "--no-pager", "-n", app.logViewCount)
 		output, err = cmd.Output()
@@ -798,6 +815,11 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			logFullPath = logfile.path
 		}
 	}
+	if newUpdate {
+		app.lastLogPath = logFullPath
+	} else {
+		logFullPath = app.lastLogPath
+	}
 	// Читаем архивные логи (decompress + stdout)
 	// gzip -dc access.log.10.gz
 	// zcat access.log.10.gz
@@ -1056,12 +1078,24 @@ func (app *App) selectDocker(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gui) {
-	var ContainerizationSystem string = app.selectContainerizationSystem
+	ContainerizationSystem := app.selectContainerizationSystem
+	// Сохраняем значение для автообновления при смене окна
+	if newUpdate {
+		app.lastContainerizationSystem = app.selectContainerizationSystem
+	} else {
+		ContainerizationSystem = app.lastContainerizationSystem
+	}
 	var containerId string
 	for _, dockerContainer := range app.dockerContainers {
 		if dockerContainer.name == containerName {
 			containerId = dockerContainer.id
 		}
+	}
+	// Сохраняем значение для автообновления при смене окна
+	if newUpdate {
+		app.lastContainerId = containerId
+	} else {
+		containerId = app.lastContainerId
 	}
 	cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
 	output, err := cmd.Output()
