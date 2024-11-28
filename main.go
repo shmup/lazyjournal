@@ -62,7 +62,9 @@ type App struct {
 	currentLogLines  []string // набор строк (срез) для хранения журнала без фильтрации
 	filteredLogLines []string // набор строк (срез) для хранения журнала после фильтра
 	logScrollPos     int      // позиция прокрутки для отображаемых строк журнала
-	autoScroll       bool     // используется для автоматического скроллинга вниз при обновлении (если это не ручной скроллинг)
+
+	autoScroll     bool // используется для автоматического скроллинга вниз при обновлении (если это не ручной скроллинг)
+	newUpdateIndex int  // фиксируем текущую длинну массива (индекс) для вставки строки обновления (если это ручной выбор из списка)
 
 	lastWindow   string // фиксируем последний используемый источник для вывода логов
 	lastSelected string // фиксируем название последнего выбранного журнала или контейнера
@@ -86,7 +88,7 @@ func main() {
 		selectPath:                   "/var/log/", // "/home/"
 		selectContainerizationSystem: "docker",    // "podman"
 		selectFilterMode:             "default",   // "fuzzy" || "regex"
-		logViewCount:                 "10000",     // 1000-50000
+		logViewCount:                 "100000",    // 1000-100000
 		journalListFrameColor:        gocui.ColorDefault,
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
@@ -500,7 +502,7 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 		return err
 	}
 	// Загружаем журналы выбранной службы, обрезая пробелы в названии
-	app.loadJournalLogs(strings.TrimSpace(line))
+	app.loadJournalLogs(strings.TrimSpace(line), true, g)
 	// Фиксируем для ручного или автоматического обновления вывода журнала
 	app.lastWindow = "services"
 	app.lastSelected = strings.TrimSpace(line)
@@ -508,7 +510,8 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 }
 
 // Функция для загрузки записей журнала выбранной службы через journalctl
-func (app *App) loadJournalLogs(serviceName string) {
+// Второй параметр для обнолвения позиции делимитра нового вывода лога а также сброса автоскролл
+func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui) {
 	var output []byte
 	var err error
 	if app.selectUnits == "kernel" {
@@ -539,6 +542,22 @@ func (app *App) loadJournalLogs(serviceName string) {
 	}
 	// Сохраняем строки журнала в массив
 	app.currentLogLines = strings.Split(string(output), "\n")
+	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
+	if newUpdate {
+		app.newUpdateIndex = len(app.currentLogLines) - 1
+		// Сбрасываем автоскролл
+		app.autoScroll = true
+	}
+	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
+	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
+		// Формируем длинну делимитра
+		v, _ := g.View("logs")
+		lengthDelimiter, _ := v.Size()
+		delimiter := strings.Repeat("⎯", lengthDelimiter)
+		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
+		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
+			append([]string{delimiter}, app.currentLogLines[app.newUpdateIndex:]...)...)
+	}
 	// Очищаем поле ввода для фильтрации, что бы не применять фильтрацию к новому журналу
 	// app.filterText = ""
 	// Применяем текущий фильтр к записям для обновления вывода
@@ -762,13 +781,13 @@ func (app *App) selectFile(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		return err
 	}
-	app.loadFileLogs(strings.TrimSpace(line))
+	app.loadFileLogs(strings.TrimSpace(line), true, g)
 	app.lastWindow = "varLogs"
 	app.lastSelected = strings.TrimSpace(line)
 	return nil
 }
 
-func (app *App) loadFileLogs(logName string) {
+func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 	// Парсим имя обратно
 	// logName = strings.ReplaceAll(logName, " ", "/")
 	// logFullPath := app.selectPath + logName + ".log"
@@ -854,6 +873,22 @@ func (app *App) loadFileLogs(logName string) {
 			return
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
+	}
+	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
+	if newUpdate {
+		app.newUpdateIndex = len(app.currentLogLines) - 1
+		// Сбрасываем автоскролл
+		app.autoScroll = true
+	}
+	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
+	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
+		// Формируем длинну делимитра
+		v, _ := g.View("logs")
+		lengthDelimiter, _ := v.Size()
+		delimiter := strings.Repeat("⎯", lengthDelimiter)
+		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
+		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
+			append([]string{delimiter}, app.currentLogLines[app.newUpdateIndex:]...)...)
 	}
 	// app.filterText = ""
 	app.applyFilter(false)
@@ -1014,13 +1049,13 @@ func (app *App) selectDocker(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		return err
 	}
-	app.loadDockerLogs(strings.TrimSpace(line))
+	app.loadDockerLogs(strings.TrimSpace(line), true, g)
 	app.lastWindow = "docker"
 	app.lastSelected = strings.TrimSpace(line)
 	return nil
 }
 
-func (app *App) loadDockerLogs(containerName string) {
+func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gui) {
 	var ContainerizationSystem string = app.selectContainerizationSystem
 	var containerId string
 	for _, dockerContainer := range app.dockerContainers {
@@ -1037,6 +1072,22 @@ func (app *App) loadDockerLogs(containerName string) {
 		return
 	}
 	app.currentLogLines = strings.Split(string(output), "\n")
+	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
+	if newUpdate {
+		app.newUpdateIndex = len(app.currentLogLines) - 1
+		// Сбрасываем автоскролл
+		app.autoScroll = true
+	}
+	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
+	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
+		// Формируем длинну делимитра
+		v, _ := g.View("logs")
+		lengthDelimiter, _ := v.Size()
+		delimiter := strings.Repeat("⎯", lengthDelimiter)
+		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
+		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
+			append([]string{delimiter}, app.currentLogLines[app.newUpdateIndex:]...)...)
+	}
 	// app.filterText = ""
 	app.applyFilter(false)
 }
@@ -1445,11 +1496,11 @@ func (app *App) updateLogOutput(seconds int) error {
 			}
 			switch app.lastWindow {
 			case "services":
-				app.loadJournalLogs(app.lastSelected)
+				app.loadJournalLogs(app.lastSelected, false, g)
 			case "varLogs":
-				app.loadFileLogs(app.lastSelected)
+				app.loadFileLogs(app.lastSelected, false, g)
 			case "docker":
-				app.loadDockerLogs(app.lastSelected)
+				app.loadDockerLogs(app.lastSelected, false, g)
 			}
 			return nil
 		})
@@ -1478,7 +1529,9 @@ func (app *App) setCountLogViewUp(g *gocui.Gui, v *gocui.View) error {
 	case "40000":
 		app.logViewCount = "50000"
 	case "50000":
-		app.logViewCount = "50000"
+		app.logViewCount = "100000"
+	case "100000":
+		app.logViewCount = "100000"
 	}
 	app.applyFilter(false)
 	app.updateLogOutput(0)
@@ -1487,6 +1540,8 @@ func (app *App) setCountLogViewUp(g *gocui.Gui, v *gocui.View) error {
 
 func (app *App) setCountLogViewDown(g *gocui.Gui, v *gocui.View) error {
 	switch app.logViewCount {
+	case "100000":
+		app.logViewCount = "50000"
 	case "50000":
 		app.logViewCount = "40000"
 	case "40000":
