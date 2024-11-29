@@ -101,7 +101,7 @@ func main() {
 		selectPath:                   "/var/log/", // "/home/"
 		selectContainerizationSystem: "docker",    // "podman"
 		selectFilterMode:             "default",   // "fuzzy" || "regex"
-		logViewCount:                 "100000",    // 1000-100000
+		logViewCount:                 "500000",    // 1000-500000
 		journalListFrameColor:        gocui.ColorDefault,
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
@@ -416,8 +416,8 @@ func (app *App) loadServices(journalName string) {
 	}
 	// Сохраняем неотфильтрованный список
 	app.journalsNotFilter = app.journals
-	// Обновляем список служб в интерфейсе
-	app.updateServicesList()
+	// Применяем фильтр при загрузки и обновляем список служб в интерфейсе через updateServicesList() внутри функции
+	app.applyFilterList()
 }
 
 // Функция для обновления окна со списком служб
@@ -715,8 +715,7 @@ func (app *App) loadFiles(logPath string) {
 		return dateI.After(dateJ)
 	})
 	app.logfilesNotFilter = app.logfiles
-	// Обновляем отображение списка журналов
-	app.updateLogsList()
+	app.applyFilterList()
 }
 
 // Функция для извлечения первой втречающейся даты в формате DD.MM.YYYY
@@ -981,7 +980,7 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		return app.dockerContainers[i].name < app.dockerContainers[j].name
 	})
 	app.dockerContainersNotFilter = app.dockerContainers
-	app.updateDockerContainerList()
+	app.applyFilterList()
 }
 
 func (app *App) updateDockerContainerList() {
@@ -1600,17 +1599,13 @@ func (app *App) setCountLogViewUp(g *gocui.Gui, v *gocui.View) error {
 	case "5000":
 		app.logViewCount = "10000"
 	case "10000":
-		app.logViewCount = "20000"
-	case "20000":
-		app.logViewCount = "30000"
-	case "30000":
-		app.logViewCount = "40000"
-	case "40000":
 		app.logViewCount = "50000"
 	case "50000":
 		app.logViewCount = "100000"
 	case "100000":
-		app.logViewCount = "100000"
+		app.logViewCount = "500000"
+	case "500000":
+		app.logViewCount = "500000"
 	}
 	app.applyFilter(false)
 	app.updateLogOutput(0)
@@ -1619,15 +1614,11 @@ func (app *App) setCountLogViewUp(g *gocui.Gui, v *gocui.View) error {
 
 func (app *App) setCountLogViewDown(g *gocui.Gui, v *gocui.View) error {
 	switch app.logViewCount {
+	case "500000":
+		app.logViewCount = "100000"
 	case "100000":
 		app.logViewCount = "50000"
 	case "50000":
-		app.logViewCount = "40000"
-	case "40000":
-		app.logViewCount = "30000"
-	case "30000":
-		app.logViewCount = "20000"
-	case "20000":
 		app.logViewCount = "10000"
 	case "10000":
 		app.logViewCount = "5000"

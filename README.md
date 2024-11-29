@@ -19,11 +19,11 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 
 - View all system and user units logs via `journalctl` (tool for reading logs using `journald` from [systemd](https://github.com/systemd/systemd)).
 - List of all system boots for kernel log output.
-- File system logs (for example, for Apache or Nginx), as well as syslog, dmesg (kernel) and user authentication (`wtmp` and `btmp`) sorted by modification date.
+- File system logs from `/var/log` (for example, for Apache or Nginx), as well as syslog, dmesg (kernel) and user authentication (`wtmp` and `btmp`) sorted by modification date.
 - View all log files in the home directories of users and root.
 - Reading archived logs in `gz` format.
 - Podman, Docker containers and Swarm services logs.
-- Displays the currently selected log and filters output in real-time.
+- Displays the currently selected log (when loading a log, a delimiter with loading time is displayed) and filters output in real-time.
 
 Supports 3 filtering modes:
 
@@ -35,11 +35,11 @@ Supports 3 filtering modes:
 
 This is an up-to-date roadmap in addition to the functionality described above.
 
-- [ ] MacOS support for launchd (issue [#1](https://github.com/Lifailon/lazyjournal/issues/1)).
-- [ ] Windows support (Windows Events via PowerShell and log files from Program Files and others directories).
+- [ ] MacOS support for `launchd` (issue [#1](https://github.com/Lifailon/lazyjournal/issues/1)).
+- [ ] Windows support (Windows Events via PowerShell and log files from `Program Files` and others directories).
 - [ ] Syntax coloring for logging output (like [tailspin](https://github.com/bensadeh/tailspin)).
-- [ ] Scrolling interface and mouse support.
-- [ ] Support remote machines via ssh protocol.
+- [ ] Interface for scrolling and mouse support.
+- [ ] Support remote machines via `ssh` protocol.
 
 ## Install
 
