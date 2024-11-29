@@ -9,33 +9,36 @@
     <a href="https://github.com/Lifailon/Kinozal-Bot/blob/rsa/LICENSE"><img title="License"src="https://img.shields.io/github/license/Lifailon/Kinozal-Bot?logo=readme&color=white"></a>
 </p>
 
-Terminal user interface for `journalctl` (tool for reading logs from [systemd](https://github.com/systemd/systemd)), logs in the file system (including syslog and archival logs, for example, apache or nginx), Docker and Podman containers for quick viewing and filtering with fuzzy find and regex support (like `fzf` and `grep`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
+Terminal user interface for `journalctl`, file system logs, as well Docker and Podman containers for quick viewing and filtering with fuzzy find and regex support (like `fzf` and `grep`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
 This tool is inspired by and with love for [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
 
 ![interface](/img/fuzzy.png)
 
-## Filter
+## Functional
 
-Supported 3 filtering modes:
+- View all system and user units logs via `journalctl` (tool for reading logs using `journald` from [systemd](https://github.com/systemd/systemd)).
+- List of all system boots for kernel log output.
+- File system logs (for example, for Apache or Nginx), as well as syslog, dmesg (kernel) and user authentication (`wtmp` and `btmp`) sorted by modification date.
+- View all log files in the home directories of users and root.
+- Reading archived logs in `gz` format.
+- Podman, Docker containers and Swarm services logs.
+- Displays the currently selected log and filters output in real-time.
 
-- **[Default]** - case sensitive exact search.
-- **[Fuzzy]** - imprecise case-insensitive search (searches for all phrases separated by a space anywhere in the string).
-- **[Regex]** - search with regular expression support, case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
+Supports 3 filtering modes:
+
+- **Default** - case sensitive exact search.
+- **Fuzzy** - imprecise case-insensitive search (searches for all phrases separated by a space anywhere in the string).
+- **Regex** - search with regular expression support, case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
 
 ## Roadmap
 
-- [X] Support fuzzy find and regular expression to filter output.
-- [X] Highlighting of found words and phrases during filtering.
-- [X] Sorting logs by modification date and support archived logs from file system.
-- [X] Add switch to load a list of user units and system loads for kernel logs.
-- [X] Add support for syslog, dmesg, authorization logs and downloading logs from user directories (home and root).
-- [X] Podman and Swarm log support.
-- [ ] Filter for log lists and background update of selected log.
-- [ ] MacOS support for launchd (issue #1).
-- [ ] Windows support via PowerShell (Windows Events and log files from Program Files and others directories).
+This is an up-to-date roadmap in addition to the functionality described above.
+
+- [ ] MacOS support for launchd (issue [#1](https://github.com/Lifailon/lazyjournal/issues/1)).
+- [ ] Windows support (Windows Events via PowerShell and log files from Program Files and others directories).
+- [ ] Syntax coloring for logging output (like [tailspin](https://github.com/bensadeh/tailspin)).
 - [ ] Scrolling interface and mouse support.
-- [ ] Syntax coloring for logging output.
 - [ ] Support remote machines via ssh protocol.
 
 ## Install
@@ -94,18 +97,18 @@ bash build.sh
 - `Shift+Tab` - Return to previous window.
 - `Left/Right` - Switch between log lists in the selected window.
 - `Enter` - Select a journal from the list to display log.
-- `Ctrl+R` - Refresh current log to show changes.
 - `Up/Down` - Move up or down through all journal lists and log output.
 - `Shift+<Up/Down>` - Quickly move up or down (every `10` lines) through all journal lists and log output.
 - `Alt+<Up/Down>` - Change the number of lines for logging output (range: `1000-50000`, default: `5000`).
 - `Alt+<Left/Right>` - Changing the mode in the filtering window.
+- `Ctrl+R` - Refresh the current log manually and go to the bottom of the output.
 - `Ctrl+<D/W>` - Clear text input field for filter to quickly update current log without filtering.
 - `Ctrl+C` - Exit.
 
 ## Alternatives
 
 - [lnav](https://github.com/tstack/lnav) - The Logfile Navigator is a **log file** viewer for the terminal.
-- [dozzle](https://github.com/amir20/dozzle) - is a small lightweight application with a web based interface to monitor **Docker logs**. It doesn’t store any log files. It is for live monitoring of your container logs only.
+- [Dozzle](https://github.com/amir20/dozzle) - is a small lightweight application with a web based interface to monitor **Docker logs**.
 
 If you like using TUI tools, try [multranslate](https://github.com/Lifailon/multranslate) for translating text in multiple translators simultaneously, with support for translation history and automatic language detection.
 
