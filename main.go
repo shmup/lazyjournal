@@ -58,6 +58,12 @@ type App struct {
 	startDockerContainers      int
 	selectedDockerContainer    int
 
+	filterListText string // текст для фильтрации список журналов
+	// Массивы для хранения списка журналов без фильтрации
+	journalsNotFilter         []Journal
+	logfilesNotFilter         []Logfile
+	dockerContainersNotFilter []DockerContainers
+
 	filterText       string   // текст для фильтрации записей журнала
 	currentLogLines  []string // набор строк (срез) для хранения журнала без фильтрации
 	filteredLogLines []string // набор строк (срез) для хранения журнала после фильтра
@@ -153,7 +159,7 @@ func main() {
 	app.loadDockerContainer(app.selectContainerizationSystem)
 
 	// Устанавливаем фокус на окно с журналами по умолчанию
-	g.SetCurrentView("services")
+	g.SetCurrentView("filterList")
 
 	// Горутина для автоматического обновления вывода журнала
 	go app.updateLogOutput(1)
@@ -166,68 +172,83 @@ func main() {
 
 // Структура интерфейса окон GUI
 func (app *App) layout(g *gocui.Gui) error {
-	maxX, maxY := g.Size()  // Получаем текущий размер интерфейса терминала (ширина, высота)
-	panelHeight := maxY / 3 // Высота каждой панели
+	maxX, maxY := g.Size()                // получаем текущий размер интерфейса терминала (ширина, высота)
+	leftPanelWidth := maxX / 4            // ширина левой колонки
+	inputHeight := 3                      // высота поля ввода для фильтрации список
+	availableHeight := maxY - inputHeight // общая высота всех трех окон слева
+	panelHeight := availableHeight / 3    // высота каждого окна
+
+	// Поле ввода для фильтрации списков
+	if v, err := g.SetView("filterList", 0, 0, leftPanelWidth-1, inputHeight-1, 0); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Filtering lists"
+		v.Editable = true
+		v.Wrap = true
+		v.FrameColor = gocui.ColorGreen // Цвет границ окна
+		v.TitleColor = gocui.ColorGreen // Цвет заголовка
+		v.Editor = app.createFilterEditor("lists")
+	}
+
 	// Окно для отображения списка доступных журналов (UNIT)
 	// Размеры окна: заголовок, отступ слева, отступ сверху, ширина, высота, 5-й параметр из форка для продолжение окна (2)
-	if v, err := g.SetView("services", 0, 0, maxX/4-1, panelHeight-1, 0); err != nil {
+	if v, err := g.SetView("services", 0, inputHeight, leftPanelWidth-1, inputHeight+panelHeight-1, 0); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Title = " < System units > " // заголовок окна
-		v.Highlight = true             // выделение активного элемента
+		v.Highlight = true             // выделение активного элемента в списке
+		v.Wrap = false                 // отключаем перенос строк
+		v.Autoscroll = true            // включаем автопрокрутку
 		// Цветовая схема из форка awesome-gocui/gocui
-		v.FrameColor = gocui.ColorGreen // Цвет границ окна
-		v.TitleColor = gocui.ColorGreen // Цвет заголовка
 		v.SelBgColor = gocui.ColorGreen // Цвет фона при выборе в списке
 		v.SelFgColor = gocui.ColorBlack // Цвет текста
 		// v.BgColor = gocui.ColorRed      // Цвет текста
 		// v.FgColor = gocui.ColorYellow   // Цвет фона внутри окна
-		v.Wrap = false           // отключаем перенос строк
-		v.Autoscroll = true      // включаем автопрокрутку
 		app.updateServicesList() // выводим список журналов в это окно
 	}
 
-	// Окно для списка из /var/log
-	if v, err := g.SetView("varLogs", 0, panelHeight, maxX/4-1, 2*panelHeight-1, 0); err != nil {
+	// Окно для списка логов из файловой системы
+	if v, err := g.SetView("varLogs", 0, inputHeight+panelHeight, leftPanelWidth-1, inputHeight+2*panelHeight-1, 0); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Title = " < Var logs > "
 		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
 		v.Wrap = false
 		v.Autoscroll = true
+		v.SelBgColor = gocui.ColorGreen
+		v.SelFgColor = gocui.ColorBlack
 		app.updateLogsList()
 	}
 
-	// Окно для списка контейнеров Docker
-	if v, err := g.SetView("docker", 0, 2*panelHeight, maxX/4-1, maxY-1, 0); err != nil {
+	// Окно для списка контейнеров Docker и Podman
+	if v, err := g.SetView("docker", 0, inputHeight+2*panelHeight, leftPanelWidth-1, maxY-1, 0); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Title = " < Docker containers > "
 		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
 		v.Wrap = false
 		v.Autoscroll = true
+		v.SelBgColor = gocui.ColorGreen
+		v.SelFgColor = gocui.ColorBlack
 	}
 
 	// Окно ввода текста для фильтрации
-	if v, err := g.SetView("filter", maxX/4+1, 0, maxX-1, 2, 0); err != nil {
+	if v, err := g.SetView("filter", leftPanelWidth+1, 0, maxX-1, 2, 0); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Title = "Filter (Default)"
-		v.Editable = true                   // включить окно редактируемым для ввода текста
-		v.Editor = app.createFilterEditor() // редактор для обработки ввода
+		v.Editable = true                         // включить окно редактируемым для ввода текста
+		v.Editor = app.createFilterEditor("logs") // редактор для обработки ввода
 		v.Wrap = true
 	}
 
 	// Окно для вывода записей выбранного журнала
-	if v, err := g.SetView("logs", maxX/4+1, 3, maxX-1, maxY-1, 0); err != nil {
+	if v, err := g.SetView("logs", leftPanelWidth+1, 3, maxX-1, maxY-1, 0); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -238,7 +259,7 @@ func (app *App) layout(g *gocui.Gui) error {
 
 	// Включение курсора в режиме фильтра и отключение в остальных окнах
 	currentView := g.CurrentView()
-	if currentView != nil && currentView.Name() == "filter" {
+	if currentView != nil && (currentView.Name() == "filter" || currentView.Name() == "filterList") {
 		g.Cursor = true
 	} else {
 		g.Cursor = false
@@ -393,6 +414,8 @@ func (app *App) loadServices(journalName string) {
 			return app.journals[i].name < app.journals[j].name
 		})
 	}
+	// Сохраняем неотфильтрованный список
+	app.journalsNotFilter = app.journals
 	// Обновляем список служб в интерфейсе
 	app.updateServicesList()
 }
@@ -567,7 +590,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	app.applyFilter(false)
 }
 
-// ---------------------------------------- Var Logs ----------------------------------------
+// ---------------------------------------- Filesystem ----------------------------------------
 
 func (app *App) loadFiles(logPath string) {
 	var output []byte
@@ -691,6 +714,7 @@ func (app *App) loadFiles(logPath string) {
 		// Сортировка в обратном порядке
 		return dateI.After(dateJ)
 	})
+	app.logfilesNotFilter = app.logfiles
 	// Обновляем отображение списка журналов
 	app.updateLogsList()
 }
@@ -956,6 +980,7 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 	sort.Slice(app.dockerContainers, func(i, j int) bool {
 		return app.dockerContainers[i].name < app.dockerContainers[j].name
 	})
+	app.dockerContainersNotFilter = app.dockerContainers
 	app.updateDockerContainerList()
 }
 
@@ -1081,7 +1106,74 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 	app.applyFilter(false)
 }
 
-// ---------------------------------------- Filter/Logs ----------------------------------------
+// ---------------------------------------- Filter ----------------------------------------
+
+// Редактор обработки ввода текста для фильтрации
+func (app *App) createFilterEditor(window string) gocui.Editor {
+	return gocui.EditorFunc(func(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
+		switch {
+		// добавляем символ в поле ввода
+		case ch != 0 && mod == 0:
+			v.EditWrite(ch)
+		// добавляем пробел
+		case key == gocui.KeySpace:
+			v.EditWrite(' ')
+		// удаляем символ слева от курсора
+		case key == gocui.KeyBackspace || key == gocui.KeyBackspace2:
+			v.EditDelete(true)
+		// Удаляем символ справа от курсора
+		case key == gocui.KeyDelete:
+			v.EditDelete(false)
+		// Перемещение курсора влево
+		case key == gocui.KeyArrowLeft:
+			v.MoveCursor(-1, 0) // удалить 3-й булевой параметр для форка
+		// Перемещение курсора вправо
+		case key == gocui.KeyArrowRight:
+			v.MoveCursor(1, 0)
+		}
+		if window == "logs" {
+			// Обновляем текст в буфере
+			app.filterText = strings.TrimSpace(v.Buffer())
+			// Применяем функцию фильтрации к выводу записей журнала
+			app.applyFilter(true)
+		} else if window == "lists" {
+			app.filterListText = strings.TrimSpace(v.Buffer())
+			app.applyFilterList()
+		}
+	})
+}
+
+// Функция для фильтрации всех список журналов
+func (app *App) applyFilterList() {
+	filter := strings.ToLower(app.filterListText)
+	// Временные массивы для отфильтрованных журналов
+	var filteredJournals []Journal
+	var filteredLogFiles []Logfile
+	var filteredDockerContainers []DockerContainers
+	for _, j := range app.journalsNotFilter {
+		if strings.Contains(strings.ToLower(j.name), filter) {
+			filteredJournals = append(filteredJournals, j)
+		}
+	}
+	for _, j := range app.logfilesNotFilter {
+		if strings.Contains(strings.ToLower(j.name), filter) {
+			filteredLogFiles = append(filteredLogFiles, j)
+		}
+	}
+	for _, j := range app.dockerContainersNotFilter {
+		if strings.Contains(strings.ToLower(j.name), filter) {
+			filteredDockerContainers = append(filteredDockerContainers, j)
+		}
+	}
+	// Сохраняем отфильтрованные и отсортированные данные
+	app.journals = filteredJournals
+	app.logfiles = filteredLogFiles
+	app.dockerContainers = filteredDockerContainers
+	// Обновляем списки в интерфейсе
+	app.updateServicesList()
+	app.updateLogsList()
+	app.updateDockerContainerList()
+}
 
 // Функция для фильтрации записей текущего журнала
 func (app *App) applyFilter(color bool) {
@@ -1289,36 +1381,6 @@ func (app *App) scrollUpLogs(step int) error {
 	return nil
 }
 
-// Редактор обработки ввода текста для фильтрации
-func (app *App) createFilterEditor() gocui.Editor {
-	return gocui.EditorFunc(func(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
-		switch {
-		// добавляем символ в поле ввода
-		case ch != 0 && mod == 0:
-			v.EditWrite(ch)
-		// добавляем пробел
-		case key == gocui.KeySpace:
-			v.EditWrite(' ')
-		// удаляем символ слева от курсора
-		case key == gocui.KeyBackspace || key == gocui.KeyBackspace2:
-			v.EditDelete(true)
-		// Удаляем символ справа от курсора
-		case key == gocui.KeyDelete:
-			v.EditDelete(false)
-		// Перемещение курсора влево
-		case key == gocui.KeyArrowLeft:
-			v.MoveCursor(-1, 0) // удалить 3-й булевой параметр для форка
-		// Перемещение курсора вправо
-		case key == gocui.KeyArrowRight:
-			v.MoveCursor(1, 0)
-		}
-		// Обновляем текст в буфере
-		app.filterText = strings.TrimSpace(v.Buffer())
-		// Применяем функцию фильтрации к выводу записей журнала
-		app.applyFilter(true)
-	})
-}
-
 // Функция для очистки поля ввода фильтра
 func (app *App) clearFilterEditor(g *gocui.Gui) {
 	v, _ := g.View("filter")
@@ -1329,6 +1391,61 @@ func (app *App) clearFilterEditor(g *gocui.Gui) {
 	// Очищаем буфер фильтра
 	app.filterText = ""
 	app.applyFilter(false)
+}
+
+// Функция для обновления последнего выбранного вывода лога
+func (app *App) updateLogOutput(seconds int) error {
+	for {
+		// Выполняем обновление интерфейса через метод Update для иницилизации перерисовки интерфейса
+		app.gui.Update(func(g *gocui.Gui) error {
+			// Сбрасываем автоскролл, если это ручное обновление, что бы опустить журнал вниз
+			if seconds == 0 {
+				app.autoScroll = true
+			}
+			switch app.lastWindow {
+			case "services":
+				app.loadJournalLogs(app.lastSelected, false, g)
+			case "varLogs":
+				app.loadFileLogs(app.lastSelected, false, g)
+			case "docker":
+				app.loadDockerLogs(app.lastSelected, false, g)
+			}
+			return nil
+		})
+		if seconds == 0 {
+			break
+		}
+		time.Sleep(time.Duration(seconds) * time.Second)
+	}
+	return nil
+}
+
+// Функция для фиксации места загрузки журнала с помощью делиметра
+func (app *App) updateDelimiter(newUpdate bool, g *gocui.Gui) {
+	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
+	if newUpdate {
+		app.newUpdateIndex = len(app.currentLogLines) - 1
+		// Сбрасываем автоскролл
+		app.autoScroll = true
+		// Фиксируем время загрузки журнала
+		app.updateTime = time.Now().Format("15:04:05")
+	}
+	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
+	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
+		// Формируем длинну делимитра
+		v, _ := g.View("logs")
+		width, _ := v.Size()
+		lengthDelimiter := width/2 - 12
+		delimiter1 := strings.Repeat("⎯", lengthDelimiter)
+		delimiter2 := delimiter1
+		if width > lengthDelimiter+lengthDelimiter+24 {
+			delimiter2 = strings.Repeat("⎯", lengthDelimiter+1)
+		}
+		var delimiterString string = delimiter1 + " Updates after " + app.updateTime + " " + delimiter2
+		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
+		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
+			append([]string{delimiterString}, app.currentLogLines[app.newUpdateIndex:]...)...)
+	}
 }
 
 // ---------------------------------------- Key Binding ----------------------------------------
@@ -1472,61 +1589,6 @@ func (app *App) setupKeybindings() error {
 		return nil
 	})
 	return nil
-}
-
-// Функция для обновления последнего выбранного вывода лога
-func (app *App) updateLogOutput(seconds int) error {
-	for {
-		// Выполняем обновление интерфейса через метод Update для иницилизации перерисовки интерфейса
-		app.gui.Update(func(g *gocui.Gui) error {
-			// Сбрасываем автоскролл, если это ручное обновление, что бы опустить журнал вниз
-			if seconds == 0 {
-				app.autoScroll = true
-			}
-			switch app.lastWindow {
-			case "services":
-				app.loadJournalLogs(app.lastSelected, false, g)
-			case "varLogs":
-				app.loadFileLogs(app.lastSelected, false, g)
-			case "docker":
-				app.loadDockerLogs(app.lastSelected, false, g)
-			}
-			return nil
-		})
-		if seconds == 0 {
-			break
-		}
-		time.Sleep(time.Duration(seconds) * time.Second)
-	}
-	return nil
-}
-
-// Функция для фиксации места загрузки журнала с помощью делиметра
-func (app *App) updateDelimiter(newUpdate bool, g *gocui.Gui) {
-	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
-	if newUpdate {
-		app.newUpdateIndex = len(app.currentLogLines) - 1
-		// Сбрасываем автоскролл
-		app.autoScroll = true
-		// Фиксируем время загрузки журнала
-		app.updateTime = time.Now().Format("15:04:05")
-	}
-	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
-	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
-		// Формируем длинну делимитра
-		v, _ := g.View("logs")
-		width, _ := v.Size()
-		lengthDelimiter := width/2 - 12
-		delimiter1 := strings.Repeat("⎯", lengthDelimiter)
-		delimiter2 := delimiter1
-		if width > lengthDelimiter+lengthDelimiter+24 {
-			delimiter2 = strings.Repeat("⎯", lengthDelimiter+1)
-		}
-		var delimiterString string = delimiter1 + " Updates after " + app.updateTime + " " + delimiter2
-		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
-		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
-			append([]string{delimiterString}, app.currentLogLines[app.newUpdateIndex:]...)...)
-	}
 }
 
 // Функции для переключения количества строк для вывода логов
@@ -1721,6 +1783,10 @@ func (app *App) setContainersList(g *gocui.Gui, v *gocui.View) error {
 
 // Функция для переключения окон через Tab
 func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
+	selectedFilterList, err := g.View("filterList")
+	if err != nil {
+		log.Panicln(err)
+	}
 	selectedServices, err := g.View("services")
 	if err != nil {
 		log.Panicln(err)
@@ -1748,9 +1814,24 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 		nextView = "services"
 	} else {
 		switch currentView.Name() {
-		// Если текущее окно services, переходим к filter
+		case "filterList":
+			nextView = "services"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
+			selectedServices.FrameColor = gocui.ColorGreen
+			selectedServices.TitleColor = gocui.ColorGreen
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = app.dockerFrameColor
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
 		case "services":
 			nextView = "varLogs"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = gocui.ColorGreen
@@ -1763,6 +1844,8 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.TitleColor = gocui.ColorDefault
 		case "varLogs":
 			nextView = "docker"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
@@ -1775,6 +1858,8 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.TitleColor = gocui.ColorDefault
 		case "docker":
 			nextView = "filter"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
@@ -1787,6 +1872,8 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.TitleColor = gocui.ColorDefault
 		case "filter":
 			nextView = "logs"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
@@ -1798,9 +1885,11 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.FrameColor = gocui.ColorGreen
 			selectedLogs.TitleColor = gocui.ColorGreen
 		case "logs":
-			nextView = "services"
-			selectedServices.FrameColor = gocui.ColorGreen
-			selectedServices.TitleColor = gocui.ColorGreen
+			nextView = "filterList"
+			selectedFilterList.FrameColor = gocui.ColorGreen
+			selectedFilterList.TitleColor = gocui.ColorGreen
+			selectedServices.FrameColor = app.journalListFrameColor
+			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
 			selectedDocker.FrameColor = app.dockerFrameColor
@@ -1820,6 +1909,10 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 
 // Функция для переключения окон в обратном порядке через Shift+Tab
 func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
+	selectedFilterList, err := g.View("filterList")
+	if err != nil {
+		log.Panicln(err)
+	}
 	selectedServices, err := g.View("services")
 	if err != nil {
 		log.Panicln(err)
@@ -1846,8 +1939,10 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 		nextView = "services"
 	} else {
 		switch currentView.Name() {
-		case "services":
+		case "filterList":
 			nextView = "logs"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
@@ -1858,8 +1953,24 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorGreen
 			selectedLogs.TitleColor = gocui.ColorGreen
+		case "services":
+			nextView = "filterList"
+			selectedFilterList.FrameColor = gocui.ColorGreen
+			selectedFilterList.TitleColor = gocui.ColorGreen
+			selectedServices.FrameColor = app.journalListFrameColor
+			selectedServices.TitleColor = gocui.ColorDefault
+			selectedVarLog.FrameColor = app.fileSystemFrameColor
+			selectedVarLog.TitleColor = gocui.ColorDefault
+			selectedDocker.FrameColor = app.dockerFrameColor
+			selectedDocker.TitleColor = gocui.ColorDefault
+			selectedFilter.FrameColor = gocui.ColorDefault
+			selectedFilter.TitleColor = gocui.ColorDefault
+			selectedLogs.FrameColor = gocui.ColorDefault
+			selectedLogs.TitleColor = gocui.ColorDefault
 		case "logs":
 			nextView = "filter"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
@@ -1872,6 +1983,8 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.TitleColor = gocui.ColorDefault
 		case "filter":
 			nextView = "docker"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
@@ -1884,6 +1997,8 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.TitleColor = gocui.ColorDefault
 		case "docker":
 			nextView = "varLogs"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = gocui.ColorGreen
@@ -1896,6 +2011,8 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedLogs.TitleColor = gocui.ColorDefault
 		case "varLogs":
 			nextView = "services"
+			selectedFilterList.FrameColor = gocui.ColorDefault
+			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = gocui.ColorGreen
 			selectedServices.TitleColor = gocui.ColorGreen
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
