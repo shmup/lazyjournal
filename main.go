@@ -65,6 +65,7 @@ type App struct {
 
 	autoScroll     bool // используется для автоматического скроллинга вниз при обновлении (если это не ручной скроллинг)
 	newUpdateIndex int  // фиксируем текущую длинну массива (индекс) для вставки строки обновления (если это ручной выбор из списка)
+	updateTime     string
 
 	lastWindow   string // фиксируем последний используемый источник для вывода логов
 	lastSelected string // фиксируем название последнего выбранного журнала или контейнера
@@ -559,22 +560,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	}
 	// Сохраняем строки журнала в массив
 	app.currentLogLines = strings.Split(string(output), "\n")
-	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
-	if newUpdate {
-		app.newUpdateIndex = len(app.currentLogLines) - 1
-		// Сбрасываем автоскролл
-		app.autoScroll = true
-	}
-	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
-	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
-		// Формируем длинну делимитра
-		v, _ := g.View("logs")
-		lengthDelimiter, _ := v.Size()
-		delimiter := strings.Repeat("⎯", lengthDelimiter)
-		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
-		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
-			append([]string{delimiter}, app.currentLogLines[app.newUpdateIndex:]...)...)
-	}
+	app.updateDelimiter(newUpdate, g)
 	// Очищаем поле ввода для фильтрации, что бы не применять фильтрацию к новому журналу
 	// app.filterText = ""
 	// Применяем текущий фильтр к записям для обновления вывода
@@ -896,22 +882,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
 	}
-	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
-	if newUpdate {
-		app.newUpdateIndex = len(app.currentLogLines) - 1
-		// Сбрасываем автоскролл
-		app.autoScroll = true
-	}
-	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
-	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
-		// Формируем длинну делимитра
-		v, _ := g.View("logs")
-		lengthDelimiter, _ := v.Size()
-		delimiter := strings.Repeat("⎯", lengthDelimiter)
-		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
-		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
-			append([]string{delimiter}, app.currentLogLines[app.newUpdateIndex:]...)...)
-	}
+	app.updateDelimiter(newUpdate, g)
 	// app.filterText = ""
 	app.applyFilter(false)
 }
@@ -1106,23 +1077,7 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 		return
 	}
 	app.currentLogLines = strings.Split(string(output), "\n")
-	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
-	if newUpdate {
-		app.newUpdateIndex = len(app.currentLogLines) - 1
-		// Сбрасываем автоскролл
-		app.autoScroll = true
-	}
-	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
-	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
-		// Формируем длинну делимитра
-		v, _ := g.View("logs")
-		lengthDelimiter, _ := v.Size()
-		delimiter := strings.Repeat("⎯", lengthDelimiter)
-		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
-		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
-			append([]string{delimiter}, app.currentLogLines[app.newUpdateIndex:]...)...)
-	}
-	// app.filterText = ""
+	app.updateDelimiter(newUpdate, g)
 	app.applyFilter(false)
 }
 
@@ -1544,6 +1499,34 @@ func (app *App) updateLogOutput(seconds int) error {
 		time.Sleep(time.Duration(seconds) * time.Second)
 	}
 	return nil
+}
+
+// Функция для фиксации места загрузки журнала с помощью делиметра
+func (app *App) updateDelimiter(newUpdate bool, g *gocui.Gui) {
+	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
+	if newUpdate {
+		app.newUpdateIndex = len(app.currentLogLines) - 1
+		// Сбрасываем автоскролл
+		app.autoScroll = true
+		// Фиксируем время загрузки журнала
+		app.updateTime = time.Now().Format("15:04:05")
+	}
+	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
+	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
+		// Формируем длинну делимитра
+		v, _ := g.View("logs")
+		width, _ := v.Size()
+		lengthDelimiter := width/2 - 12
+		delimiter1 := strings.Repeat("⎯", lengthDelimiter)
+		delimiter2 := delimiter1
+		if width > lengthDelimiter+lengthDelimiter+24 {
+			delimiter2 = strings.Repeat("⎯", lengthDelimiter+1)
+		}
+		var delimiterString string = delimiter1 + " Updates after " + app.updateTime + " " + delimiter2
+		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
+		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
+			append([]string{delimiterString}, app.currentLogLines[app.newUpdateIndex:]...)...)
+	}
 }
 
 // Функции для переключения количества строк для вывода логов
