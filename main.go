@@ -1186,6 +1186,19 @@ func (app *App) applyFilter(color bool) {
 	app.filteredLogLines = make([]string, 0)
 	// Опускаем регистр ввода текста для фильтра
 	filter := strings.ToLower(app.filterText)
+	// Проверка регулярного выражения
+	var regex *regexp.Regexp
+	if app.selectFilterMode == "regex" {
+		// Добавляем флаг для нечувствительности к регистру по умолчанию
+		filter = "(?i)" + filter
+		// Компилируем регулярное выражение
+		regex, err = regexp.Compile(filter)
+		if err != nil {
+			// В случае синтаксической ошибки регулярного выражения, красим окно красным цветом и завершаем цикл
+			v.FrameColor = gocui.ColorRed
+			return
+		}
+	}
 	for _, line := range app.currentLogLines {
 		// Fuzzy (неточный поиск без учета регистра)
 		if app.selectFilterMode == "fuzzy" {
@@ -1232,15 +1245,6 @@ func (app *App) applyFilter(color bool) {
 			}
 			// Regex (с использованием регулярных выражений Go и без учета регистра по умолчанию)
 		} else if app.selectFilterMode == "regex" {
-			// Добавляем флаг для нечувствительности к регистру по умолчанию
-			filter = "(?i)" + filter
-			// Компилируем регулярное выражение
-			regex, err := regexp.Compile(filter)
-			if err != nil {
-				// В случае синтаксической ошибки регулярного выражения, красим окно красным цветом и завершаем цикл
-				v.FrameColor = gocui.ColorRed
-				break
-			}
 			// Проверяем, что строка подходит под регулярное выражение
 			if regex.MatchString(line) {
 				originalLine := line
