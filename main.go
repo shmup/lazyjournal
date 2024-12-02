@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -197,10 +198,10 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = " < System units > " // заголовок окна
-		v.Highlight = true             // выделение активного элемента в списке
-		v.Wrap = false                 // отключаем перенос строк
-		v.Autoscroll = true            // включаем автопрокрутку
+		v.Title = " < System units (0) > " // заголовок окна
+		v.Highlight = true                 // выделение активного элемента в списке
+		v.Wrap = false                     // отключаем перенос строк
+		v.Autoscroll = true                // включаем автопрокрутку
 		// Цветовая схема из форка awesome-gocui/gocui
 		v.SelBgColor = gocui.ColorGreen // Цвет фона при выборе в списке
 		v.SelFgColor = gocui.ColorBlack // Цвет текста
@@ -214,7 +215,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = " < Var logs > "
+		v.Title = " < Var logs (0) > "
 		v.Highlight = true
 		v.Wrap = false
 		v.Autoscroll = true
@@ -228,7 +229,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = " < Docker containers > "
+		v.Title = " < Docker containers (0) > "
 		v.Highlight = true
 		v.Wrap = false
 		v.Autoscroll = true
@@ -513,6 +514,13 @@ func (app *App) selectServiceByIndex(index int) error {
 	if err != nil {
 		return err
 	}
+	// Обновляем счетчик в заголовке
+	re := regexp.MustCompile(`\s\(.+\) >`)
+	updateTitle := " (0) >"
+	if len(app.journals) != 0 {
+		updateTitle = " (" + strconv.Itoa(app.selectedJournal+1) + "/" + strconv.Itoa(len(app.journals)) + ") >"
+	}
+	v.Title = re.ReplaceAllString(v.Title, updateTitle)
 	// Устанавливаем курсор на нужный индекс (строку)
 	v.SetCursor(0, index) // первый столбец (0), индекс строки
 	return nil
@@ -621,7 +629,9 @@ func (app *App) loadFiles(logPath string) {
 		// Добавляем пути по умолчанию для /var/log
 		logPaths := []string{
 			"/var/log/syslog\n",
+			"/var/log/syslog.1\n",
 			"/var/log/dmesg\n",
+			"/var/log/dmesg.1\n",
 			// Информация о входах и выходах пользователей, перезагрузках и остановках системы
 			"/var/log/wtmp\n",
 			// Информация о неудачных попытках входа в систему (например, неправильные пароли)
@@ -794,6 +804,13 @@ func (app *App) selectFileByIndex(index int) error {
 	if err != nil {
 		return err
 	}
+	// Обновляем счетчик в заголовке
+	re := regexp.MustCompile(`\s\(.+\) >`)
+	updateTitle := " (0) >"
+	if len(app.logfiles) != 0 {
+		updateTitle = " (" + strconv.Itoa(app.selectedFile+1) + "/" + strconv.Itoa(len(app.logfiles)) + ") >"
+	}
+	v.Title = re.ReplaceAllString(v.Title, updateTitle)
 	v.SetCursor(0, index)
 	return nil
 }
@@ -1053,6 +1070,13 @@ func (app *App) selectDockerByIndex(index int) error {
 	if err != nil {
 		return err
 	}
+	// Обновляем счетчик в заголовке
+	re := regexp.MustCompile(`\s\(.+\) >`)
+	updateTitle := " (0) >"
+	if len(app.dockerContainers) != 0 {
+		updateTitle = " (" + strconv.Itoa(app.selectedDockerContainer+1) + "/" + strconv.Itoa(len(app.dockerContainers)) + ") >"
+	}
+	v.Title = re.ReplaceAllString(v.Title, updateTitle)
 	v.SetCursor(0, index)
 	return nil
 }
@@ -1179,6 +1203,33 @@ func (app *App) applyFilterList() {
 	app.updateServicesList()
 	app.updateLogsList()
 	app.updateDockerContainerList()
+	// Обновляем статус количества служб
+	v, _ := app.gui.View("services")
+	// Обновляем счетчик в заголовке
+	re := regexp.MustCompile(`\s\(.+\) >`)
+	updateTitle := " (0) >"
+	if len(app.journals) != 0 {
+		updateTitle = " (" + strconv.Itoa(app.selectedJournal+1) + "/" + strconv.Itoa(len(app.journals)) + ") >"
+	}
+	v.Title = re.ReplaceAllString(v.Title, updateTitle)
+	// Обновляем статус количества файлов
+	v, _ = app.gui.View("varLogs")
+	// Обновляем счетчик в заголовке
+	re = regexp.MustCompile(`\s\(.+\) >`)
+	updateTitle = " (0) >"
+	if len(app.logfiles) != 0 {
+		updateTitle = " (" + strconv.Itoa(app.selectedFile+1) + "/" + strconv.Itoa(len(app.logfiles)) + ") >"
+	}
+	v.Title = re.ReplaceAllString(v.Title, updateTitle)
+	// Обновляем статус количества контейнеров
+	v, _ = app.gui.View("docker")
+	// Обновляем счетчик в заголовке
+	re = regexp.MustCompile(`\s\(.+\) >`)
+	updateTitle = " (0) >"
+	if len(app.dockerContainers) != 0 {
+		updateTitle = " (" + strconv.Itoa(app.selectedDockerContainer+1) + "/" + strconv.Itoa(len(app.dockerContainers)) + ") >"
+	}
+	v.Title = re.ReplaceAllString(v.Title, updateTitle)
 }
 
 // Функция для фильтрации записей текущего журнала
@@ -1696,19 +1747,22 @@ func (app *App) setUnitListRight(g *gocui.Gui, v *gocui.View) error {
 	app.journals = app.journals[:0]
 	app.startServices = 0
 	app.selectedJournal = 0
+	// Удалить счетсчик из названия
+	// re := regexp.MustCompile(`\s*\(.+\)`)
+	// titleNotCounter := re.ReplaceAllString(selectedServices.Title, "")
 	// Меняем журнал и обновляем список
-	switch selectedServices.Title {
-	case " < System units > ":
-		selectedServices.Title = " < User units > "
+	switch app.selectUnits {
+	case "UNIT":
 		app.selectUnits = "USER_UNIT"
+		selectedServices.Title = " < User units (0) > "
 		app.loadServices(app.selectUnits)
-	case " < User units > ":
-		selectedServices.Title = " < Kernel boot > "
+	case "USER_UNIT":
 		app.selectUnits = "kernel"
+		selectedServices.Title = " < Kernel boot (0) > "
 		app.loadServices(app.selectUnits)
-	case " < Kernel boot > ":
-		selectedServices.Title = " < System units > "
+	case "kernel":
 		app.selectUnits = "UNIT"
+		selectedServices.Title = " < System units (0) > "
 		app.loadServices(app.selectUnits)
 	}
 	return nil
@@ -1722,18 +1776,18 @@ func (app *App) setUnitListLeft(g *gocui.Gui, v *gocui.View) error {
 	app.journals = app.journals[:0]
 	app.startServices = 0
 	app.selectedJournal = 0
-	switch selectedServices.Title {
-	case " < System units > ":
-		selectedServices.Title = " < Kernel boot > "
+	switch app.selectUnits {
+	case "UNIT":
 		app.selectUnits = "kernel"
+		selectedServices.Title = " < Kernel boot (0) > "
 		app.loadServices(app.selectUnits)
-	case " < Kernel boot > ":
-		selectedServices.Title = " < User units > "
+	case "kernel":
 		app.selectUnits = "USER_UNIT"
+		selectedServices.Title = " < User units (0) > "
 		app.loadServices(app.selectUnits)
-	case " < User units > ":
-		selectedServices.Title = " < System units > "
+	case "USER_UNIT":
 		app.selectUnits = "UNIT"
+		selectedServices.Title = " < System units (0) > "
 		app.loadServices(app.selectUnits)
 	}
 	return nil
@@ -1748,14 +1802,14 @@ func (app *App) setLogFilesList(g *gocui.Gui, v *gocui.View) error {
 	app.logfiles = app.logfiles[:0]
 	app.startFiles = 0
 	app.selectedFile = 0
-	switch selectedVarLog.Title {
-	case " < Var logs > ":
-		selectedVarLog.Title = " < Home logs > "
+	switch app.selectPath {
+	case "/var/log/":
 		app.selectPath = "/home/"
+		selectedVarLog.Title = " < Home logs (0) > "
 		app.loadFiles(app.selectPath)
-	case " < Home logs > ":
-		selectedVarLog.Title = " < Var logs > "
+	case "/home/":
 		app.selectPath = "/var/log/"
+		selectedVarLog.Title = " < Var logs (0) > "
 		app.loadFiles(app.selectPath)
 	}
 	return nil
@@ -1770,14 +1824,14 @@ func (app *App) setContainersList(g *gocui.Gui, v *gocui.View) error {
 	app.dockerContainers = app.dockerContainers[:0]
 	app.startDockerContainers = 0
 	app.selectedDockerContainer = 0
-	switch selectedDocker.Title {
-	case " < Docker containers > ":
-		selectedDocker.Title = " < Podman containers > "
+	switch app.selectContainerizationSystem {
+	case "docker":
 		app.selectContainerizationSystem = "podman"
+		selectedDocker.Title = " < Podman containers (0) > "
 		app.loadDockerContainer(app.selectContainerizationSystem)
-	case " < Podman containers > ":
-		selectedDocker.Title = " < Docker containers > "
+	case "podman":
 		app.selectContainerizationSystem = "docker"
+		selectedDocker.Title = " < Docker containers (0) > "
 		app.loadDockerContainer(app.selectContainerizationSystem)
 	}
 	return nil
