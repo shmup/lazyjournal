@@ -1699,15 +1699,21 @@ func (app *App) setFilterModeRight(g *gocui.Gui, v *gocui.View) error {
 	case "Filter (Default)":
 		selectedFilter.Title = "Filter (Fuzzy)"
 		app.selectFilterMode = "fuzzy"
-		app.logViewCount = "200000"
+		if app.logViewCount == "50000" {
+			app.logViewCount = "200000"
+		}
 	case "Filter (Fuzzy)":
 		selectedFilter.Title = "Filter (Regex)"
 		app.selectFilterMode = "regex"
-		app.logViewCount = "50000"
+		if app.logViewCount == "200000" {
+			app.logViewCount = "50000"
+		}
 	case "Filter (Regex)":
 		selectedFilter.Title = "Filter (Default)"
 		app.selectFilterMode = "default"
-		app.logViewCount = "200000"
+		if app.logViewCount == "50000" {
+			app.logViewCount = "200000"
+		}
 	}
 	app.applyFilter(false)
 	return nil
@@ -1722,15 +1728,21 @@ func (app *App) setFilterModeLeft(g *gocui.Gui, v *gocui.View) error {
 	case "Filter (Default)":
 		selectedFilter.Title = "Filter (Regex)"
 		app.selectFilterMode = "regex"
-		app.logViewCount = "50000"
+		if app.logViewCount == "200000" {
+			app.logViewCount = "50000"
+		}
 	case "Filter (Regex)":
 		selectedFilter.Title = "Filter (Fuzzy)"
 		app.selectFilterMode = "fuzzy"
-		app.logViewCount = "200000"
+		if app.logViewCount == "50000" {
+			app.logViewCount = "200000"
+		}
 	case "Filter (Fuzzy)":
 		selectedFilter.Title = "Filter (Default)"
 		app.selectFilterMode = "default"
-		app.logViewCount = "200000"
+		if app.logViewCount == "50000" {
+			app.logViewCount = "200000"
+		}
 	}
 	app.applyFilter(false)
 	return nil
