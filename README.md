@@ -93,17 +93,17 @@ bash build.sh
 
 ## Hotkeys
 
-- `Tab` - Switch between windows.
-- `Shift+Tab` - Return to previous window.
-- `Left/Right` - Switch between log lists in the selected window.
-- `Enter` - Select a journal from the list to display log.
-- `Up/Down` - Move up or down through all journal lists and log output.
-- `Shift+<Up/Down>` - Quickly move up or down (every `10` lines) through all journal lists and log output.
-- `Alt+<Up/Down>` - Change the number of lines for logging output (range: `1000-50000`, default: `5000`).
-- `Alt+<Left/Right>` - Changing the mode in the filtering window.
-- `Ctrl+R` - Refresh the current log manually and go to the bottom of the output.
-- `Ctrl+<D/W>` - Clear text input field for filter to quickly update current log without filtering.
-- `Ctrl+C` - Exit.
+- `Tab` - switch between windows.
+- `Shift+Tab` - return to previous window.
+- `Left/Right` - switch between log lists in the selected window.
+- `Enter` - selection a journal from the list to display log.
+- `Up/Down` - move up or down through all journal lists and log output, as well as changing the filtering mode in the filter window.
+- `<Shift/Alt>+<Up/Down>` - quickly move up or down (every `10` or `500` lines) through all journal lists and log output.
+- `Ctrl+R` - refresh the current log manually and go to the bottom of the output.
+- `Ctrl+<D/W>` - clear text input field for filter to quickly update current log output without filtering.
+- `Ctrl+C` - exit.
+
+There is currently a performance issue with Regex mode if the log size exceeds several tens of thousands of lines, so a 50k line limit is applied when switching (for other modes the default is 200k lines), but this number can be changed using the buttons `Left/Right` in the log output window.
 
 ## Alternatives
 

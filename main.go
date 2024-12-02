@@ -101,7 +101,7 @@ func main() {
 		selectPath:                   "/var/log/", // "/home/"
 		selectContainerizationSystem: "docker",    // "podman"
 		selectFilterMode:             "default",   // "fuzzy" || "regex"
-		logViewCount:                 "500000",    // 1000-500000
+		logViewCount:                 "200000",    // 5000-300000
 		journalListFrameColor:        gocui.ColorDefault,
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
@@ -1164,6 +1164,13 @@ func (app *App) applyFilterList() {
 			filteredDockerContainers = append(filteredDockerContainers, j)
 		}
 	}
+	// Сбрасываем индексы выбранного журнала для правильного позиционирования
+	app.selectedJournal = 0
+	app.selectedFile = 0
+	app.selectedDockerContainer = 0
+	app.startServices = 0
+	app.startFiles = 0
+	app.startDockerContainers = 0
 	// Сохраняем отфильтрованные и отсортированные данные
 	app.journals = filteredJournals
 	app.logfiles = filteredLogFiles
@@ -1538,26 +1545,14 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowLeft, gocui.ModNone, app.setContainersList); err != nil {
 		return err
 	}
-	// Переключение между режимами фильтрации Alt+<Left/Right> и Up/Down для выбранного окна (filter)
-	if err := app.gui.SetKeybinding("", gocui.KeyArrowRight, gocui.ModAlt, app.setFilterModeRight); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("", gocui.KeyArrowLeft, gocui.ModAlt, app.setFilterModeLeft); err != nil {
-		return err
-	}
+	// Переключение между режимами фильтрации через Up/Down для выбранного окна (filter)
 	if err := app.gui.SetKeybinding("filter", gocui.KeyArrowUp, gocui.ModNone, app.setFilterModeRight); err != nil {
 		return err
 	}
 	if err := app.gui.SetKeybinding("filter", gocui.KeyArrowDown, gocui.ModNone, app.setFilterModeLeft); err != nil {
 		return err
 	}
-	// Переключение между режимами фильтрации Alt+<Up/Down> и Left/Right для выбранного окна (logs)
-	if err := app.gui.SetKeybinding("", gocui.KeyArrowDown, gocui.ModAlt, app.setCountLogViewDown); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("", gocui.KeyArrowUp, gocui.ModAlt, app.setCountLogViewUp); err != nil {
-		return err
-	}
+	// Переключение для количества выводимых строк через Left/Right для выбранного окна (logs)
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowLeft, gocui.ModNone, app.setCountLogViewDown); err != nil {
 		return err
 	}
@@ -1571,11 +1566,17 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollDownLogs(10)
 	})
+	app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollDownLogs(500)
+	})
 	app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollUpLogs(1)
 	})
 	app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollUpLogs(10)
+	})
+	app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollUpLogs(500)
 	})
 	// Ручное обновление вывода журнала (Ctrl+R)
 	app.gui.SetKeybinding("", gocui.KeyCtrlR, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
@@ -1598,8 +1599,6 @@ func (app *App) setupKeybindings() error {
 
 func (app *App) setCountLogViewUp(g *gocui.Gui, v *gocui.View) error {
 	switch app.logViewCount {
-	case "1000":
-		app.logViewCount = "5000"
 	case "5000":
 		app.logViewCount = "10000"
 	case "10000":
@@ -1607,9 +1606,11 @@ func (app *App) setCountLogViewUp(g *gocui.Gui, v *gocui.View) error {
 	case "50000":
 		app.logViewCount = "100000"
 	case "100000":
-		app.logViewCount = "500000"
-	case "500000":
-		app.logViewCount = "500000"
+		app.logViewCount = "200000"
+	case "200000":
+		app.logViewCount = "300000"
+	case "300000":
+		app.logViewCount = "300000"
 	}
 	app.applyFilter(false)
 	app.updateLogOutput(0)
@@ -1618,7 +1619,9 @@ func (app *App) setCountLogViewUp(g *gocui.Gui, v *gocui.View) error {
 
 func (app *App) setCountLogViewDown(g *gocui.Gui, v *gocui.View) error {
 	switch app.logViewCount {
-	case "500000":
+	case "300000":
+		app.logViewCount = "200000"
+	case "200000":
 		app.logViewCount = "100000"
 	case "100000":
 		app.logViewCount = "50000"
@@ -1627,9 +1630,7 @@ func (app *App) setCountLogViewDown(g *gocui.Gui, v *gocui.View) error {
 	case "10000":
 		app.logViewCount = "5000"
 	case "5000":
-		app.logViewCount = "1000"
-	case "1000":
-		app.logViewCount = "1000"
+		app.logViewCount = "5000"
 	}
 	app.applyFilter(false)
 	app.updateLogOutput(0)
@@ -1647,12 +1648,15 @@ func (app *App) setFilterModeRight(g *gocui.Gui, v *gocui.View) error {
 	case "Filter (Default)":
 		selectedFilter.Title = "Filter (Fuzzy)"
 		app.selectFilterMode = "fuzzy"
+		app.logViewCount = "200000"
 	case "Filter (Fuzzy)":
 		selectedFilter.Title = "Filter (Regex)"
 		app.selectFilterMode = "regex"
+		app.logViewCount = "50000"
 	case "Filter (Regex)":
 		selectedFilter.Title = "Filter (Default)"
 		app.selectFilterMode = "default"
+		app.logViewCount = "200000"
 	}
 	app.applyFilter(false)
 	return nil
@@ -1667,12 +1671,15 @@ func (app *App) setFilterModeLeft(g *gocui.Gui, v *gocui.View) error {
 	case "Filter (Default)":
 		selectedFilter.Title = "Filter (Regex)"
 		app.selectFilterMode = "regex"
+		app.logViewCount = "50000"
 	case "Filter (Regex)":
 		selectedFilter.Title = "Filter (Fuzzy)"
 		app.selectFilterMode = "fuzzy"
+		app.logViewCount = "200000"
 	case "Filter (Fuzzy)":
 		selectedFilter.Title = "Filter (Default)"
 		app.selectFilterMode = "default"
+		app.logViewCount = "200000"
 	}
 	app.applyFilter(false)
 	return nil
