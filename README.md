@@ -15,6 +15,8 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 
 ![interface](/img/fuzzy.png)
 
+![interface](/img/regex.png)
+
 ## Functional
 
 - View all system and user units logs via `journalctl` (tool for reading logs using `journald` from [systemd](https://github.com/systemd/systemd)).
