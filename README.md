@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
+    <a href="https://pkg.go.dev/github.com/Lifailon/lazyjournal"><img src="https://pkg.go.dev/badge/github.com/Lifailon/lazyjournal.svg" alt="Go Reference"></a>
+    <a href="https://goreportcard.com/report/github.com/Lifailon/lazyjournal"><img src="https://goreportcard.com/badge/github.com/Lifailon/lazyjournal" alt="Go Report"></a>
     <a href="https://github.com/Lifailon/lazyjournal"><img title="Go Version"src="https://img.shields.io/github/go-mod/go-version/Lifailon/lazyjournal?logo=go"></a>
-    <a href="https://github.com/Lifailon/lazyjournal/releases/latest"><img title="GitHub Release"src="https://img.shields.io/github/v/release/Lifailon/lazyjournal?label=Latest release&logo=git&color=coral"></a>
-    <a href="https://github.com/Lifailon/lazyjournal/releases"><img title="GitHub Downloads"src="https://img.shields.io/github/downloads/Lifailon/lazyjournal/total?label=Downloads&logo=github&color=green"></a>
     <a href="https://github.com/Lifailon/Kinozal-Bot/blob/rsa/LICENSE"><img title="License"src="https://img.shields.io/github/license/Lifailon/Kinozal-Bot?logo=readme&color=white"></a>
 </p>
 
@@ -19,6 +19,7 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 
 ## Functional
 
+- Simple installation, to run it, just download a single executable file without dependencies.
 - View all system and user units logs via `journalctl` (tool for reading logs using `journald` from [systemd](https://github.com/systemd/systemd)).
 - List of all system boots for kernel log output.
 - File system logs from `/var/log` (for example, for Apache or Nginx), as well as syslog, dmesg (kernel) and user authentication (`wtmp` and `btmp`) sorted by modification date.
@@ -40,7 +41,7 @@ Regex mode uses the built-in `regexp` library, which is resource-intensive when 
 This is an up-to-date roadmap in addition to the functionality described above.
 
 - [ ] MacOS support for `launchd` (issue [#1](https://github.com/Lifailon/lazyjournal/issues/1)).
-- [ ] Windows support (Windows Events via PowerShell and log files from `Program Files` and others directories).
+- [ ] Windows support (`Windows Events` via `PowerShell` and log files from `Program Files` and others directories).
 - [ ] Syntax coloring for logging output (like [tailspin](https://github.com/bensadeh/tailspin)).
 - [ ] Interface for scrolling and mouse support.
 - [ ] Support remote machines via `ssh` protocol.
