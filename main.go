@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +38,8 @@ type DockerContainers struct {
 // Структура основного приложения (графический интерфейс и данные журналов)
 type App struct {
 	gui *gocui.Gui // графический интерфейс (gocui)
+
+	getOS string // название ОС
 
 	selectUnits                  string // название журнала (UNIT/USER_UNIT)
 	selectPath                   string // путь к логам (/var/log/)
@@ -98,7 +101,7 @@ func main() {
 		selectedFile:                 0,
 		startDockerContainers:        0,
 		selectedDockerContainer:      0,
-		selectUnits:                  "UNIT",      // "USER_UNIT" || "kernel"
+		selectUnits:                  "process",   // "UNIT" || "USER_UNIT" || "kernel"
 		selectPath:                   "/var/log/", // "/home/"
 		selectContainerizationSystem: "docker",    // "podman"
 		selectFilterMode:             "default",   // "fuzzy" || "regex"
@@ -136,6 +139,12 @@ func main() {
 	if err := app.layout(g); err != nil {
 		log.Panicln(err)
 	}
+
+	// Определяем используемую ОС (linux/darwin/windows)
+	app.getOS = runtime.GOOS
+	// if v, err := g.View("logs"); err == nil {
+	// 	fmt.Fprintln(v, app.getOS)
+	// }
 
 	// Фиксируем текущее количество видимых строк в терминале (-1 заголовок)
 	if v, err := g.View("services"); err == nil {
@@ -198,7 +207,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = " < System units (0) > " // заголовок окна
+		v.Title = " < Process list (0) > " // заголовок окна
 		v.Highlight = true                 // выделение активного элемента в списке
 		v.Wrap = false                     // отключаем перенос строк
 		v.Autoscroll = true                // включаем автопрокрутку
@@ -271,149 +280,193 @@ func (app *App) layout(g *gocui.Gui) error {
 
 // ---------------------------------------- journalctl ----------------------------------------
 
-// journald/systemd not supported
-// journalctl --version
-
 // Функция для загрузки списка журналов служб или загрузок системы из journalctl
 func (app *App) loadServices(journalName string) {
-	// Проверка, что в системе установлен/поддерживается утилита journalctl
-	checkJournald := exec.Command("journalctl", "--version")
-	// Проверяем на ошибки (очищаем список служб, отключаем курсор и выводим ошибку)
-	_, err := checkJournald.Output()
-	if err != nil {
-		vError, _ := app.gui.View("services")
-		vError.Clear()
-		app.journalListFrameColor = gocui.ColorRed
-		vError.FrameColor = app.journalListFrameColor
-		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[31mjournald not supported\033[0m")
-		return
-	}
-	if journalName == "kernel" {
-		// Получаем список загрузок системы
-		bootCmd := exec.Command("journalctl", "--list-boots", "-o", "json")
-		bootOutput, err := bootCmd.Output()
+	var psList *exec.Cmd
+	if journalName == "process" {
+		psList = exec.Command("ps", "ax", "-o", "pid,comm")
+		output, err := psList.Output()
 		if err != nil {
 			vError, _ := app.gui.View("services")
 			vError.Clear()
 			app.journalListFrameColor = gocui.ColorRed
 			vError.FrameColor = app.journalListFrameColor
 			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mError getting boot information from journald\033[0m")
+			fmt.Fprintln(vError, "\033[31mAccess denied\033[0m")
 			return
-		} else {
-			vError, _ := app.gui.View("services")
-			app.journalListFrameColor = gocui.ColorDefault
-			if vError.FrameColor != gocui.ColorDefault {
-				vError.FrameColor = gocui.ColorGreen
+		}
+		v, _ := app.gui.View("services")
+		app.journalListFrameColor = gocui.ColorDefault
+		if v.FrameColor != gocui.ColorDefault {
+			v.FrameColor = gocui.ColorGreen
+		}
+		v.Highlight = true
+		serviceMap := make(map[string]bool)
+		scanner := bufio.NewScanner(strings.NewReader(string(output)))
+		// Пропускаем первую строку (заголовок)
+		scanner.Scan()
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line != "" {
+				// Разделяем строку на PID и COMMAND
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					// Получаем PID
+					pid := fields[0]
+					// Получаем имя процесса (command)
+					serviceName := fields[1]
+					// Уникальный ключ для проверки
+					uniqueKey := pid + ":" + serviceName
+					if !serviceMap[uniqueKey] {
+						serviceMap[uniqueKey] = true
+						app.journals = append(app.journals, Journal{
+							name:    serviceName,
+							boot_id: pid,
+						})
+					}
+				}
 			}
-			vError.Highlight = true
 		}
-		// Структура для парсинга JSON
-		type BootInfo struct {
-			BootID     string `json:"boot_id"`
-			FirstEntry int64  `json:"first_entry"`
-			LastEntry  int64  `json:"last_entry"`
-		}
-		var bootRecords []BootInfo
-		err = json.Unmarshal(bootOutput, &bootRecords)
-		// Если JSON невалидный
+	} else {
+		// Проверка, что в системе установлен/поддерживается утилита journalctl
+		checkJournald := exec.Command("journalctl", "--version")
+		// Проверяем на ошибки (очищаем список служб, отключаем курсор и выводим ошибку)
+		_, err := checkJournald.Output()
 		if err != nil {
-			// Парсим вывод построчно
-			lines := strings.Split(string(bootOutput), "\n")
-			for _, line := range lines {
-				// Разбиваем строку на массив
-				wordsArray := strings.Fields(line)
-				// 0 d914ebeb67c6428a87f9cfe3861c295d Mon 2024-11-25 12:15:07 MSK—Mon 2024-11-25 18:34:53 MSK
-				if len(wordsArray) >= 8 {
-					bootId := wordsArray[1]
-					// Забираем дату, проверяем и изменяем формат
-					var parseDate []string
-					var bootDate string
-					parseDate = strings.Split(wordsArray[3], "-")
-					if len(parseDate) == 3 {
-						bootDate = fmt.Sprintf("%s.%s.%s", parseDate[2], parseDate[1], parseDate[0])
-					} else {
-						continue
+			vError, _ := app.gui.View("services")
+			vError.Clear()
+			app.journalListFrameColor = gocui.ColorRed
+			vError.FrameColor = app.journalListFrameColor
+			vError.Highlight = false
+			fmt.Fprintln(vError, "\033[31mjournald not supported\033[0m")
+			return
+		}
+		if journalName == "kernel" {
+			// Получаем список загрузок системы
+			bootCmd := exec.Command("journalctl", "--list-boots", "-o", "json")
+			bootOutput, err := bootCmd.Output()
+			if err != nil {
+				vError, _ := app.gui.View("services")
+				vError.Clear()
+				app.journalListFrameColor = gocui.ColorRed
+				vError.FrameColor = app.journalListFrameColor
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[31mError getting boot information from journald\033[0m")
+				return
+			} else {
+				vError, _ := app.gui.View("services")
+				app.journalListFrameColor = gocui.ColorDefault
+				if vError.FrameColor != gocui.ColorDefault {
+					vError.FrameColor = gocui.ColorGreen
+				}
+				vError.Highlight = true
+			}
+			// Структура для парсинга JSON
+			type BootInfo struct {
+				BootID     string `json:"boot_id"`
+				FirstEntry int64  `json:"first_entry"`
+				LastEntry  int64  `json:"last_entry"`
+			}
+			var bootRecords []BootInfo
+			err = json.Unmarshal(bootOutput, &bootRecords)
+			// Если JSON невалидный
+			if err != nil {
+				// Парсим вывод построчно
+				lines := strings.Split(string(bootOutput), "\n")
+				for _, line := range lines {
+					// Разбиваем строку на массив
+					wordsArray := strings.Fields(line)
+					// 0 d914ebeb67c6428a87f9cfe3861c295d Mon 2024-11-25 12:15:07 MSK—Mon 2024-11-25 18:34:53 MSK
+					if len(wordsArray) >= 8 {
+						bootId := wordsArray[1]
+						// Забираем дату, проверяем и изменяем формат
+						var parseDate []string
+						var bootDate string
+						parseDate = strings.Split(wordsArray[3], "-")
+						if len(parseDate) == 3 {
+							bootDate = fmt.Sprintf("%s.%s.%s", parseDate[2], parseDate[1], parseDate[0])
+						} else {
+							continue
+						}
+						var stopDate string
+						parseDate = strings.Split(wordsArray[6], "-")
+						if len(parseDate) == 3 {
+							stopDate = fmt.Sprintf("%s.%s.%s", parseDate[2], parseDate[1], parseDate[0])
+						} else {
+							continue
+						}
+						// Заполняем массив
+						bootDateTime := bootDate + " " + wordsArray[4]
+						stopDateTime := stopDate + " " + wordsArray[7]
+						app.journals = append(app.journals, Journal{
+							name:    fmt.Sprintf(bootDateTime + " - " + stopDateTime),
+							boot_id: bootId,
+						})
 					}
-					var stopDate string
-					parseDate = strings.Split(wordsArray[6], "-")
-					if len(parseDate) == 3 {
-						stopDate = fmt.Sprintf("%s.%s.%s", parseDate[2], parseDate[1], parseDate[0])
-					} else {
-						continue
-					}
-					// Заполняем массив
-					bootDateTime := bootDate + " " + wordsArray[4]
-					stopDateTime := stopDate + " " + wordsArray[7]
+				}
+			} else {
+				// Добавляем информацию о загрузках в app.journals
+				for _, bootRecord := range bootRecords {
+					// Преобразуем наносекунды в секунды
+					firstEntryTime := time.Unix(bootRecord.FirstEntry/1000000, bootRecord.FirstEntry%1000000)
+					lastEntryTime := time.Unix(bootRecord.LastEntry/1000000, bootRecord.LastEntry%1000000)
+					// Форматируем строку в формате "DD.MM.YYYY HH:MM:SS"
+					const dateFormat = "02.01.2006 15:04:05"
+					name := fmt.Sprintf("%s - %s", firstEntryTime.Format(dateFormat), lastEntryTime.Format(dateFormat))
+					// Добавляем в массив
 					app.journals = append(app.journals, Journal{
-						name:    fmt.Sprintf(bootDateTime + " - " + stopDateTime),
-						boot_id: bootId,
+						name:    name,
+						boot_id: bootRecord.BootID,
 					})
 				}
 			}
+			// Сортируем по второй дате
+			sort.Slice(app.journals, func(i, j int) bool {
+				// Разделяем строки на части (до и после дефиса)
+				dateFormat := "02.01.2006 15:04:05"
+				// Получаем вторую дату (после дефиса) и парсим её
+				endDate1, _ := time.Parse(dateFormat, app.journals[i].name[22:])
+				endDate2, _ := time.Parse(dateFormat, app.journals[j].name[22:])
+				// Сравниваем по второй дате в обратном порядке
+				return endDate1.After(endDate2) // Используем After для сортировки по убыванию
+			})
 		} else {
-			// Добавляем информацию о загрузках в app.journals
-			for _, bootRecord := range bootRecords {
-				// Преобразуем наносекунды в секунды
-				firstEntryTime := time.Unix(bootRecord.FirstEntry/1000000, bootRecord.FirstEntry%1000000)
-				lastEntryTime := time.Unix(bootRecord.LastEntry/1000000, bootRecord.LastEntry%1000000)
-				// Форматируем строку в формате "DD.MM.YYYY HH:MM:SS"
-				const dateFormat = "02.01.2006 15:04:05"
-				name := fmt.Sprintf("%s - %s", firstEntryTime.Format(dateFormat), lastEntryTime.Format(dateFormat))
-				// Добавляем в массив
-				app.journals = append(app.journals, Journal{
-					name:    name,
-					boot_id: bootRecord.BootID,
-				})
+			cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
+			output, err := cmd.Output()
+			if err != nil {
+				vError, _ := app.gui.View("services")
+				vError.Clear()
+				app.journalListFrameColor = gocui.ColorRed
+				vError.FrameColor = app.journalListFrameColor
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[31mError getting services from journald\033[0m")
+				return
+			} else {
+				vError, _ := app.gui.View("services")
+				app.journalListFrameColor = gocui.ColorDefault
+				if vError.FrameColor != gocui.ColorDefault {
+					vError.FrameColor = gocui.ColorGreen
+				}
+				vError.Highlight = true
 			}
-		}
-		// Сортируем по второй дате
-		sort.Slice(app.journals, func(i, j int) bool {
-			// Разделяем строки на части (до и после дефиса)
-			dateFormat := "02.01.2006 15:04:05"
-			// Получаем вторую дату (после дефиса) и парсим её
-			endDate1, _ := time.Parse(dateFormat, app.journals[i].name[22:])
-			endDate2, _ := time.Parse(dateFormat, app.journals[j].name[22:])
-			// Сравниваем по второй дате в обратном порядке
-			return endDate1.After(endDate2) // Используем After для сортировки по убыванию
-		})
-	} else {
-		cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
-		output, err := cmd.Output()
-		if err != nil {
-			vError, _ := app.gui.View("services")
-			vError.Clear()
-			app.journalListFrameColor = gocui.ColorRed
-			vError.FrameColor = app.journalListFrameColor
-			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mError getting services from journald\033[0m")
-			return
-		} else {
-			vError, _ := app.gui.View("services")
-			app.journalListFrameColor = gocui.ColorDefault
-			if vError.FrameColor != gocui.ColorDefault {
-				vError.FrameColor = gocui.ColorGreen
+			// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
+			serviceMap := make(map[string]bool)
+			scanner := bufio.NewScanner(strings.NewReader(string(output)))
+			for scanner.Scan() {
+				serviceName := strings.TrimSpace(scanner.Text())
+				if serviceName != "" && !serviceMap[serviceName] {
+					serviceMap[serviceName] = true
+					app.journals = append(app.journals, Journal{
+						name:    serviceName,
+						boot_id: "",
+					})
+				}
 			}
-			vError.Highlight = true
+			// Сортируем список служб по алфавиту
+			sort.Slice(app.journals, func(i, j int) bool {
+				return app.journals[i].name < app.journals[j].name
+			})
 		}
-		// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
-		serviceMap := make(map[string]bool)
-		scanner := bufio.NewScanner(strings.NewReader(string(output)))
-		for scanner.Scan() {
-			serviceName := strings.TrimSpace(scanner.Text())
-			if serviceName != "" && !serviceMap[serviceName] {
-				serviceMap[serviceName] = true
-				app.journals = append(app.journals, Journal{
-					name:    serviceName,
-					boot_id: "",
-				})
-			}
-		}
-		// Сортируем список служб по алфавиту
-		sort.Slice(app.journals, func(i, j int) bool {
-			return app.journals[i].name < app.journals[j].name
-		})
 	}
 	// Сохраняем неотфильтрованный список
 	app.journalsNotFilter = app.journals
@@ -558,7 +611,32 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	} else {
 		selectUnits = app.lastSelectUnits
 	}
-	if selectUnits == "kernel" {
+	if selectUnits == "process" {
+		var boot_id string
+		for _, journal := range app.journals {
+			if journal.name == serviceName {
+				boot_id = journal.boot_id
+				break
+			}
+		}
+		if newUpdate {
+			app.lastBootId = boot_id
+		} else {
+			boot_id = app.lastBootId
+		}
+		// Сбрасываем количество строк журнала до 5000
+		if app.logViewCount == "200000" {
+			app.logViewCount = "5000"
+		}
+		cmd := exec.Command("journalctl", "_PID="+boot_id, "--no-pager", "-n", app.logViewCount)
+		output, err = cmd.Output()
+		if err != nil {
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
+			return
+		}
+	} else if selectUnits == "kernel" {
 		var boot_id string
 		for _, journal := range app.journals {
 			if journal.name == serviceName {
@@ -943,7 +1021,7 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		app.dockerFrameColor = gocui.ColorRed
 		vError.FrameColor = app.dockerFrameColor
 		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[31m"+ContainerizationSystem+" not installed\033[0m")
+		fmt.Fprintln(vError, "\033[31m"+ContainerizationSystem+" not installed (environment not found)\033[0m")
 		return
 	}
 	cmd = exec.Command(ContainerizationSystem, "ps", "--format", "{{.ID}} {{.Names}}")
@@ -1764,6 +1842,10 @@ func (app *App) setUnitListRight(g *gocui.Gui, v *gocui.View) error {
 	// titleNotCounter := re.ReplaceAllString(selectedServices.Title, "")
 	// Меняем журнал и обновляем список
 	switch app.selectUnits {
+	case "process":
+		app.selectUnits = "UNIT"
+		selectedServices.Title = " < System units (0) > "
+		app.loadServices(app.selectUnits)
 	case "UNIT":
 		app.selectUnits = "USER_UNIT"
 		selectedServices.Title = " < User units (0) > "
@@ -1773,8 +1855,8 @@ func (app *App) setUnitListRight(g *gocui.Gui, v *gocui.View) error {
 		selectedServices.Title = " < Kernel boot (0) > "
 		app.loadServices(app.selectUnits)
 	case "kernel":
-		app.selectUnits = "UNIT"
-		selectedServices.Title = " < System units (0) > "
+		app.selectUnits = "process"
+		selectedServices.Title = " < Process list (0) > "
 		app.loadServices(app.selectUnits)
 	}
 	return nil
@@ -1789,7 +1871,7 @@ func (app *App) setUnitListLeft(g *gocui.Gui, v *gocui.View) error {
 	app.startServices = 0
 	app.selectedJournal = 0
 	switch app.selectUnits {
-	case "UNIT":
+	case "process":
 		app.selectUnits = "kernel"
 		selectedServices.Title = " < Kernel boot (0) > "
 		app.loadServices(app.selectUnits)
@@ -1800,6 +1882,10 @@ func (app *App) setUnitListLeft(g *gocui.Gui, v *gocui.View) error {
 	case "USER_UNIT":
 		app.selectUnits = "UNIT"
 		selectedServices.Title = " < System units (0) > "
+		app.loadServices(app.selectUnits)
+	case "UNIT":
+		app.selectUnits = "process"
+		selectedServices.Title = " < Process list (0) > "
 		app.loadServices(app.selectUnits)
 	}
 	return nil
