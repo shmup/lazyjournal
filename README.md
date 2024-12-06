@@ -20,9 +20,10 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 ## Functional
 
 - Simple installation, to run it, just download a single executable file without dependencies.
-- View all system and user units logs via `journalctl` (tool for reading logs using `journald` from [systemd](https://github.com/systemd/systemd)).
+- List of all units (services, sockets, etc.) via `systemctl` with current running status.
+- View all system and user journals via `journalctl` (tool for reading logs from [systemd-journald](https://github.com/systemd/systemd/tree/main/src/journal)).
 - List of all system boots for kernel log output.
-- File system logs from `/var/log` (for example, for Apache or Nginx), as well as syslog, dmesg (kernel) and user authentication (`wtmp` and `btmp`) sorted by modification date.
+- File system logs from `/var/log` (for example, for Apache or Nginx), as well as `syslog`, `dmesg` (kernel) and user authentication (`wtmp` and `btmp`) sorted by modification date.
 - View all log files in the home directories of users and root.
 - Reading archived logs in `gz` format.
 - Podman, Docker containers and Swarm services logs.
@@ -52,7 +53,7 @@ Binaries for the Linux operating system are available on the [releases](https://
 
 > Development is done on the Ubuntu Server system, also tested in WSL environment on Debian system (`x64` platform) and Raspberry Pi (`aarch64` platform).
 
-Run the command in your console to quickly install or update:
+Run the command in your console to quickly install or update the stable version:
 
 ```shell
 curl https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | bash
@@ -60,7 +61,7 @@ curl https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | ba
 
 This command will run a script that will download the latest executable from the GitHub repository into your current user's home directory along with other executables (or create a directory) and grant execution permission.
 
-You can also use Go for installation. To do this, the Go interpreter must be installed on the system, for example, in Ubuntu you can use the SnapCraft package manager:
+You can also use Go for install the dev version. To do this, the Go interpreter must be installed on the system, for example, in Ubuntu you can use the SnapCraft package manager:
 
 ```shell
 sudo snap install go --classic

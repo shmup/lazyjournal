@@ -101,7 +101,7 @@ func main() {
 		selectedFile:                 0,
 		startDockerContainers:        0,
 		selectedDockerContainer:      0,
-		selectUnits:                  "process",   // "UNIT" || "USER_UNIT" || "kernel"
+		selectUnits:                  "services",  // "UNIT" || "USER_UNIT" || "kernel" || "process"
 		selectPath:                   "/var/log/", // "/home/"
 		selectContainerizationSystem: "docker",    // "podman"
 		selectFilterMode:             "default",   // "fuzzy" || "regex"
@@ -142,9 +142,6 @@ func main() {
 
 	// Определяем используемую ОС (linux/darwin/windows)
 	app.getOS = runtime.GOOS
-	// if v, err := g.View("logs"); err == nil {
-	// 	fmt.Fprintln(v, app.getOS)
-	// }
 
 	// Фиксируем текущее количество видимых строк в терминале (-1 заголовок)
 	if v, err := g.View("services"); err == nil {
@@ -207,7 +204,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = " < Process list (0) > " // заголовок окна
+		v.Title = " < Service list (0) > " // заголовок окна
 		v.Highlight = true                 // выделение активного элемента в списке
 		v.Wrap = false                     // отключаем перенос строк
 		v.Autoscroll = true                // включаем автопрокрутку
@@ -280,6 +277,13 @@ func (app *App) layout(g *gocui.Gui) error {
 
 // ---------------------------------------- journalctl ----------------------------------------
 
+// launchctl list
+
+// Descriptor logs
+// sudo lsof -F | grep .log$
+
+// sudo cat /var/lib/docker/containers/ba4ade14ab33a45ccc3280d5feebfe321460bd9914f40e70c4569acf84c005c9/ba4ade14ab33a45ccc3280d5feebfe321460bd9914f40e70c4569acf84c005c9-json.log | jq
+
 // Функция для загрузки списка журналов служб или загрузок системы из journalctl
 func (app *App) loadServices(journalName string) {
 	var psList *exec.Cmd
@@ -338,10 +342,58 @@ func (app *App) loadServices(journalName string) {
 			app.journalListFrameColor = gocui.ColorRed
 			vError.FrameColor = app.journalListFrameColor
 			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mjournald not supported\033[0m")
+			fmt.Fprintln(vError, "\033[31msystemd-journald not supported\033[0m")
 			return
 		}
-		if journalName == "kernel" {
+		if journalName == "services" {
+			// systemctl list-units --type=service --all
+			psList = exec.Command("systemctl", "list-units", "--all", "--type=service", "--plain", "--no-legend", "--no-pager", "--output=json")
+			output, err := psList.Output()
+			if err != nil {
+				vError, _ := app.gui.View("services")
+				vError.Clear()
+				app.journalListFrameColor = gocui.ColorRed
+				vError.FrameColor = app.journalListFrameColor
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[31mAccess denied in systemd\033[0m")
+				return
+			}
+			v, _ := app.gui.View("services")
+			app.journalListFrameColor = gocui.ColorDefault
+			if v.FrameColor != gocui.ColorDefault {
+				v.FrameColor = gocui.ColorGreen
+			}
+			v.Highlight = true
+			// Чтение данных в формате JSON
+			var units []map[string]interface{}
+			err = json.Unmarshal(output, &units)
+			if err != nil {
+				log.Fatalf("Failed to decode JSON: %v", err)
+			}
+			serviceMap := make(map[string]bool)
+			// Обработка записей
+			for _, unit := range units {
+				// Извлечение данных из JSON
+				unitName, _ := unit["unit"].(string)
+				active, _ := unit["active"].(string)
+				sub, _ := unit["sub"].(string)
+				// Удаляем из названия service
+				unitName = strings.TrimSuffix(unitName, ".service")
+				// Формирование строки для имени журнала
+				name := unitName + " (" + active + "/" + sub + ")"
+				bootID := unitName
+				// Уникальный ключ для проверки
+				uniqueKey := name + ":" + bootID
+				if !serviceMap[uniqueKey] {
+					serviceMap[uniqueKey] = true
+					// Добавление записи в массив
+					app.journals = append(app.journals, Journal{
+						name:    name,
+						boot_id: bootID,
+					})
+				}
+			}
+		} else if journalName == "kernel" {
 			// Получаем список загрузок системы
 			bootCmd := exec.Command("journalctl", "--list-boots", "-o", "json")
 			bootOutput, err := bootCmd.Output()
@@ -624,17 +676,54 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 		} else {
 			boot_id = app.lastBootId
 		}
-		// Сбрасываем количество строк журнала до 5000
-		if app.logViewCount == "200000" {
-			app.logViewCount = "5000"
-		}
-		cmd := exec.Command("journalctl", "_PID="+boot_id, "--no-pager", "-n", app.logViewCount)
-		output, err = cmd.Output()
-		if err != nil {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
-			return
+		if app.getOS == "linux" {
+			// Сбрасываем количество строк журнала до 5000
+			if app.logViewCount == "200000" {
+				app.logViewCount = "5000"
+			}
+			cmd := exec.Command("journalctl", "_PID="+boot_id, "--no-pager", "-n", app.logViewCount)
+			output, err = cmd.Output()
+			if err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
+				return
+			}
+		} else if app.getOS == "darwin" {
+			cmd := exec.Command("log", "show", "--predicate", "processIdentifier=="+boot_id, "--style", "json", "--last", "1h")
+			output, err = cmd.Output()
+			if err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
+				return
+			}
+			// Структура для парсинга
+			type LogEntry struct {
+				Timestamp    string `json:"timestamp"`
+				MessageType  string `json:"messageType"`
+				Category     string `json:"category"`
+				EventMessage string `json:"eventMessage"`
+			}
+			// Парсим JSON-вывод как массив
+			var entries []LogEntry
+			if err := json.Unmarshal(output, &entries); err != nil {
+				fmt.Printf("\033[31mError parsing JSON: %v\033[0m\n", err)
+				return
+			}
+			// Собираем eventMessage в строку
+			var formattedLogs []string
+			re := regexp.MustCompile(`\..+`)
+			for _, entry := range entries {
+				if entry.EventMessage != "" && entry.Timestamp != "" {
+					// Формируем строку с Timestamp и EventMessage
+					timestamp := re.ReplaceAllString(entry.Timestamp, "")
+					formattedLog := fmt.Sprintf("%s [Type: %s, Category: %s]: %s", timestamp, entry.MessageType, entry.Category, entry.EventMessage)
+					formattedLogs = append(formattedLogs, formattedLog)
+				}
+			}
+			// Собираем строки в одну и преобразуем в []byte
+			output = []byte(strings.Join(formattedLogs, "\n"))
 		}
 	} else if selectUnits == "kernel" {
 		var boot_id string
@@ -657,7 +746,27 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
 			return
 		}
-	} else {
+	} else if selectUnits == "services" {
+		for _, journal := range app.journals {
+			if journal.name == serviceName {
+				serviceName = journal.boot_id
+				break
+			}
+		}
+		if newUpdate {
+			app.lastBootId = serviceName
+		} else {
+			serviceName = app.lastBootId
+		}
+		cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", app.logViewCount)
+		output, err = cmd.Output()
+		if err != nil {
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
+			return
+		}
+	} else if selectUnits == "UNIT" || selectUnits == "USER_UNIT" {
 		cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", app.logViewCount)
 		output, err = cmd.Output()
 		if err != nil {
@@ -1006,10 +1115,6 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 }
 
 // ---------------------------------------- Docker/Podman ----------------------------------------
-
-// Swarm
-// docker service ls --format "{{.ID}} {{.Name}}"
-// docker service logs lmt7evz8xzc0
 
 func (app *App) loadDockerContainer(ContainerizationSystem string) {
 	// Получаем версию для проверки, что система контейнеризации установлена
@@ -1842,21 +1947,25 @@ func (app *App) setUnitListRight(g *gocui.Gui, v *gocui.View) error {
 	// titleNotCounter := re.ReplaceAllString(selectedServices.Title, "")
 	// Меняем журнал и обновляем список
 	switch app.selectUnits {
-	case "process":
+	case "services":
+		// 	app.selectUnits = "process"
+		// 	selectedServices.Title = " < Process list (0) > "
+		// 	app.loadServices(app.selectUnits)
+		// case "process":
 		app.selectUnits = "UNIT"
-		selectedServices.Title = " < System units (0) > "
+		selectedServices.Title = " < System journals (0) > "
 		app.loadServices(app.selectUnits)
 	case "UNIT":
 		app.selectUnits = "USER_UNIT"
-		selectedServices.Title = " < User units (0) > "
+		selectedServices.Title = " < User journals (0) > "
 		app.loadServices(app.selectUnits)
 	case "USER_UNIT":
 		app.selectUnits = "kernel"
 		selectedServices.Title = " < Kernel boot (0) > "
 		app.loadServices(app.selectUnits)
 	case "kernel":
-		app.selectUnits = "process"
-		selectedServices.Title = " < Process list (0) > "
+		app.selectUnits = "services"
+		selectedServices.Title = " < Service list (0) > "
 		app.loadServices(app.selectUnits)
 	}
 	return nil
@@ -1871,21 +1980,25 @@ func (app *App) setUnitListLeft(g *gocui.Gui, v *gocui.View) error {
 	app.startServices = 0
 	app.selectedJournal = 0
 	switch app.selectUnits {
-	case "process":
+	case "services":
 		app.selectUnits = "kernel"
 		selectedServices.Title = " < Kernel boot (0) > "
 		app.loadServices(app.selectUnits)
 	case "kernel":
 		app.selectUnits = "USER_UNIT"
-		selectedServices.Title = " < User units (0) > "
+		selectedServices.Title = " < User journals (0) > "
 		app.loadServices(app.selectUnits)
 	case "USER_UNIT":
 		app.selectUnits = "UNIT"
-		selectedServices.Title = " < System units (0) > "
+		selectedServices.Title = " < System journals (0) > "
 		app.loadServices(app.selectUnits)
 	case "UNIT":
-		app.selectUnits = "process"
-		selectedServices.Title = " < Process list (0) > "
+		// 	app.selectUnits = "process"
+		// 	selectedServices.Title = " < Process list (0) > "
+		// 	app.loadServices(app.selectUnits)
+		// case "process":
+		app.selectUnits = "services"
+		selectedServices.Title = " < Service list (0) > "
 		app.loadServices(app.selectUnits)
 	}
 	return nil
