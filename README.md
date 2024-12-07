@@ -23,9 +23,9 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 - List of all units (services, sockets, etc.) via `systemctl` with current running status.
 - View all system and user journals via `journalctl` (tool for reading logs from [systemd-journald](https://github.com/systemd/systemd/tree/main/src/journal)).
 - List of all system boots for kernel log output.
-- File system logs from `/var/log` (for example, for Apache or Nginx), as well as `syslog`, `dmesg` (kernel) and user authentication (`wtmp` and `btmp`) sorted by modification date.
-- View all log files in the home directories of users and root.
-- Reading archived logs in `gz` format.
+- File system logs from `/var/log` (example, for Apache or Nginx), as well as `syslog`, `dmesg` (kernel) and user authentication (`wtmp` and `btmp`) sorted by modification date.
+- List of all log files of descriptors used by processes, as well as all log files in the home directories of users and the root user.
+- Reading archived logs (`gz` format).
 - Podman, Docker containers and Swarm services logs.
 - Displays the currently selected log (when loading a log, a delimiter with loading time is displayed) and filters output in real-time.
 
@@ -41,7 +41,7 @@ Regex mode uses the built-in `regexp` library, which is resource-intensive when 
 
 This is an up-to-date roadmap in addition to the functionality described above.
 
-- [ ] MacOS support for `launchd` (issue [#1](https://github.com/Lifailon/lazyjournal/issues/1)).
+- [ ] MacOS support for `launchd`.
 - [ ] Windows support (`Windows Events` via `PowerShell` and log files from `Program Files` and others directories).
 - [ ] Syntax coloring for logging output (like [tailspin](https://github.com/bensadeh/tailspin)).
 - [ ] Interface for scrolling and mouse support.
@@ -91,7 +91,7 @@ go mod tidy
 go run main.go
 ```
 
-Building the executable files for different platforms:
+Build executable files for different platforms and all systems:
 
 ```shell
 bash build.sh
@@ -115,6 +115,13 @@ bash build.sh
 - [Dozzle](https://github.com/amir20/dozzle) - is a small lightweight application with a web based interface to monitor **Docker logs**.
 
 If you like using TUI tools, try [multranslate](https://github.com/Lifailon/multranslate) for translating text in multiple translators simultaneously, with support for translation history and automatic language detection.
+
+## License
+
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+
+Copyright (C) 2024 Lifailon (Alex Kup)
+
 
 <!--
 ```j

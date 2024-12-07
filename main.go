@@ -204,10 +204,10 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = " < Service list (0) > " // заголовок окна
-		v.Highlight = true                 // выделение активного элемента в списке
-		v.Wrap = false                     // отключаем перенос строк
-		v.Autoscroll = true                // включаем автопрокрутку
+		v.Title = " < Unit list (0) > " // заголовок окна
+		v.Highlight = true              // выделение активного элемента в списке
+		v.Wrap = false                  // отключаем перенос строк
+		v.Autoscroll = true             // включаем автопрокрутку
 		// Цветовая схема из форка awesome-gocui/gocui
 		v.SelBgColor = gocui.ColorGreen // Цвет фона при выборе в списке
 		v.SelFgColor = gocui.ColorBlack // Цвет текста
@@ -278,11 +278,8 @@ func (app *App) layout(g *gocui.Gui) error {
 // ---------------------------------------- journalctl ----------------------------------------
 
 // launchctl list
-
-// Descriptor logs
-// sudo lsof -F | grep .log$
-
 // sudo cat /var/lib/docker/containers/ba4ade14ab33a45ccc3280d5feebfe321460bd9914f40e70c4569acf84c005c9/ba4ade14ab33a45ccc3280d5feebfe321460bd9914f40e70c4569acf84c005c9-json.log | jq
+// journalctl --file=/var/log/journal/2f11f3ba72234b0ea4417809ea60919a/user-1000.journal
 
 // Функция для загрузки списка журналов служб или загрузок системы из journalctl
 func (app *App) loadServices(journalName string) {
@@ -346,8 +343,8 @@ func (app *App) loadServices(journalName string) {
 			return
 		}
 		if journalName == "services" {
-			// systemctl list-units --type=service --all
-			psList = exec.Command("systemctl", "list-units", "--all", "--type=service", "--plain", "--no-legend", "--no-pager", "--output=json")
+			// Получаем список всех юнитов в системе через systemctl
+			psList = exec.Command("systemctl", "list-units", "--all", "--plain", "--no-legend", "--no-pager", "--output=json") // "--type=service"
 			output, err := psList.Output()
 			if err != nil {
 				vError, _ := app.gui.View("services")
@@ -373,13 +370,20 @@ func (app *App) loadServices(journalName string) {
 			serviceMap := make(map[string]bool)
 			// Обработка записей
 			for _, unit := range units {
-				// Извлечение данных из JSON
+				// Извлечение данных в формате JSON и проверка статуса для покраски
 				unitName, _ := unit["unit"].(string)
 				active, _ := unit["active"].(string)
+				if active == "active" {
+					active = "\033[32m" + active + "\033[0m"
+				} else {
+					active = "\033[31m" + active + "\033[0m"
+				}
 				sub, _ := unit["sub"].(string)
-				// Удаляем из названия service
-				unitName = strings.TrimSuffix(unitName, ".service")
-				// Формирование строки для имени журнала
+				if sub == "exited" || sub == "dead" {
+					sub = "\033[31m" + sub + "\033[0m"
+				} else {
+					sub = "\033[32m" + sub + "\033[0m"
+				}
 				name := unitName + " (" + active + "/" + sub + ")"
 				bootID := unitName
 				// Уникальный ключ для проверки
@@ -733,6 +737,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 				break
 			}
 		}
+		// Сохраняем название для обновления вывода журнала при фильтрации списков
 		if newUpdate {
 			app.lastBootId = boot_id
 		} else {
@@ -746,27 +751,12 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
 			return
 		}
-	} else if selectUnits == "services" {
-		for _, journal := range app.journals {
-			if journal.name == serviceName {
-				serviceName = journal.boot_id
-				break
-			}
+	} else {
+		if selectUnits == "services" {
+			// Удаляем статусы с покраской из навзания
+			var ansiEscape = regexp.MustCompile(`\s\(.+\)`)
+			serviceName = ansiEscape.ReplaceAllString(serviceName, "")
 		}
-		if newUpdate {
-			app.lastBootId = serviceName
-		} else {
-			serviceName = app.lastBootId
-		}
-		cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", app.logViewCount)
-		output, err = cmd.Output()
-		if err != nil {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
-			return
-		}
-	} else if selectUnits == "UNIT" || selectUnits == "USER_UNIT" {
 		cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", app.logViewCount)
 		output, err = cmd.Output()
 		if err != nil {
@@ -789,7 +779,41 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 
 func (app *App) loadFiles(logPath string) {
 	var output []byte
-	if logPath == "/var/log/" {
+	if logPath == "descriptor" {
+		cmd := exec.Command("lsof", "-F")
+		output, _ = cmd.Output()
+		// Разбиваем вывод на строки
+		files := strings.Split(strings.TrimSpace(string(output)), "\n")
+		// Если список файлов пустой, возвращаем ошибку Permission denied
+		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+			vError, _ := app.gui.View("varLogs")
+			vError.Clear()
+			// Меняем цвет окна на красный
+			app.fileSystemFrameColor = gocui.ColorRed
+			vError.FrameColor = app.fileSystemFrameColor
+			// Отключаем курсор и выводим сообщение об ошибке
+			vError.Highlight = false
+			fmt.Fprintln(vError, "\033[31mPermission denied\033[0m")
+			return
+		} else {
+			vError, _ := app.gui.View("varLogs")
+			app.fileSystemFrameColor = gocui.ColorDefault
+			if vError.FrameColor != gocui.ColorDefault {
+				vError.FrameColor = gocui.ColorGreen
+			}
+			vError.Highlight = true
+		}
+		// Очищаем массив перед добавлением отфильтрованных файлов
+		output = []byte{}
+		// Фильтруем строки, которые заканчиваются на ".log" и удаляем префикс (имя файла)
+		for _, file := range files {
+			if strings.HasSuffix(file, ".log") {
+				file = strings.TrimPrefix(file, "n")
+				output = append(output, []byte(file+"\n")...)
+			}
+		}
+		// 1086
+	} else if logPath == "/var/log/" {
 		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log", "-o", "-name", "*.gz")
 		output, _ = cmd.Output()
 		// Преобразуем вывод команды в строку и делим на массив строк
@@ -867,11 +891,16 @@ func (app *App) loadFiles(logPath string) {
 		// Получаем строку полного пути
 		logFullPath := scanner.Text()
 		// Удаляем префикс пути и расширение файла в конце
-		logName := strings.TrimPrefix(logFullPath, logPath)
+		logName := logFullPath
+		if logPath != "descriptor" {
+			logName = strings.TrimPrefix(logFullPath, logPath)
+		}
+		// logName := strings.TrimPrefix(logFullPath, logPath)
 		logName = strings.TrimSuffix(logName, ".log")
 		logName = strings.TrimSuffix(logName, ".gz")
 		logName = strings.ReplaceAll(logName, "/", " ")
-		logName = strings.ReplaceAll(logName, ".log.", " ")
+		logName = strings.ReplaceAll(logName, ".log.", "")
+		logName = strings.TrimPrefix(logName, " ")
 		if logPath == "/home/" {
 			// Разбиваем строку на слова
 			words := strings.Fields(logName)
@@ -884,16 +913,19 @@ func (app *App) loadFiles(logPath string) {
 		// cmd := exec.Command("bash", "-c", "stat --format='%y' /var/log/apache2/access.log | awk '{print $1}' | awk -F- '{print $3\".\"$2\".\"$1}'")
 		fileInfo, err := os.Stat(logFullPath)
 		if err != nil {
-			// Пропускаем файл, если к нему нет доступа (актуально для статических файлов из logPaths)
+			// Пропускаем файл, если к нему нет доступа (актуально для статических файлов из logPath)
 			continue
 		}
 		// Получаем дату изменения
 		modTime := fileInfo.ModTime()
 		// Форматирование даты в формат DD.MM.YYYY
 		formattedDate := modTime.Format("02.01.2006")
-		// Проверяем, если такого имени ещё нет
-		if logName != "" && !serviceMap[logName] {
-			serviceMap[logName] = true
+		// Проверяем, что такого имени еще нет в списке
+		// if logName != "" && !serviceMap[logName] {
+		// serviceMap[logName] = true
+		// Проверяем, что полного пути до файла еще нет в списке
+		if logName != "" && !serviceMap[logFullPath] {
+			serviceMap[logFullPath] = true
 			// Добавляем в список
 			app.logfiles = append(app.logfiles, Logfile{
 				name: "[" + formattedDate + "] " + logName,
@@ -1766,10 +1798,10 @@ func (app *App) setupKeybindings() error {
 		return err
 	}
 	// Переключение выбора журналов для File System
-	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowRight, gocui.ModNone, app.setLogFilesList); err != nil {
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowRight, gocui.ModNone, app.setLogFilesListRight); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowLeft, gocui.ModNone, app.setLogFilesList); err != nil {
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowLeft, gocui.ModNone, app.setLogFilesListLeft); err != nil {
 		return err
 	}
 	// Переключение выбора журналов для Containerization System
@@ -1942,9 +1974,6 @@ func (app *App) setUnitListRight(g *gocui.Gui, v *gocui.View) error {
 	app.journals = app.journals[:0]
 	app.startServices = 0
 	app.selectedJournal = 0
-	// Удалить счетсчик из названия
-	// re := regexp.MustCompile(`\s*\(.+\)`)
-	// titleNotCounter := re.ReplaceAllString(selectedServices.Title, "")
 	// Меняем журнал и обновляем список
 	switch app.selectUnits {
 	case "services":
@@ -1965,7 +1994,7 @@ func (app *App) setUnitListRight(g *gocui.Gui, v *gocui.View) error {
 		app.loadServices(app.selectUnits)
 	case "kernel":
 		app.selectUnits = "services"
-		selectedServices.Title = " < Service list (0) > "
+		selectedServices.Title = " < Unit list (0) > "
 		app.loadServices(app.selectUnits)
 	}
 	return nil
@@ -1998,14 +2027,15 @@ func (app *App) setUnitListLeft(g *gocui.Gui, v *gocui.View) error {
 		// 	app.loadServices(app.selectUnits)
 		// case "process":
 		app.selectUnits = "services"
-		selectedServices.Title = " < Service list (0) > "
+		selectedServices.Title = " < Unit list (0) > "
 		app.loadServices(app.selectUnits)
 	}
 	return nil
 }
 
-// Функция для переключения выбора журналов из файловой системы
-func (app *App) setLogFilesList(g *gocui.Gui, v *gocui.View) error {
+// Функция для переключения выбора журналов из файловой системы и файловый дескрипторы
+
+func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 	selectedVarLog, err := g.View("varLogs")
 	if err != nil {
 		log.Panicln(err)
@@ -2015,6 +2045,35 @@ func (app *App) setLogFilesList(g *gocui.Gui, v *gocui.View) error {
 	app.selectedFile = 0
 	switch app.selectPath {
 	case "/var/log/":
+		app.selectPath = "/home/"
+		selectedVarLog.Title = " < Home logs (0) > "
+		app.loadFiles(app.selectPath)
+	case "/home/":
+		app.selectPath = "descriptor"
+		selectedVarLog.Title = " < Descriptor logs (0) > "
+		app.loadFiles(app.selectPath)
+	case "descriptor":
+		app.selectPath = "/var/log/"
+		selectedVarLog.Title = " < Var logs (0) > "
+		app.loadFiles(app.selectPath)
+	}
+	return nil
+}
+
+func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
+	selectedVarLog, err := g.View("varLogs")
+	if err != nil {
+		log.Panicln(err)
+	}
+	app.logfiles = app.logfiles[:0]
+	app.startFiles = 0
+	app.selectedFile = 0
+	switch app.selectPath {
+	case "/var/log/":
+		app.selectPath = "descriptor"
+		selectedVarLog.Title = " < Descriptor logs (0) > "
+		app.loadFiles(app.selectPath)
+	case "descriptor":
 		app.selectPath = "/home/"
 		selectedVarLog.Title = " < Home logs (0) > "
 		app.loadFiles(app.selectPath)
