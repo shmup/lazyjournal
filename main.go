@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -278,7 +279,6 @@ func (app *App) layout(g *gocui.Gui) error {
 // ---------------------------------------- journalctl ----------------------------------------
 
 // launchctl list
-// sudo cat /var/lib/docker/containers/ba4ade14ab33a45ccc3280d5feebfe321460bd9914f40e70c4569acf84c005c9/ba4ade14ab33a45ccc3280d5feebfe321460bd9914f40e70c4569acf84c005c9-json.log | jq
 // journalctl --file=/var/log/journal/2f11f3ba72234b0ea4417809ea60919a/user-1000.journal
 
 // Функция для загрузки списка журналов служб или загрузок системы из journalctl
@@ -1182,7 +1182,7 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		fmt.Fprintln(vError, "\033[31m"+ContainerizationSystem+" not installed (environment not found)\033[0m")
 		return
 	}
-	cmd = exec.Command(ContainerizationSystem, "ps", "--format", "{{.ID}} {{.Names}}")
+	cmd = exec.Command(ContainerizationSystem, "ps", "-a", "--format", "{{.ID}} {{.Names}} {{.State}}")
 	output, err := cmd.Output()
 	if err != nil {
 		vError, _ := app.gui.View("docker")
@@ -1223,8 +1223,15 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		parts := strings.Fields(idName)
 		if idName != "" && !serviceMap[idName] {
 			serviceMap[idName] = true
+			containerStatus := parts[2]
+			if containerStatus == "running" {
+				containerStatus = "\033[32m" + containerStatus + "\033[0m"
+			} else {
+				containerStatus = "\033[31m" + containerStatus + "\033[0m"
+			}
+			containerName := parts[1] + " (" + containerStatus + ")"
 			app.dockerContainers = append(app.dockerContainers, DockerContainers{
-				name: parts[1],
+				name: containerName,
 				id:   parts[0],
 			})
 		}
@@ -1334,33 +1341,90 @@ func (app *App) selectDocker(g *gocui.Gui, v *gocui.View) error {
 
 func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gui) {
 	ContainerizationSystem := app.selectContainerizationSystem
-	// Сохраняем значение для автообновления при смене окна
+	// Сохраняем систему контейнеризации для автообновления при смене окна
 	if newUpdate {
 		app.lastContainerizationSystem = app.selectContainerizationSystem
 	} else {
 		ContainerizationSystem = app.lastContainerizationSystem
 	}
+	var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	var containerId string
 	for _, dockerContainer := range app.dockerContainers {
-		if dockerContainer.name == containerName {
+		dockerContainerName := ansiEscape.ReplaceAllString(dockerContainer.name, "")
+		if dockerContainerName == containerName {
 			containerId = dockerContainer.id
 		}
 	}
-	// Сохраняем значение для автообновления при смене окна
+	// Сохраняем id контейнера для автообновления при смене окна
 	if newUpdate {
 		app.lastContainerId = containerId
 	} else {
 		containerId = app.lastContainerId
 	}
-	cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
-	output, err := cmd.Output()
-	if err != nil {
-		v, _ := app.gui.View("logs")
-		v.Clear()
-		fmt.Fprintln(v, "\033[31mError getting logs from", containerName, "(", containerId, ")", "container.", err, "\033[0m")
-		return
+	// Читаем локальный JSON лог для Docker
+	if ContainerizationSystem == "docker" {
+		basePath := "/var/lib/docker/containers"
+		var logFilePath string
+		// Ищем файл лога в локальной системе по id
+		_ = filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+			if err == nil && strings.Contains(info.Name(), containerId) && strings.HasSuffix(info.Name(), "-json.log") {
+				logFilePath = path
+				// Останавливаем поиск
+				return filepath.SkipDir
+			}
+			return nil
+		})
+		// Открываем файл
+		file, err := os.Open(logFilePath)
+		if err != nil {
+			// Access denied
+		}
+		defer file.Close()
+		// Читаем файл построчно
+		scanner := bufio.NewScanner(file)
+		var logViewCountCurrent int
+		logViewCountMax, _ := strconv.Atoi(app.logViewCount)
+		var lines []string
+		for scanner.Scan() {
+			line := scanner.Text()
+			// JSON-структура для парсинга
+			var jsonData map[string]interface{}
+			// Парсим текущую строку
+			json.Unmarshal([]byte(line), &jsonData)
+			// Извлекаем данные
+			stream, _ := jsonData["stream"].(string)
+			timeStr, _ := jsonData["time"].(string)
+			// Парсим строку времени в объект time.Time
+			parsedTime, _ := time.Parse(time.RFC3339Nano, timeStr)
+			// Форматируем дату в формат: DD:MM:YYYY HH:MM:SS
+			timeStr = parsedTime.Format("02.01.2006 15:04:05")
+			logMessage, _ := jsonData["log"].(string)
+			// Удаляем встроенный перенос строки
+			logMessage = strings.TrimSuffix(logMessage, "\n")
+			// Заполняем в формате: stream time: log
+			formattedLine := fmt.Sprintf("%s %s: %s", stream, timeStr, logMessage)
+			lines = append(lines, formattedLine)
+			logViewCountCurrent++
+			// Если размер лога привысило максимальное количество, завершаем цикл
+			if logViewCountCurrent > logViewCountMax {
+				break
+			}
+		}
+		// Вывод в массив строк
+		output := strings.Join(lines, "\n")
+		app.currentLogLines = strings.Split(string(output), "\n")
+	} else {
+		// Читаем лог через podman cli
+		cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
+		output, err := cmd.Output()
+		if err != nil {
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError getting logs from", containerName, "(", containerId, ")", "container.", err, "\033[0m")
+			return
+		}
+		app.currentLogLines = strings.Split(string(output), "\n")
 	}
-	app.currentLogLines = strings.Split(string(output), "\n")
 	app.updateDelimiter(newUpdate, g)
 	app.applyFilter(false)
 }
