@@ -780,7 +780,11 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 func (app *App) loadFiles(logPath string) {
 	var output []byte
 	if logPath == "descriptor" {
-		cmd := exec.Command("lsof", "-F")
+		// n - имя файла (путь)
+		// c - имя команды (процесса)
+		cmd := exec.Command("lsof", "-Fn")
+		// Подавить вывод ошибок при отсутствиее прав доступа (opendir: Permission denied)
+		cmd.Stderr = nil
 		output, _ = cmd.Output()
 		// Разбиваем вывод на строки
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -907,7 +911,7 @@ func (app *App) loadFiles(logPath string) {
 			// Берем первое и последнее слово
 			firstWord := words[0]
 			lastWord := words[len(words)-1]
-			logName = firstWord + ": " + lastWord
+			logName = "\x1b[0;33m" + firstWord + "\033[0m" + ": " + lastWord
 		}
 		// Получаем информацию о файле
 		// cmd := exec.Command("bash", "-c", "stat --format='%y' /var/log/apache2/access.log | awk '{print $1}' | awk -F- '{print $3\".\"$2\".\"$1}'")
@@ -916,16 +920,35 @@ func (app *App) loadFiles(logPath string) {
 			// Пропускаем файл, если к нему нет доступа (актуально для статических файлов из logPath)
 			continue
 		}
+		// Проверяем, что файл не пустой
+		if fileInfo.Size() == 0 {
+			// Пропускаем пустой файл
+			continue
+		}
 		// Получаем дату изменения
 		modTime := fileInfo.ModTime()
 		// Форматирование даты в формат DD.MM.YYYY
 		formattedDate := modTime.Format("02.01.2006")
-		// Проверяем, что такого имени еще нет в списке
-		// if logName != "" && !serviceMap[logName] {
-		// serviceMap[logName] = true
 		// Проверяем, что полного пути до файла еще нет в списке
 		if logName != "" && !serviceMap[logFullPath] {
+			// Добавляем путь в массив для проверки уникальных путей
 			serviceMap[logFullPath] = true
+			// Получаем имя процесса для файла дескриптора
+			if logPath == "descriptor" {
+				cmd := exec.Command("lsof", "-Fc", logFullPath)
+				cmd.Stderr = nil
+				outputLsof, _ := cmd.Output()
+				processLines := strings.Split(strings.TrimSpace(string(outputLsof)), "\n")
+				// Ищем строку, которая содержит имя процесса (только первый процесс)
+				for _, line := range processLines {
+					if strings.HasPrefix(line, "c") {
+						// Удаляем префикс
+						processName := line[1:]
+						logName = "\x1b[0;33m" + processName + "\033[0m" + ": " + logName
+						break
+					}
+				}
+			}
 			// Добавляем в список
 			app.logfiles = append(app.logfiles, Logfile{
 				name: "[" + formattedDate + "] " + logName,
@@ -1050,13 +1073,14 @@ func (app *App) selectFile(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
-	// Парсим имя обратно
-	// logName = strings.ReplaceAll(logName, " ", "/")
-	// logFullPath := app.selectPath + logName + ".log"
+	// В параметре logName имя файла при выборе возвращяется без символов покраски
 	// Получаем путь из массива по имени
 	var logFullPath string
+	var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	for _, logfile := range app.logfiles {
-		if logfile.name == logName {
+		// Удаляем покраску из имени файла в сохраненном массиве
+		logfileName := ansiEscape.ReplaceAllString(logfile.name, "")
+		if logfileName == logName {
 			logFullPath = logfile.path
 		}
 	}
@@ -1066,9 +1090,6 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		logFullPath = app.lastLogPath
 	}
 	// Читаем архивные логи (decompress + stdout)
-	// gzip -dc access.log.10.gz
-	// zcat access.log.10.gz
-	// gunzip -c access.log.10.gz
 	if strings.HasSuffix(logFullPath, ".gz") {
 		cmdGzip := exec.Command("gzip", "-dc", logFullPath)
 		cmdTail := exec.Command("tail", "-n", app.logViewCount)
