@@ -1374,45 +1374,47 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 			}
 			return nil
 		})
-		// Открываем файл
-		file, err := os.Open(logFilePath)
+		// Читаем файл с конца с помощью tail
+		cmd := exec.Command("tail", "-n", app.logViewCount, logFilePath)
+		output, err := cmd.Output()
 		if err != nil {
-			// Access denied
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError reading log:", err, "\033[0m")
+			return
 		}
-		defer file.Close()
-		// Читаем файл построчно
-		scanner := bufio.NewScanner(file)
-		var logViewCountCurrent int
-		logViewCountMax, _ := strconv.Atoi(app.logViewCount)
-		var lines []string
-		for scanner.Scan() {
-			line := scanner.Text()
+		// Разбиваем строки на массив
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		var formattedLines []string
+		// Обрабатываем вывод в формате JSON построчно
+		for i, line := range lines {
 			// JSON-структура для парсинга
 			var jsonData map[string]interface{}
-			// Парсим текущую строку
-			json.Unmarshal([]byte(line), &jsonData)
-			// Извлекаем данные
+			err := json.Unmarshal([]byte(line), &jsonData)
+			if err != nil {
+				continue
+			}
+			// Извлекаем JSON данные
 			stream, _ := jsonData["stream"].(string)
 			timeStr, _ := jsonData["time"].(string)
-			// Парсим строку времени в объект time.Time
-			parsedTime, _ := time.Parse(time.RFC3339Nano, timeStr)
-			// Форматируем дату в формат: DD:MM:YYYY HH:MM:SS
-			timeStr = parsedTime.Format("02.01.2006 15:04:05")
 			logMessage, _ := jsonData["log"].(string)
-			// Удаляем встроенный перенос строки
+			// Удаляем встроенный экранированный символ переноса строки
 			logMessage = strings.TrimSuffix(logMessage, "\n")
-			// Заполняем в формате: stream time: log
+			// Парсим строку времени в объект time.Time
+			parsedTime, err := time.Parse(time.RFC3339Nano, timeStr)
+			if err == nil {
+				// Форматируем дату в формат: DD:MM:YYYY HH:MM:SS
+				timeStr = parsedTime.Format("02.01.2006 15:04:05")
+			}
+			// Заполняем строку в формате: stream time: log
 			formattedLine := fmt.Sprintf("%s %s: %s", stream, timeStr, logMessage)
-			lines = append(lines, formattedLine)
-			logViewCountCurrent++
-			// Если размер лога привысило максимальное количество, завершаем цикл
-			if logViewCountCurrent > logViewCountMax {
-				break
+			formattedLines = append(formattedLines, formattedLine)
+			// Если это последняя строка в выводе, добавляем перенос строки
+			if i == len(lines)-1 {
+				formattedLines = append(formattedLines, "\n")
 			}
 		}
-		// Вывод в массив строк
-		output := strings.Join(lines, "\n")
-		app.currentLogLines = strings.Split(string(output), "\n")
+		app.currentLogLines = formattedLines
 	} else {
 		// Читаем лог через podman cli
 		cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
@@ -1420,7 +1422,7 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 		if err != nil {
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting logs from", containerName, "(", containerId, ")", "container.", err, "\033[0m")
+			fmt.Fprintln(v, "\033[31mError getting logs from", containerName, "(id:", containerId, ")", "container.", err, "\033[0m")
 			return
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")

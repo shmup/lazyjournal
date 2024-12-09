@@ -116,6 +116,10 @@ bash build.sh
 
 If you like using TUI tools, try [multranslate](https://github.com/Lifailon/multranslate) for translating text in multiple translators simultaneously, with support for translation history and automatic language detection.
 
+## Contributing
+
+Any contribution is welcome. If you want to implement a feature or fix something, please [open an issue](https://github.com/Lifailon/lazyjournal/issues) first.
+
 ## License
 
 This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
