@@ -7,7 +7,7 @@ rm -rf bin/*
 architectures=(amd64 arm64)
 for arch in "${architectures[@]}"; do
     GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
-    GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-macos-$arch
+    GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-darwin-$arch
     GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
 done
 
