@@ -23,8 +23,8 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 - List of all units (services, sockets, etc.) via `systemctl` with current running status.
 - View all system and user journals via `journalctl` (tool for reading logs from [systemd-journald](https://github.com/systemd/systemd/tree/main/src/journal)).
 - List of all system boots for kernel log output.
-- File system logs from `/var/log` (example, for Apache or Nginx), as well as `syslog`, `dmesg` (kernel) and user authentication sorted by modification date.
-- List of all log files of descriptors used by processes, as well as all log files in the home directories of users and the root user.
+- File system logs (example, for Apache or Nginx), as well as `syslog` or `messages`, `dmesg` (kernel), etc.
+- List of all log files of descriptors used by processes, as well as all log files in the home directories of users.
 - Reading archived logs (`gz` format).
 - Podman pods, Docker containers and Swarm services logs for all systems.
 - Displays the currently selected log and filters output in real-time.
@@ -41,19 +41,19 @@ Regex mode uses the built-in `regexp` library, which is resource-intensive when 
 
 This is an up-to-date roadmap in addition to the functionality described above.
 
-- [X] MacOS support (partially, only for file system).
-- [ ] Windows support (`Windows Events` via `PowerShell` and log files from `Program Files` and others directories).
+- [X] File system support for MacOS and the RHEL based systems.
 - [ ] Syntax coloring for logging output (like [tailspin](https://github.com/bensadeh/tailspin)).
 - [ ] Interface for scrolling and mouse support.
+- [ ] Windows support (`Windows Events` via `PowerShell` and log files from `Program Files` and others directories).
 - [ ] Support remote machines via `ssh` protocol.
 
 ## Install
 
 Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
-> Development is done on the Ubuntu Server system, also tested in WSL environment on Debian system (`x64` platform) and Raspberry Pi (`aarch64` platform).
+> Development is carried out on the Ubuntu Server system, and is also tested on the Raspberry Pi (`aarch64` platform), the WSL environment on the Oracle Linux system and the Darwin system (`x64` platform).
 
-Run the command in your console to quickly install or update the stable version:
+Run the command in the console to quickly install or update the stable version on Linux or MacOS:
 
 ```shell
 curl https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | bash

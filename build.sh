@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version=${1:-"0.4.0"}
+version=${1:-"0.5.0"}
 mkdir -p bin
 rm -rf bin/*
 
@@ -10,10 +10,5 @@ for arch in "${architectures[@]}"; do
     GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-macos-$arch
     GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
 done
-
-if [ -n "$2" ]; then
-    snapcraft --destructive-mode
-    mv "$(ls *.snap)" "bin/$(ls *.snap | sed "s/_/-/g")"
-fi
 
 ls -lh bin
