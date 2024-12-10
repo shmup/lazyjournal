@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/awesome-gocui/gocui"
+	// regexp "github.com/wasilibs/go-re2"
 )
 
 // Структура хранения информации о журналах
@@ -1596,83 +1597,90 @@ func (app *App) applyFilter(color bool) {
 	if color {
 		v.FrameColor = gocui.ColorGreen
 	}
-	app.filteredLogLines = make([]string, 0)
-	// Опускаем регистр ввода текста для фильтра
-	filter := strings.ToLower(app.filterText)
-	// Проверка регулярного выражения
-	var regex *regexp.Regexp
-	if app.selectFilterMode == "regex" {
-		// Добавляем флаг для нечувствительности к регистру по умолчанию
-		filter = "(?i)" + filter
-		// Компилируем регулярное выражение
-		regex, err = regexp.Compile(filter)
-		if err != nil {
-			// В случае синтаксической ошибки регулярного выражения, красим окно красным цветом и завершаем цикл
-			v.FrameColor = gocui.ColorRed
-			return
-		}
-	}
-	for _, line := range app.currentLogLines {
-		// Fuzzy (неточный поиск без учета регистра)
-		if app.selectFilterMode == "fuzzy" {
-			// Разбиваем текст фильтра на массив из строк
-			filterWords := strings.Fields(filter)
-			// Опускаем регистр текущей строки цикла
-			lineLower := strings.ToLower(line)
-			var match bool = true
-			// Проверяем, если строка не содержит хотя бы одно слово из фильтра, то пропускаем строку
-			for _, word := range filterWords {
-				if !strings.Contains(lineLower, word) {
-					match = false
-					break
-				}
+	filter := app.filterText
+	// Если текст фильтра пустой, возвращяем обычный вывод после загрузки журнала
+	if len(filter) == 0 {
+		app.filteredLogLines = app.currentLogLines
+	} else {
+		app.filteredLogLines = make([]string, 0)
+		// Опускаем регистр ввода текста для фильтра
+		filter = strings.ToLower(filter)
+		// Проверка регулярного выражения
+		var regex *regexp.Regexp
+		if app.selectFilterMode == "regex" {
+			// Добавляем флаг для нечувствительности к регистру по умолчанию
+			filter = "(?i)" + filter
+			// Компилируем регулярное выражение
+			regex, err = regexp.Compile(filter)
+			if err != nil {
+				// В случае синтаксической ошибки регулярного выражения, красим окно красным цветом и завершаем цикл
+				v.FrameColor = gocui.ColorRed
+				return
 			}
-			// Если строка подходит под фильтр, возвращаем её с покраской
-			if match {
-				// Временные символы для обозначения начала и конца покраски найденных символов
-				startColor := "►"
-				endColor := "◄"
-				originalLine := line
-				// Проходимся по всем словосочетаниям фильтра (массив через пробел) для позиционирования покраски
+		}
+		// Проходимся по каждой строке
+		for _, line := range app.currentLogLines {
+			// Fuzzy (неточный поиск без учета регистра)
+			if app.selectFilterMode == "fuzzy" {
+				// Разбиваем текст фильтра на массив из строк
+				filterWords := strings.Fields(filter)
+				// Опускаем регистр текущей строки цикла
+				lineLower := strings.ToLower(line)
+				var match bool = true
+				// Проверяем, если строка не содержит хотя бы одно слово из фильтра, то пропускаем строку
 				for _, word := range filterWords {
-					wordLower := strings.ToLower(word)
-					start := 0
-					// Ищем все вхождения слова в строке с учётом регистра
-					for {
-						// Находим индекс вхождения с учетом регистра
-						idx := strings.Index(strings.ToLower(originalLine[start:]), wordLower)
-						if idx == -1 {
-							break // Если больше нет вхождений, выходим
-						}
-						start += idx // корректируем индекс с учетом текущей позиции
-						// Вставляем временные символы для покраски
-						originalLine = originalLine[:start] + startColor + originalLine[start:start+len(word)] + endColor + originalLine[start+len(word):]
-						// Сдвигаем индекс для поиска в оставшейся части строки
-						start += len(startColor) + len(word) + len(endColor)
+					if !strings.Contains(lineLower, word) {
+						match = false
+						break
 					}
 				}
-				// Заменяем временные символы на ANSI escape-последовательности
-				originalLine = strings.ReplaceAll(originalLine, startColor, "\x1b[0;33m")
-				originalLine = strings.ReplaceAll(originalLine, endColor, "\033[0m")
-				app.filteredLogLines = append(app.filteredLogLines, originalLine)
-			}
-			// Regex (с использованием регулярных выражений Go и без учета регистра по умолчанию)
-		} else if app.selectFilterMode == "regex" {
-			// Проверяем, что строка подходит под регулярное выражение
-			if regex.MatchString(line) {
-				originalLine := line
-				// Находим все найденные совпадени
-				matches := regex.FindAllString(originalLine, -1)
-				// Красим только первое найденное совпадение
-				originalLine = strings.ReplaceAll(originalLine, matches[0], "\x1b[0;33m"+matches[0]+"\033[0m")
-				app.filteredLogLines = append(app.filteredLogLines, originalLine)
-			}
-			// Default (точный поиск с учетом регистра)
-		} else {
-			filter = app.filterText
-			if filter == "" || strings.Contains(line, filter) {
-				lineColor := strings.ReplaceAll(line, filter, "\x1b[0;33m"+filter+"\033[0m")
-				app.filteredLogLines = append(app.filteredLogLines, lineColor)
+				// Если строка подходит под фильтр, возвращаем её с покраской
+				if match {
+					// Временные символы для обозначения начала и конца покраски найденных символов
+					startColor := "►"
+					endColor := "◄"
+					originalLine := line
+					// Проходимся по всем словосочетаниям фильтра (массив через пробел) для позиционирования покраски
+					for _, word := range filterWords {
+						wordLower := strings.ToLower(word)
+						start := 0
+						// Ищем все вхождения слова в строке с учётом регистра
+						for {
+							// Находим индекс вхождения с учетом регистра
+							idx := strings.Index(strings.ToLower(originalLine[start:]), wordLower)
+							if idx == -1 {
+								break // Если больше нет вхождений, выходим
+							}
+							start += idx // корректируем индекс с учетом текущей позиции
+							// Вставляем временные символы для покраски
+							originalLine = originalLine[:start] + startColor + originalLine[start:start+len(word)] + endColor + originalLine[start+len(word):]
+							// Сдвигаем индекс для поиска в оставшейся части строки
+							start += len(startColor) + len(word) + len(endColor)
+						}
+					}
+					// Заменяем временные символы на ANSI escape-последовательности
+					originalLine = strings.ReplaceAll(originalLine, startColor, "\x1b[0;33m")
+					originalLine = strings.ReplaceAll(originalLine, endColor, "\033[0m")
+					app.filteredLogLines = append(app.filteredLogLines, originalLine)
+				}
+				// Regex (с использованием регулярных выражений Go и без учета регистра по умолчанию)
+			} else if app.selectFilterMode == "regex" {
+				// Проверяем, что строка подходит под регулярное выражение
+				if regex.MatchString(line) {
+					originalLine := line
+					// Находим все найденные совпадени
+					matches := regex.FindAllString(originalLine, -1)
+					// Красим только первое найденное совпадение
+					originalLine = strings.ReplaceAll(originalLine, matches[0], "\x1b[0;33m"+matches[0]+"\033[0m")
+					app.filteredLogLines = append(app.filteredLogLines, originalLine)
+				}
+				// Default (точный поиск с учетом регистра)
+			} else {
+				filter = app.filterText
+				if filter == "" || strings.Contains(line, filter) {
+					lineColor := strings.ReplaceAll(line, filter, "\x1b[0;33m"+filter+"\033[0m")
+					app.filteredLogLines = append(app.filteredLogLines, lineColor)
+				}
 			}
 		}
 	}
@@ -2054,21 +2062,12 @@ func (app *App) setFilterModeRight(g *gocui.Gui, v *gocui.View) error {
 	case "Filter (Default)":
 		selectedFilter.Title = "Filter (Fuzzy)"
 		app.selectFilterMode = "fuzzy"
-		if app.logViewCount == "50000" {
-			app.logViewCount = "200000"
-		}
 	case "Filter (Fuzzy)":
 		selectedFilter.Title = "Filter (Regex)"
 		app.selectFilterMode = "regex"
-		if app.logViewCount == "200000" {
-			app.logViewCount = "50000"
-		}
 	case "Filter (Regex)":
 		selectedFilter.Title = "Filter (Default)"
 		app.selectFilterMode = "default"
-		if app.logViewCount == "50000" {
-			app.logViewCount = "200000"
-		}
 	}
 	app.applyFilter(false)
 	return nil
@@ -2083,21 +2082,12 @@ func (app *App) setFilterModeLeft(g *gocui.Gui, v *gocui.View) error {
 	case "Filter (Default)":
 		selectedFilter.Title = "Filter (Regex)"
 		app.selectFilterMode = "regex"
-		if app.logViewCount == "200000" {
-			app.logViewCount = "50000"
-		}
 	case "Filter (Regex)":
 		selectedFilter.Title = "Filter (Fuzzy)"
 		app.selectFilterMode = "fuzzy"
-		if app.logViewCount == "50000" {
-			app.logViewCount = "200000"
-		}
 	case "Filter (Fuzzy)":
 		selectedFilter.Title = "Filter (Default)"
 		app.selectFilterMode = "default"
-		if app.logViewCount == "50000" {
-			app.logViewCount = "200000"
-		}
 	}
 	app.applyFilter(false)
 	return nil

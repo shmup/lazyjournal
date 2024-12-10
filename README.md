@@ -32,10 +32,8 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 Supports 3 filtering modes:
 
 - **Default** - case sensitive exact search.
-- **Fuzzy** - imprecise case-insensitive search (searches for all phrases separated by a space anywhere in the string).
-- **Regex** - search with regular expression support, case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
-
-Regex mode uses the built-in `regexp` library, which is resource-intensive when filtering several tens of thousands of lines, so when switching modes, a limit of 50k lines is applied (for other modes the default is 200k lines), but this number can be changed using the buttons `Left/Right` in the log output window (maximum 300k lines).
+- **Fuzzy** - custom inexact case-insensitive search (searches for all phrases separated by a space anywhere on a line).
+- **Regex** - search with regular expression support (based on `regexp` library), case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
 
 ## Roadmap
 
