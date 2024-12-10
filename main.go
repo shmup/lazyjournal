@@ -861,6 +861,13 @@ func (app *App) loadFiles(logPath string) {
 			"/var/log/wtmp\n",
 			// Информация о неудачных попытках входа в систему (например, неправильные пароли)
 			"/var/log/btmp\n",
+			// Oracle/RHEL
+			"/var/log/messages\n",
+			"/var/log/messages.1\n",
+			"/var/log/secure\n",
+			"/var/log/secure.1\n",
+			"/var/log/lastlog\n",
+			"/var/log/maillog\n",
 		}
 		for _, path := range logPaths {
 			output = append([]byte(path), output...)
@@ -1155,13 +1162,13 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		if err := cmdGzip.Wait(); err != nil {
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading archive log with tool: gzip.", err, "\033[0m")
+			fmt.Fprintln(v, "\033[31mError reading archive log using gzip tool", err, "\033[0m")
 			return
 		}
 		if err := cmdTail.Wait(); err != nil {
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log with tool: tail.", err, "\033[0m")
+			fmt.Fprintln(v, "\033[31mError reading log using tail tool", err, "\033[0m")
 			return
 		}
 		// Выводим содержимое
@@ -1173,7 +1180,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		if err != nil {
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log with tool: last.", err, "\033[0m")
+			fmt.Fprintln(v, "\033[31mError reading log using last tool", err, "\033[0m")
 			return
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
@@ -1183,7 +1190,17 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		if err != nil {
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log with tool: lastb.", err, "\033[0m")
+			fmt.Fprintln(v, "\033[31mError reading log using lastb tool", err, "\033[0m")
+			return
+		}
+		app.currentLogLines = strings.Split(string(output), "\n")
+	} else if strings.HasSuffix(logFullPath, "lastlog") {
+		cmd := exec.Command("lastlog")
+		output, err := cmd.Output()
+		if err != nil {
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			fmt.Fprintln(v, "\033[31mError reading log using lastlog tool", err, "\033[0m")
 			return
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
@@ -1193,7 +1210,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		if err != nil {
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log with tool: tail.", err, "\033[0m")
+			fmt.Fprintln(v, "\033[31mError reading log using tail tool", err, "\033[0m")
 			return
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
