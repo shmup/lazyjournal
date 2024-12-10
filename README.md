@@ -23,11 +23,11 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 - List of all units (services, sockets, etc.) via `systemctl` with current running status.
 - View all system and user journals via `journalctl` (tool for reading logs from [systemd-journald](https://github.com/systemd/systemd/tree/main/src/journal)).
 - List of all system boots for kernel log output.
-- File system logs from `/var/log` (example, for Apache or Nginx), as well as `syslog`, `dmesg` (kernel) and user authentication (`wtmp` and `btmp`) sorted by modification date.
+- File system logs from `/var/log` (example, for Apache or Nginx), as well as `syslog`, `dmesg` (kernel) and user authentication sorted by modification date.
 - List of all log files of descriptors used by processes, as well as all log files in the home directories of users and the root user.
 - Reading archived logs (`gz` format).
-- Podman, Docker containers and Swarm services logs.
-- Displays the currently selected log (when loading a log, a delimiter with loading time is displayed) and filters output in real-time.
+- Podman pods, Docker containers and Swarm services logs for all systems.
+- Displays the currently selected log and filters output in real-time.
 
 Supports 3 filtering modes:
 
@@ -41,7 +41,7 @@ Regex mode uses the built-in `regexp` library, which is resource-intensive when 
 
 This is an up-to-date roadmap in addition to the functionality described above.
 
-- [ ] MacOS support for `launchd`.
+- [X] MacOS support (partially, only for file system).
 - [ ] Windows support (`Windows Events` via `PowerShell` and log files from `Program Files` and others directories).
 - [ ] Syntax coloring for logging output (like [tailspin](https://github.com/bensadeh/tailspin)).
 - [ ] Interface for scrolling and mouse support.
@@ -78,7 +78,7 @@ lazyjournal
 
 Access to all system logs and containers may require elevated privileges for the current user.
 
-Windows and MacOS is not currently supported, but the project will work to access Docker and Podman containers logs.
+Windows is not currently supported, but the project will work to access Docker and Podman containers logs.
 
 ## Build
 
@@ -109,16 +109,16 @@ bash build.sh
 - `Ctrl+<D/W>` - clear text input field for filter to quickly update current log output without filtering.
 - `Ctrl+C` - exit.
 
+## Contributing
+
+Any contribution is welcome. If you want to implement a feature or fix something, please [open an issue](https://github.com/Lifailon/lazyjournal/issues) first.
+
 ## Alternatives
 
 - [lnav](https://github.com/tstack/lnav) - The Logfile Navigator is a **log file** viewer for the terminal.
 - [Dozzle](https://github.com/amir20/dozzle) - is a small lightweight application with a web based interface to monitor **Docker logs**.
 
 If you like using TUI tools, try [multranslate](https://github.com/Lifailon/multranslate) for translating text in multiple translators simultaneously, with support for translation history and automatic language detection.
-
-## Contributing
-
-Any contribution is welcome. If you want to implement a feature or fix something, please [open an issue](https://github.com/Lifailon/lazyjournal/issues) first.
 
 ## License
 

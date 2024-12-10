@@ -103,7 +103,7 @@ func main() {
 		startDockerContainers:        0,
 		selectedDockerContainer:      0,
 		selectUnits:                  "services",  // "UNIT" || "USER_UNIT" || "kernel" || "process"
-		selectPath:                   "/var/log/", // "/home/"
+		selectPath:                   "/var/log/", // "/home/" ("/Users/" - для MacOS)
 		selectContainerizationSystem: "docker",    // "podman"
 		selectFilterMode:             "default",   // "fuzzy" || "regex"
 		logViewCount:                 "200000",    // 5000-300000
@@ -222,7 +222,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = " < Var logs (0) > "
+		v.Title = " < System var logs (0) > "
 		v.Highlight = true
 		v.Wrap = false
 		v.Autoscroll = true
@@ -277,9 +277,6 @@ func (app *App) layout(g *gocui.Gui) error {
 }
 
 // ---------------------------------------- journalctl ----------------------------------------
-
-// launchctl list
-// journalctl --file=/var/log/journal/2f11f3ba72234b0ea4417809ea60919a/user-1000.journal
 
 // Функция для загрузки списка журналов служб или загрузок системы из journalctl
 func (app *App) loadServices(journalName string) {
@@ -667,6 +664,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	} else {
 		selectUnits = app.lastSelectUnits
 	}
+	// Фильтрация по PID процесса для Linux и MacOS
 	if selectUnits == "process" {
 		var boot_id string
 		for _, journal := range app.journals {
@@ -729,6 +727,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 			// Собираем строки в одну и преобразуем в []byte
 			output = []byte(strings.Join(formattedLogs, "\n"))
 		}
+		// Загрузки системы для логов ядра
 	} else if selectUnits == "kernel" {
 		var boot_id string
 		for _, journal := range app.journals {
@@ -751,6 +750,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
 			return
 		}
+		// Для юнитов systemd
 	} else {
 		if selectUnits == "services" {
 			// Удаляем статусы с покраской из навзания
@@ -816,9 +816,19 @@ func (app *App) loadFiles(logPath string) {
 				output = append(output, []byte(file+"\n")...)
 			}
 		}
-		// 1086
 	} else if logPath == "/var/log/" {
-		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log", "-o", "-name", "*.gz")
+		var cmd *exec.Cmd
+		// Загрузка системных журналов для MacOS
+		if app.getOS == "darwin" {
+			cmd = exec.Command(
+				"find", logPath, "/Library/Logs",
+				"-type", "f",
+				"(", "-name", "*.log", "-o", "-name", "*.gz", "-o", "-name", "*.1", ")",
+			)
+		} else {
+			// Загрузка системных журналов для Linux
+			cmd = exec.Command("find", logPath, "-type", "f", "-name", "*.log", "-o", "-name", "*.gz", "-o", "-name", "*.1")
+		}
 		output, _ = cmd.Output()
 		// Преобразуем вывод команды в строку и делим на массив строк
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -855,10 +865,36 @@ func (app *App) loadFiles(logPath string) {
 		for _, path := range logPaths {
 			output = append([]byte(path), output...)
 		}
+		// Домашние каталоги пользователей: /home/ для Linux и /Users/ для MacOS
 	} else {
-		cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log")
+		if app.getOS == "darwin" {
+			logPath = "/Users/"
+		}
+		// Ищем файлы с помощью системной утилиты find
+		// cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log")
+		cmd := exec.Command("find", logPath,
+			"-type", "d",
+			"(",
+			"-name", "Library", "-o",
+			"-name", "Pictures", "-o",
+			"-name", "Movies", "-o",
+			"-name", "Music", "-o",
+			"-name", ".Trash", "-o",
+			"-name", ".cache",
+			")",
+			"-prune", "-o",
+			"-type", "f", "-name", "*.log", "-print",
+		)
 		output, _ = cmd.Output()
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
+		// Ищем файлы с помощью WalkDir
+		// var files []string
+		// _ = filepath.WalkDir(logPath, func(path string, d os.DirEntry, err error) error {
+		// 	if !d.IsDir() && strings.HasSuffix(d.Name(), ".log") {
+		// 		files = append(files, path)
+		// 	}
+		// 	return nil
+		// })
 		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
 			vError, _ := app.gui.View("varLogs")
 			vError.Clear()
@@ -905,7 +941,7 @@ func (app *App) loadFiles(logPath string) {
 		logName = strings.ReplaceAll(logName, "/", " ")
 		logName = strings.ReplaceAll(logName, ".log.", "")
 		logName = strings.TrimPrefix(logName, " ")
-		if logPath == "/home/" {
+		if logPath == "/home/" || logPath == "/Users/" {
 			// Разбиваем строку на слова
 			words := strings.Fields(logName)
 			// Берем первое и последнее слово
@@ -1152,7 +1188,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
 	} else {
-		cmd := exec.Command("tail", logFullPath, "-n", app.logViewCount)
+		cmd := exec.Command("tail", "-n", app.logViewCount, logFullPath)
 		output, err := cmd.Output()
 		if err != nil {
 			v, _ := app.gui.View("logs")
@@ -2127,23 +2163,35 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		log.Panicln(err)
 	}
-	app.logfiles = app.logfiles[:0]
-	app.startFiles = 0
-	app.selectedFile = 0
-	switch app.selectPath {
-	case "/var/log/":
-		app.selectPath = "/home/"
-		selectedVarLog.Title = " < Home logs (0) > "
-		app.loadFiles(app.selectPath)
-	case "/home/":
-		app.selectPath = "descriptor"
-		selectedVarLog.Title = " < Descriptor logs (0) > "
-		app.loadFiles(app.selectPath)
-	case "descriptor":
-		app.selectPath = "/var/log/"
-		selectedVarLog.Title = " < Var logs (0) > "
-		app.loadFiles(app.selectPath)
-	}
+	// Добавляем сообщение о загрузке журнала
+	g.Update(func(g *gocui.Gui) error {
+		selectedVarLog.Clear()
+		fmt.Fprintln(selectedVarLog, "Searching log files...")
+		selectedVarLog.Highlight = false
+		return nil
+	})
+	// Полсекундная задержка, для корректного обновления интерфейса после выполнения функции
+	time.Sleep(500 * time.Millisecond)
+	// Запускаем функцию загрузки журнала в горутине
+	go func() {
+		app.logfiles = app.logfiles[:0]
+		app.startFiles = 0
+		app.selectedFile = 0
+		switch app.selectPath {
+		case "/var/log/":
+			app.selectPath = "/home/"
+			selectedVarLog.Title = " < Users home logs (0) > "
+			app.loadFiles(app.selectPath)
+		case "/home/":
+			app.selectPath = "descriptor"
+			selectedVarLog.Title = " < Process descriptor logs (0) > "
+			app.loadFiles(app.selectPath)
+		case "descriptor":
+			app.selectPath = "/var/log/"
+			selectedVarLog.Title = " < System var logs (0) > "
+			app.loadFiles(app.selectPath)
+		}
+	}()
 	return nil
 }
 
@@ -2152,23 +2200,32 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		log.Panicln(err)
 	}
-	app.logfiles = app.logfiles[:0]
-	app.startFiles = 0
-	app.selectedFile = 0
-	switch app.selectPath {
-	case "/var/log/":
-		app.selectPath = "descriptor"
-		selectedVarLog.Title = " < Descriptor logs (0) > "
-		app.loadFiles(app.selectPath)
-	case "descriptor":
-		app.selectPath = "/home/"
-		selectedVarLog.Title = " < Home logs (0) > "
-		app.loadFiles(app.selectPath)
-	case "/home/":
-		app.selectPath = "/var/log/"
-		selectedVarLog.Title = " < Var logs (0) > "
-		app.loadFiles(app.selectPath)
-	}
+	g.Update(func(g *gocui.Gui) error {
+		selectedVarLog.Clear()
+		fmt.Fprintln(selectedVarLog, "Searching log files...")
+		selectedVarLog.Highlight = false
+		return nil
+	})
+	time.Sleep(500 * time.Millisecond)
+	go func() {
+		app.logfiles = app.logfiles[:0]
+		app.startFiles = 0
+		app.selectedFile = 0
+		switch app.selectPath {
+		case "/var/log/":
+			app.selectPath = "descriptor"
+			selectedVarLog.Title = " < Process descriptor logs (0) > "
+			app.loadFiles(app.selectPath)
+		case "descriptor":
+			app.selectPath = "/home/"
+			selectedVarLog.Title = " < Users home logs (0) > "
+			app.loadFiles(app.selectPath)
+		case "/home/":
+			app.selectPath = "/var/log/"
+			selectedVarLog.Title = " < System var logs (0) > "
+			app.loadFiles(app.selectPath)
+		}
+	}()
 	return nil
 }
 
