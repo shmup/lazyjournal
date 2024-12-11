@@ -13,15 +13,15 @@ case $ARCH in
         ;;
 esac
 
-if [ $SHELL = "/bin/bash" ]; then
-    shellRc="$HOME/.bashrc"
-elif [ $SHELL = "/bin/zsh" ]; then
-    shellRc="$HOME/.zshrc"
-else
-    echo -e "\033[31mError.\033[0m Shell not supported: $SHELL"
-    echo -e "Create a request with a \033[31mproblem\033[0m: https://github.com/Lifailon/lazyjournal/issues"
-    exit 1
-fi
+case "$SHELL" in
+    */bash) shellRc="$HOME/.bashrc" ;;
+    */zsh) shellRc="$HOME/.zshrc" ;;
+    *)
+        echo -e "\033[31mError.\033[0m Shell not supported: $SHELL"
+        echo -e "Create a request with a \033[31mproblem\033[0m: https://github.com/Lifailon/lazyjournal/issues"
+        exit 1
+        ;;
+esac
 
 touch $shellRc
 mkdir -p $HOME/.local/bin

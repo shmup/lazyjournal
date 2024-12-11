@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1357,7 +1358,8 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 				formattedLines = append(formattedLines, "\n")
 			}
 		}
-		app.currentLogLines = formattedLines
+		// app.currentLogLines = formattedLines
+		app.currentLogLines = app.processWithTailspin(formattedLines)
 	} else {
 		// Читаем лог через podman cli
 		cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
@@ -1372,6 +1374,22 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 	}
 	app.updateDelimiter(newUpdate, g)
 	app.applyFilter(false)
+}
+
+func (app *App) processWithTailspin(formattedLines []string) []string {
+	// Собираем все строки в одну строку, разделенную новыми строками
+	input := strings.Join(formattedLines, "\n")
+	// Создаем команду для tailspin с параметром -p
+	cmd := exec.Command("tailspin", "-p")
+	// Передаем строки в стандартный ввод команды
+	cmd.Stdin = strings.NewReader(input)
+	// Буфер для захвата вывода команды
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	// Запускаем команду
+	cmd.Run()
+	// Разделяем вывод на строки и сохраняем их в currentLogLines
+	return strings.Split(out.String(), "\n")
 }
 
 // ---------------------------------------- Filter ----------------------------------------
@@ -1487,8 +1505,8 @@ func (app *App) applyFilter(color bool) {
 		v.FrameColor = gocui.ColorGreen
 	}
 	filter := app.filterText
-	// Если текст фильтра пустой, возвращяем обычный вывод после загрузки журнала
-	if len(filter) == 0 {
+	// Если текст фильтра пустой или равен любому символу, возвращяем вывод без фильтра
+	if len(filter) == 0 || filter == "." {
 		app.filteredLogLines = app.currentLogLines
 	} else {
 		app.filteredLogLines = make([]string, 0)
