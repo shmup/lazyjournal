@@ -1358,8 +1358,7 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 				formattedLines = append(formattedLines, "\n")
 			}
 		}
-		// app.currentLogLines = formattedLines
-		app.currentLogLines = app.processWithTailspin(formattedLines)
+		app.currentLogLines = formattedLines
 	} else {
 		// Читаем лог через podman cli
 		cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
@@ -1374,22 +1373,6 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 	}
 	app.updateDelimiter(newUpdate, g)
 	app.applyFilter(false)
-}
-
-func (app *App) processWithTailspin(formattedLines []string) []string {
-	// Собираем все строки в одну строку, разделенную новыми строками
-	input := strings.Join(formattedLines, "\n")
-	// Создаем команду для tailspin с параметром -p
-	cmd := exec.Command("tailspin", "-p")
-	// Передаем строки в стандартный ввод команды
-	cmd.Stdin = strings.NewReader(input)
-	// Буфер для захвата вывода команды
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	// Запускаем команду
-	cmd.Run()
-	// Разделяем вывод на строки и сохраняем их в currentLogLines
-	return strings.Split(out.String(), "\n")
 }
 
 // ---------------------------------------- Filter ----------------------------------------
@@ -1591,6 +1574,11 @@ func (app *App) applyFilter(color bool) {
 			}
 		}
 	}
+	// Пропускаем вывод после фильтрации через tailspin
+	tailspinFormatted, err := app.processTailspin(app.filteredLogLines)
+	if err == nil {
+		app.filteredLogLines = tailspinFormatted
+	}
 	// Обновляем окно для отображения отфильтрованных записей
 	if app.autoScroll {
 		app.logScrollPos = 0
@@ -1598,6 +1586,34 @@ func (app *App) applyFilter(color bool) {
 	} else {
 		app.updateLogsView(false)
 	}
+}
+
+// Функция для покраски вывода через tailsping
+func (app *App) processTailspin(formattedLines []string) ([]string, error) {
+	var tailspiCommand string = "tailspin"
+	// Проверяем, что tailspin установлен в системе
+	tailspinVersion := exec.Command(tailspiCommand, "--version")
+	err := tailspinVersion.Run()
+	if err != nil {
+		tailspiCommand = "tspin"
+		tailspinVersion = exec.Command(tailspiCommand, "--version")
+		err = tailspinVersion.Run()
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Собираем все строки в одну строку
+	input := strings.Join(formattedLines, "\n")
+	// Передаем строки в стандартный ввод команды
+	cmd := exec.Command(tailspiCommand, "-p")
+	cmd.Stdin = strings.NewReader(input)
+	// Буфер для захвата вывода команды
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	// Запускаем команду
+	cmd.Run()
+	// Разделяем полученный вывод вывод на строки и сохраняем их в currentLogLines
+	return strings.Split(out.String(), "\n"), nil
 }
 
 // Функция для обновления вывода журнала (параметр для прокрутки в самый вниз)
