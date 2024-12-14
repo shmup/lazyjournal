@@ -47,6 +47,8 @@ This is an up-to-date roadmap in addition to the functionality described above.
 
 ## Install
 
+### Releases
+
 Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
 > Development is carried out on the Ubuntu Server system, and is also tested on the Raspberry Pi (`aarch64` platform), the WSL environment on the Oracle Linux system and the Darwin system (`x64` platform).
@@ -59,6 +61,8 @@ curl https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | ba
 
 This command will run a script that will download the latest executable from the GitHub repository into your current user's home directory along with other executables (or create a directory) and grant execution permission.
 
+### Latest
+
 You can also use Go for install the dev version. To do this, the Go interpreter must be installed on the system, for example, in Ubuntu you can use the SnapCraft package manager:
 
 ```shell
@@ -67,6 +71,16 @@ grep -F 'export PATH=$PATH:$HOME/go/bin' $HOME/.bashrc || echo 'export PATH=$PAT
 
 go install github.com/Lifailon/lazyjournal@latest
 ```
+
+### Arch Linux
+
+If you're an Arch Linux user you can also install from the [AUR](https://aur.archlinux.org/packages/lazyjournal) with your favorite [AUR helper](https://wiki.archlinux.org/title/AUR_helpers), e.g.:
+
+```shell
+paru -S lazyjournal
+```
+
+## Usage
 
 You can launch the interface anywhere (no parameters are used):
 
