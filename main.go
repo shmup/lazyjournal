@@ -93,6 +93,11 @@ type App struct {
 	journalListFrameColor gocui.Attribute
 	fileSystemFrameColor  gocui.Attribute
 	dockerFrameColor      gocui.Attribute
+
+	// Регулярные выражения для покраски строк
+	dateRegex     *regexp.Regexp
+	timeRegex     *regexp.Regexp
+	dateTimeRegex *regexp.Regexp
 }
 
 func main() {
@@ -113,6 +118,9 @@ func main() {
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
 		autoScroll:                   true,
+		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2})\b`),
+		timeRegex:                    regexp.MustCompile(`\b(\d{1,2}:\d{2}(:\d{2}))\b`),
+		dateTimeRegex:                regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\b`),
 	}
 
 	// Создаем GUI
@@ -172,7 +180,7 @@ func main() {
 	g.SetCurrentView("filterList")
 
 	// Горутина для автоматического обновления вывода журнала
-	go app.updateLogOutput(1)
+	go app.updateLogOutput(5)
 
 	// Запус GUI
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
@@ -1588,10 +1596,17 @@ func (app *App) applyFilter(color bool) {
 			}
 		}
 		// Пропускаем вывод после фильтрации через tailspin для покраски
-		tailspinFormatted, err := app.processTailspin(app.filteredLogLines)
-		if err == nil {
-			app.filteredLogLines = tailspinFormatted
+		// tailspinFormatted, err := app.processTailspin(app.filteredLogLines)
+		// if err == nil {
+		// 	app.filteredLogLines = tailspinFormatted
+		// }
+		// Пропускаем вывод после фильтрации построчно для покраски
+		var colorLogLines []string
+		for _, line := range app.filteredLogLines {
+			colorLine := app.lineColor(line)
+			colorLogLines = append(colorLogLines, colorLine)
 		}
+		app.filteredLogLines = colorLogLines
 	}
 	// Debug: корректируем текущую позицию скролла, если размер массива стал меньше
 	if size > len(app.filteredLogLines) {
@@ -1610,6 +1625,111 @@ func (app *App) applyFilter(color bool) {
 		app.updateLogsView(false)
 	}
 }
+
+// Функция для покраски строки
+func (app *App) lineColor(inputLine string) string {
+	// Разбиваем строку на слова
+	words := strings.Fields(inputLine)
+	var colorLine string
+	var filterColor bool = false
+	for _, word := range words {
+		// Исключаем строки с покраской при поиске
+		if strings.Contains(word, "\x1b[0;33m") {
+			filterColor = true
+		}
+		// Красим слово в функции
+		if !filterColor {
+			word = app.wordColor(word)
+		}
+		// Возобновляем покраску
+		if strings.Contains(word, "\033[0m") {
+			filterColor = false
+		}
+		colorLine += word + " "
+	}
+	return strings.TrimSpace(colorLine)
+}
+
+// Игнорируем регистр при замене для покраски
+func (app *App) replaceWordLower(word, keyword, color string) string {
+	re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(keyword))
+	return re.ReplaceAllStringFunc(word, func(match string) string {
+		return color + match + "\033[0m"
+	})
+}
+
+// Функция для покраски словосочетаний
+func (app *App) wordColor(inputWord string) string {
+	var coloredWord string
+	// Опускаем регистр слова
+	inputWordLower := strings.ToLower(inputWord)
+	switch {
+	// Красный
+	case strings.Contains(inputWordLower, "stderr"):
+		coloredWord = app.replaceWordLower(inputWord, "stderr", "\033[31m")
+	case strings.Contains(inputWordLower, "error"):
+		coloredWord = app.replaceWordLower(inputWord, "error", "\033[31m")
+	case strings.Contains(inputWordLower, "erro"):
+		coloredWord = app.replaceWordLower(inputWord, "erro", "\033[31m")
+	case strings.Contains(inputWordLower, "err"):
+		coloredWord = app.replaceWordLower(inputWord, "err", "\033[31m")
+	case strings.Contains(inputWordLower, "critical"):
+		coloredWord = app.replaceWordLower(inputWord, "critical", "\033[31m")
+	case strings.Contains(inputWordLower, "warning"):
+		coloredWord = app.replaceWordLower(inputWord, "warning", "\033[31m")
+	case strings.Contains(inputWordLower, "failed"):
+		coloredWord = app.replaceWordLower(inputWord, "failed", "\033[31m")
+	case strings.Contains(inputWordLower, "fatal"):
+		coloredWord = app.replaceWordLower(inputWord, "fatal", "\033[31m")
+	case strings.Contains(inputWordLower, "false"):
+		coloredWord = app.replaceWordLower(inputWord, "false", "\033[31m")
+	// Зеленый
+	case strings.Contains(inputWordLower, "stdout"):
+		coloredWord = app.replaceWordLower(inputWord, "stdout", "\033[32m")
+	case strings.HasPrefix(inputWordLower, "[ok"):
+		coloredWord = app.replaceWordLower(inputWord, "ok", "\033[32m")
+	case strings.HasPrefix(inputWordLower, "ok"):
+		coloredWord = app.replaceWordLower(inputWord, "ok", "\033[32m")
+	case strings.Contains(inputWordLower, "information"):
+		coloredWord = app.replaceWordLower(inputWord, "information", "\033[32m")
+	case strings.Contains(inputWordLower, "successfully"):
+		coloredWord = app.replaceWordLower(inputWord, "successfully", "\033[32m")
+	case strings.Contains(inputWordLower, "successfull"):
+		coloredWord = app.replaceWordLower(inputWord, "successfull", "\033[32m")
+	case strings.Contains(inputWordLower, "success"):
+		coloredWord = app.replaceWordLower(inputWord, "success", "\033[32m")
+	case strings.Contains(inputWordLower, "completed"):
+		coloredWord = app.replaceWordLower(inputWord, "completed", "\033[32m")
+	case strings.Contains(inputWordLower, "passed"):
+		coloredWord = app.replaceWordLower(inputWord, "passed", "\033[32m")
+	case strings.Contains(inputWordLower, "active"):
+		coloredWord = app.replaceWordLower(inputWord, "active", "\033[32m")
+	case strings.Contains(inputWordLower, "true"):
+		coloredWord = app.replaceWordLower(inputWord, "true", "\033[32m")
+	// Голубой
+	case strings.Contains(inputWordLower, "info"):
+		coloredWord = app.replaceWordLower(inputWord, "info", "\033[34m")
+	case app.dateTimeRegex.MatchString(inputWord):
+		coloredWord = app.dateTimeRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
+			return "\033[34m" + match + "\033[0m"
+		})
+	case app.dateRegex.MatchString(inputWord):
+		coloredWord = app.dateRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
+			return "\033[34m" + match + "\033[0m"
+		})
+	case app.timeRegex.MatchString(inputWord):
+		coloredWord = app.timeRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
+			return "\033[34m" + match + "\033[0m"
+		})
+	default:
+		coloredWord = inputWord
+	}
+	return coloredWord
+}
+
+// Добавить прверку на буквы (не символы)
+// Регулярки для дат
+// Разбить еще строки на запятые для json
 
 // Функция для покраски вывода через tailsping
 func (app *App) processTailspin(formattedLines []string) ([]string, error) {
