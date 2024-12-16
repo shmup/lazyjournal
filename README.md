@@ -9,7 +9,7 @@
     <a href="https://github.com/Lifailon/Kinozal-Bot/blob/rsa/LICENSE"><img title="License"src="https://img.shields.io/github/license/Lifailon/Kinozal-Bot?logo=readme&color=white"></a>
 </p>
 
-Terminal user interface for `journalctl`, file system logs, as well Docker and Podman containers for quick viewing and filtering with fuzzy find and regex support (like `fzf` and `grep`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
+Terminal user interface for `journalctl`, file system logs, as well Docker and Podman containers for quick viewing and filtering with fuzzy find, regex support (like `fzf` and `grep`) and coloring the output (like `tailspin`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
 This tool is inspired by and with love for [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
 
@@ -40,7 +40,7 @@ Supports 3 filtering modes:
 This is an up-to-date roadmap in addition to the functionality described above.
 
 - [X] File system support for MacOS and the RHEL based systems.
-- [ ] Syntax coloring for logging output (like [tailspin](https://github.com/bensadeh/tailspin)).
+- [X] Syntax coloring for logging output (this functionality will be improved in major versions as part of minor version `0.6`).
 - [ ] Interface for scrolling and mouse support.
 - [ ] Windows support (`Windows Events` via `PowerShell` and log files from `Program Files` and others directories).
 - [ ] Support remote machines via `ssh` protocol.
@@ -51,7 +51,7 @@ This is an up-to-date roadmap in addition to the functionality described above.
 
 Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
-> Development is carried out on the Ubuntu Server system, and is also tested on the Raspberry Pi (`aarch64` platform), the WSL environment on the Oracle Linux system and the Darwin system (`x64` platform).
+Development is carried out on the Ubuntu Server system, and is also tested on the Raspberry Pi (`aarch64` platform), the WSL environment on the Oracle Linux system and the Darwin system (`x64` platform).
 
 Run the command in the console to quickly install or update the stable version on Linux or MacOS:
 
@@ -79,6 +79,12 @@ If you're an Arch Linux user you can also install from the [AUR](https://aur.arc
 ```shell
 paru -S lazyjournal
 ```
+
+Thank you [Matteo Giordano](https://github.com/malteo) for upload and update the package in AUR.
+
+### Others
+
+If you use other packag manager and want this package to be present there as well, open an issue or load it yourself and make `Pull requests`.
 
 ## Usage
 
