@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/awesome-gocui/gocui"
@@ -136,7 +137,7 @@ func main() {
 		trimHttpsRegex:               regexp.MustCompile(`^.+https://|[^a-zA-Z0-9/.-_?&=].+$`),                                  // и после любого символа, который не может содержать в себе url
 		trimPrefixPathRegex:          regexp.MustCompile(`^[^/]+`),                                                              // иключаем все до первого символа слэша (не включительно)
 		trimPostfixPathRegex:         regexp.MustCompile(`[=:'"(){}\[\]]+.*$`),                                                  // исключаем все после первого символа, который не должен (но может) содержаться в пути
-		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_]+\[\d+\]\:$`),                                              // dockerd[1341]:
+		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]\:$`),                                             // unit_daemon-name.service[1341]:
 		dateTimeRegex:                regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`), // YYYY-MM-DDTHH:MM:SS.MS+HH:MM
 		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2})\b`),       // DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD
 		timeRegex:                    regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2})?\b`),                                          // HH:MM || HH:MM:SS
@@ -1665,13 +1666,54 @@ func (app *App) applyFilter(color bool) {
 				}
 			}
 		}
-		// Пропускаем вывод построчно после фильтрации для покраски
-		var colorLogLines []string
-		for _, line := range app.filteredLogLines {
-			colorLine := app.lineColor(line)
-			colorLogLines = append(colorLogLines, colorLine)
+		// Debug start time
+		// startTime := time.Now()
+		// Пропускаем вывод построчно (синхронно) после фильтрации для покраски
+		// var colorLogLines []string
+		// for _, line := range app.filteredLogLines {
+		// 	colorLine := app.lineColor(line)
+		// 	colorLogLines = append(colorLogLines, colorLine)
+		// }
+		// app.filteredLogLines = colorLogLines
+		// Максимальное количество потоков
+		const maxWorkers = 10
+		// Канал для передачи индексов всех строк
+		tasks := make(chan int, len(app.filteredLogLines))
+		// Срез для хранения обработанных строк
+		colorLogLines := make([]string, len(app.filteredLogLines))
+		// Объявляем группу ожидания для синхронизации всех горутин (воркеров)
+		var wg sync.WaitGroup
+		// Создаем maxWorkers горутин, где каждая будет обрабатывать задачи из канала tasks
+		for i := 0; i < maxWorkers; i++ {
+			go func() {
+				// Горутина будет работать, пока в канале tasks есть задачи
+				for index := range tasks {
+					// Обрабатываем строку и сохраняем результат по соответствующему индексу
+					colorLogLines[index] = app.lineColor(app.filteredLogLines[index])
+					// Уменьшаем счетчик задач в группе ожидания.
+					wg.Done()
+				}
+			}()
 		}
+		// Добавляем задачи в канал
+		for i := range app.filteredLogLines {
+			// Увеличиваем счетчик задач в группе ожидания.
+			wg.Add(1)
+			// Передаем индекс строки в канал tasks
+			tasks <- i
+		}
+		// Закрываем канал задач, чтобы воркеры завершили работу после обработки всех задач
+		close(tasks)
+		// Ждем завершения всех задач
+		wg.Wait()
 		app.filteredLogLines = colorLogLines
+		// Debug work time
+		// selectedFilter, _ := app.gui.View("filter")
+		// endTime := time.Since(startTime)
+		// selectedFilter.Title = "Work Time: " + endTime.String()
+		// Async/Sync
+		// 30K lines: 350ms/620ms
+		// 110K lines: 1.10s/1.95s
 	}
 	// Debug: корректируем текущую позицию скролла, если размер массива стал меньше
 	if size > len(app.filteredLogLines) {
@@ -1813,6 +1855,8 @@ func (app *App) wordColor(inputWord string) string {
 		cleanedWord := app.trimPrefixPathRegex.ReplaceAllString(inputWord, "")
 		cleanedWord = app.trimPostfixPathRegex.ReplaceAllString(cleanedWord, "")
 		coloredWord = strings.ReplaceAll(inputWord, cleanedWord, "\033[35m"+cleanedWord+"\033[0m")
+	case strings.HasPrefix(inputWordLower, "kernel:"):
+		coloredWord = app.replaceWordLower(inputWord, "kernel", "\033[35m")
 	case app.syslogUnitRegex.MatchString(inputWord):
 		// Красим только имя службы
 		cleanedWord := strings.Split(inputWord, "[")[0]
