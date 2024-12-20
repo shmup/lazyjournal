@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -41,7 +42,10 @@ type DockerContainers struct {
 type App struct {
 	gui *gocui.Gui // графический интерфейс (gocui)
 
-	getOS string // название ОС
+	getOS         string   // название ОС
+	hostName      string   // текущее имя хоста для покраски в логах
+	userName      string   // текущее имя пользователя
+	userNameArray []string // список всех пользователей
 
 	selectUnits                  string // название журнала (UNIT/USER_UNIT)
 	selectPath                   string // путь к логам (/var/log/)
@@ -76,9 +80,13 @@ type App struct {
 	logScrollPos     int      // позиция прокрутки для отображаемых строк журнала
 	lastFilterText   string   // фиксируем содержимое последнего ввода текста для фильтрации
 
-	autoScroll     bool // используется для автоматического скроллинга вниз при обновлении (если это не ручной скроллинг)
-	newUpdateIndex int  // фиксируем текущую длинну массива (индекс) для вставки строки обновления (если это ручной выбор из списка)
-	updateTime     string
+	autoScroll     bool   // используется для автоматического скроллинга вниз при обновлении (если это не ручной скроллинг)
+	newUpdateIndex int    // фиксируем текущую длинну массива (индекс) для вставки строки обновления (если это ручной выбор из списка)
+	updateTime     string // время загрузки журнала для делиметра
+
+	lastDateUpdateFile time.Time // последняя дата изменения файла
+	lastSizeFile       int64     // размер файла
+	updateFile         bool
 
 	lastWindow   string // фиксируем последний используемый источник для вывода логов
 	lastSelected string // фиксируем название последнего выбранного журнала или контейнера
@@ -95,6 +103,7 @@ type App struct {
 	dockerFrameColor      gocui.Attribute
 
 	// Регулярные выражения для покраски строк
+	ipAddress     *regexp.Regexp
 	dateRegex     *regexp.Regexp
 	timeRegex     *regexp.Regexp
 	dateTimeRegex *regexp.Regexp
@@ -118,11 +127,11 @@ func main() {
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
 		autoScroll:                   true,
+		ipAddress:                    regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`),
 		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2})\b`),
-		timeRegex:                    regexp.MustCompile(`\b(\d{1,2}:\d{2}(:\d{2}))\b`),
+		timeRegex:                    regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2})?\b`),
 		dateTimeRegex:                regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\b`),
 	}
-
 	// Создаем GUI
 	g, err := gocui.NewGui(gocui.OutputNormal, true) // 2-й параметр для форка
 	if err != nil {
@@ -154,6 +163,19 @@ func main() {
 	// Определяем используемую ОС (linux/darwin/windows)
 	app.getOS = runtime.GOOS
 
+	app.hostName, _ = os.Hostname()
+	currentUser, _ := user.Current()
+	app.userName = currentUser.Username
+	passwd, _ := os.Open("/etc/passwd")
+	scanner := bufio.NewScanner(passwd)
+	for scanner.Scan() {
+		line := scanner.Text()
+		user := strings.Split(line, ":")
+		if len(user) > 0 {
+			app.userNameArray = append(app.userNameArray, user[0])
+		}
+	}
+
 	// Фиксируем текущее количество видимых строк в терминале (-1 заголовок)
 	if v, err := g.View("services"); err == nil {
 		_, viewHeight := v.Size()
@@ -179,8 +201,8 @@ func main() {
 	// Устанавливаем фокус на окно с журналами по умолчанию
 	g.SetCurrentView("filterList")
 
-	// Горутина для автоматического обновления вывода журнала
-	go app.updateLogOutput(5)
+	// Горутина для автоматического обновления вывода журнала каждын 2-e секунды
+	go app.updateLogOutput(2)
 
 	// Запус GUI
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
@@ -1029,95 +1051,123 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 	}
 	if newUpdate {
 		app.lastLogPath = logFullPath
+		// Фиксируем новую дату изменения и размер для выбранного файла
+		fileInfo, err := os.Stat(logFullPath)
+		if err != nil {
+			return
+		}
+		fileModTime := fileInfo.ModTime()
+		fileSize := fileInfo.Size()
+		app.lastDateUpdateFile = fileModTime
+		app.lastSizeFile = fileSize
+		app.updateFile = true
 	} else {
 		logFullPath = app.lastLogPath
+		// Проверяем дату изменения
+		fileInfo, err := os.Stat(logFullPath)
+		if err != nil {
+			return
+		}
+		fileModTime := fileInfo.ModTime()
+		fileSize := fileInfo.Size()
+		// Обновлять файл в горутине, только если есть изменения (дата модификации и размер)
+		if fileModTime != app.lastDateUpdateFile || fileSize != app.lastSizeFile {
+			app.lastDateUpdateFile = fileModTime
+			app.lastSizeFile = fileSize
+			app.updateFile = true
+		} else {
+			app.updateFile = false
+		}
 	}
-	// Читаем архивные логи (decompress + stdout)
-	if strings.HasSuffix(logFullPath, ".gz") {
-		cmdGzip := exec.Command("gzip", "-dc", logFullPath)
-		cmdTail := exec.Command("tail", "-n", app.logViewCount)
-		pipe, err := cmdGzip.StdoutPipe()
-		if err != nil {
-			log.Fatalf("Error creating pipe: %v", err)
+	// Читаем файл, толькое если были изменения
+	if app.updateFile {
+		// Читаем архивные логи (decompress + stdout)
+		if strings.HasSuffix(logFullPath, ".gz") {
+			cmdGzip := exec.Command("gzip", "-dc", logFullPath)
+			cmdTail := exec.Command("tail", "-n", app.logViewCount)
+			pipe, err := cmdGzip.StdoutPipe()
+			if err != nil {
+				log.Fatalf("Error creating pipe: %v", err)
+			}
+			// Стандартный вывод gzip передаем в stdin tail
+			cmdTail.Stdin = pipe
+			out, err := cmdTail.StdoutPipe()
+			if err != nil {
+				log.Fatalf("Error creating stdout pipe for tail: %v", err)
+			}
+			// Запуск команд
+			if err := cmdGzip.Start(); err != nil {
+				log.Fatalf("Error starting gzip: %v", err)
+			}
+			if err := cmdTail.Start(); err != nil {
+				log.Fatalf("Error starting tail: %v", err)
+			}
+			// Чтение вывода
+			output, err := io.ReadAll(out)
+			if err != nil {
+				log.Fatalf("Error reading output from tail: %v", err)
+			}
+			// Ожидание завершения команд
+			if err := cmdGzip.Wait(); err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, "\033[31mError reading archive log using gzip tool", err, "\033[0m")
+				return
+			}
+			if err := cmdTail.Wait(); err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, "\033[31mError reading log using tail tool", err, "\033[0m")
+				return
+			}
+			// Выводим содержимое
+			app.currentLogLines = strings.Split(string(output), "\n")
+			// Читаем бинарные файлы с помощью last/lastb
+		} else if strings.HasSuffix(logFullPath, "wtmp") {
+			cmd := exec.Command("last", "-f", logFullPath)
+			output, err := cmd.Output()
+			if err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, "\033[31mError reading log using last tool", err, "\033[0m")
+				return
+			}
+			app.currentLogLines = strings.Split(string(output), "\n")
+		} else if strings.HasSuffix(logFullPath, "btmp") {
+			cmd := exec.Command("lastb", "-f", logFullPath)
+			output, err := cmd.Output()
+			if err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, "\033[31mError reading log using lastb tool", err, "\033[0m")
+				return
+			}
+			app.currentLogLines = strings.Split(string(output), "\n")
+		} else if strings.HasSuffix(logFullPath, "lastlog") {
+			cmd := exec.Command("lastlog")
+			output, err := cmd.Output()
+			if err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, "\033[31mError reading log using lastlog tool", err, "\033[0m")
+				return
+			}
+			app.currentLogLines = strings.Split(string(output), "\n")
+		} else {
+			cmd := exec.Command("tail", "-n", app.logViewCount, logFullPath)
+			output, err := cmd.Output()
+			if err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, "\033[31mError reading log using tail tool", err, "\033[0m")
+				return
+			}
+			app.currentLogLines = strings.Split(string(output), "\n")
 		}
-		// Стандартный вывод gzip передаем в stdin tail
-		cmdTail.Stdin = pipe
-		out, err := cmdTail.StdoutPipe()
-		if err != nil {
-			log.Fatalf("Error creating stdout pipe for tail: %v", err)
-		}
-		// Запуск команд
-		if err := cmdGzip.Start(); err != nil {
-			log.Fatalf("Error starting gzip: %v", err)
-		}
-		if err := cmdTail.Start(); err != nil {
-			log.Fatalf("Error starting tail: %v", err)
-		}
-		// Чтение вывода
-		output, err := io.ReadAll(out)
-		if err != nil {
-			log.Fatalf("Error reading output from tail: %v", err)
-		}
-		// Ожидание завершения команд
-		if err := cmdGzip.Wait(); err != nil {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading archive log using gzip tool", err, "\033[0m")
-			return
-		}
-		if err := cmdTail.Wait(); err != nil {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log using tail tool", err, "\033[0m")
-			return
-		}
-		// Выводим содержимое
-		app.currentLogLines = strings.Split(string(output), "\n")
-		// Читаем бинарные файлы с помощью last/lastb
-	} else if strings.HasSuffix(logFullPath, "wtmp") {
-		cmd := exec.Command("last", "-f", logFullPath)
-		output, err := cmd.Output()
-		if err != nil {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log using last tool", err, "\033[0m")
-			return
-		}
-		app.currentLogLines = strings.Split(string(output), "\n")
-	} else if strings.HasSuffix(logFullPath, "btmp") {
-		cmd := exec.Command("lastb", "-f", logFullPath)
-		output, err := cmd.Output()
-		if err != nil {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log using lastb tool", err, "\033[0m")
-			return
-		}
-		app.currentLogLines = strings.Split(string(output), "\n")
-	} else if strings.HasSuffix(logFullPath, "lastlog") {
-		cmd := exec.Command("lastlog")
-		output, err := cmd.Output()
-		if err != nil {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log using lastlog tool", err, "\033[0m")
-			return
-		}
-		app.currentLogLines = strings.Split(string(output), "\n")
-	} else {
-		cmd := exec.Command("tail", "-n", app.logViewCount, logFullPath)
-		output, err := cmd.Output()
-		if err != nil {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log using tail tool", err, "\033[0m")
-			return
-		}
-		app.currentLogLines = strings.Split(string(output), "\n")
+		app.updateDelimiter(newUpdate, g)
+		// app.filterText = ""
+		app.applyFilter(false)
 	}
-	app.updateDelimiter(newUpdate, g)
-	// app.filterText = ""
-	app.applyFilter(false)
 }
 
 // ---------------------------------------- Docker/Podman ----------------------------------------
@@ -1600,7 +1650,7 @@ func (app *App) applyFilter(color bool) {
 		// if err == nil {
 		// 	app.filteredLogLines = tailspinFormatted
 		// }
-		// Пропускаем вывод после фильтрации построчно для покраски
+		// Пропускаем вывод построчно после фильтрации для покраски
 		var colorLogLines []string
 		for _, line := range app.filteredLogLines {
 			colorLine := app.lineColor(line)
@@ -1658,6 +1708,15 @@ func (app *App) replaceWordLower(word, keyword, color string) string {
 	})
 }
 
+func (app *App) containsUser(searchWord string) bool {
+	for _, user := range app.userNameArray {
+		if user == searchWord {
+			return true
+		}
+	}
+	return false
+}
+
 // Функция для покраски словосочетаний
 func (app *App) wordColor(inputWord string) string {
 	var coloredWord string
@@ -1671,12 +1730,10 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "error", "\033[31m")
 	case strings.Contains(inputWordLower, "erro"):
 		coloredWord = app.replaceWordLower(inputWord, "erro", "\033[31m")
-	case strings.Contains(inputWordLower, "err"):
+	case strings.HasPrefix(inputWordLower, "err"):
 		coloredWord = app.replaceWordLower(inputWord, "err", "\033[31m")
 	case strings.Contains(inputWordLower, "critical"):
 		coloredWord = app.replaceWordLower(inputWord, "critical", "\033[31m")
-	case strings.Contains(inputWordLower, "warning"):
-		coloredWord = app.replaceWordLower(inputWord, "warning", "\033[31m")
 	case strings.Contains(inputWordLower, "failed"):
 		coloredWord = app.replaceWordLower(inputWord, "failed", "\033[31m")
 	case strings.Contains(inputWordLower, "fatal"):
@@ -1686,9 +1743,7 @@ func (app *App) wordColor(inputWord string) string {
 	// Зеленый
 	case strings.Contains(inputWordLower, "stdout"):
 		coloredWord = app.replaceWordLower(inputWord, "stdout", "\033[32m")
-	case strings.HasPrefix(inputWordLower, "[ok"):
-		coloredWord = app.replaceWordLower(inputWord, "ok", "\033[32m")
-	case strings.HasPrefix(inputWordLower, "ok"):
+	case strings.Contains(inputWordLower, "[ok]"):
 		coloredWord = app.replaceWordLower(inputWord, "ok", "\033[32m")
 	case strings.Contains(inputWordLower, "information"):
 		coloredWord = app.replaceWordLower(inputWord, "information", "\033[32m")
@@ -1706,9 +1761,33 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "active", "\033[32m")
 	case strings.Contains(inputWordLower, "true"):
 		coloredWord = app.replaceWordLower(inputWord, "true", "\033[32m")
-	// Голубой
+	// Пурпурный
+	case strings.HasPrefix(inputWord, "http://"):
+		coloredWord = strings.ReplaceAll(inputWord, inputWord, "\033[35m"+inputWord+"\033[0m")
+	case strings.HasPrefix(inputWord, "https://"):
+		coloredWord = strings.ReplaceAll(inputWord, inputWord, "\033[35m"+inputWord+"\033[0m")
+	case app.ipAddress.MatchString(inputWord):
+		coloredWord = app.ipAddress.ReplaceAllStringFunc(inputWord, func(match string) string {
+			return "\033[35m" + match + "\033[0m"
+		})
+	case strings.Contains(inputWordLower, app.hostName):
+		coloredWord = app.replaceWordLower(inputWord, app.hostName, "\033[35m")
+	case strings.Contains(inputWordLower, app.userName):
+		coloredWord = app.replaceWordLower(inputWord, app.userName, "\033[35m")
+	case app.containsUser(inputWord):
+		coloredWord = app.replaceWordLower(inputWord, inputWord, "\033[35m")
+	// Синий
 	case strings.Contains(inputWordLower, "info"):
-		coloredWord = app.replaceWordLower(inputWord, "info", "\033[34m")
+		coloredWord = app.replaceWordLower(inputWord, "info", "\033[36m")
+	case strings.Contains(inputWordLower, "level"):
+		coloredWord = app.replaceWordLower(inputWord, "level", "\033[36m")
+	case strings.Contains(inputWordLower, "warning"):
+		coloredWord = app.replaceWordLower(inputWord, "warning", "\033[36m")
+	case strings.HasPrefix(inputWordLower, "warn"):
+		coloredWord = app.replaceWordLower(inputWord, "warn", "\033[31m")
+	// Голубой
+	case strings.Contains(inputWord, "⎯"):
+		coloredWord = app.replaceWordLower(inputWord, "⎯", "\033[34m")
 	case app.dateTimeRegex.MatchString(inputWord):
 		coloredWord = app.dateTimeRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
 			return "\033[34m" + match + "\033[0m"
@@ -1727,11 +1806,7 @@ func (app *App) wordColor(inputWord string) string {
 	return coloredWord
 }
 
-// Добавить прверку на буквы (не символы)
-// Регулярки для дат
-// Разбить еще строки на запятые для json
-
-// Функция для покраски вывода через tailsping
+// Функция для покраски вывода через процесс tailsping
 func (app *App) processTailspin(formattedLines []string) ([]string, error) {
 	var tailspiCommand string = "tailspin"
 	// Проверяем, что tailspin установлен в системе
@@ -1974,17 +2049,26 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextDockerContainer(v, 1)
 	})
-	// Быстрое пролистывание (через 10 записей) Shift+Down
+	// Быстрое пролистывание вниз через 10 и 100 записей (<Shift/Alt>+Down)
 	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 10)
 	})
 	app.gui.SetKeybinding("varLogs", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextFileName(v, 10)
 	})
-	app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+	app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextDockerContainer(v, 10)
 	})
-	// Пролистывание вверх
+	app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextService(v, 100)
+	})
+	app.gui.SetKeybinding("varLogs", gocui.KeyArrowDown, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextFileName(v, 100)
+	})
+	app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextDockerContainer(v, 100)
+	})
+	// Пролистывание вверх (<Shift/Alt>+Up)
 	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 1)
 	})
@@ -1994,15 +2078,23 @@ func (app *App) setupKeybindings() error {
 	app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevDockerContainer(v, 1)
 	})
-	// Shift+Up
 	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 10)
 	})
 	app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevFileName(v, 10)
 	})
-	app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+	app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevDockerContainer(v, 10)
+	})
+	app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevService(v, 100)
+	})
+	app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevFileName(v, 100)
+	})
+	app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevDockerContainer(v, 100)
 	})
 	// Переключение выбора журналов для journalctl (systemd)
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowRight, gocui.ModNone, app.setUnitListRight); err != nil {
