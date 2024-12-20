@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -46,6 +45,7 @@ type App struct {
 	hostName      string   // текущее имя хоста для покраски в логах
 	userName      string   // текущее имя пользователя
 	userNameArray []string // список всех пользователей
+	rootDirArray  []string // список всех корневых каталогов
 
 	selectUnits                  string // название журнала (UNIT/USER_UNIT)
 	selectPath                   string // путь к логам (/var/log/)
@@ -103,10 +103,15 @@ type App struct {
 	dockerFrameColor      gocui.Attribute
 
 	// Регулярные выражения для покраски строк
-	ipAddress     *regexp.Regexp
-	dateRegex     *regexp.Regexp
-	timeRegex     *regexp.Regexp
-	dateTimeRegex *regexp.Regexp
+	trimHttpRegex        *regexp.Regexp
+	trimHttpsRegex       *regexp.Regexp
+	trimPrefixPathRegex  *regexp.Regexp
+	trimPostfixPathRegex *regexp.Regexp
+	syslogUnitRegex      *regexp.Regexp
+	dateTimeRegex        *regexp.Regexp
+	dateRegex            *regexp.Regexp
+	timeRegex            *regexp.Regexp
+	ipAddressRegex       *regexp.Regexp
 }
 
 func main() {
@@ -127,10 +132,15 @@ func main() {
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
 		autoScroll:                   true,
-		ipAddress:                    regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`),
-		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2})\b`),
-		timeRegex:                    regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2})?\b`),
-		dateTimeRegex:                regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\b`),
+		trimHttpRegex:                regexp.MustCompile(`^.+http://|[^a-zA-Z0-9/.-_?&=].+$`),                                   // исключаем все до http:// (включительно) в начале строки
+		trimHttpsRegex:               regexp.MustCompile(`^.+https://|[^a-zA-Z0-9/.-_?&=].+$`),                                  // и после любого символа, который не может содержать в себе url
+		trimPrefixPathRegex:          regexp.MustCompile(`^[^/]+`),                                                              // иключаем все до первого символа слэша (не включительно)
+		trimPostfixPathRegex:         regexp.MustCompile(`[=:'"(){}\[\]]+.*$`),                                                  // исключаем все после первого символа, который не должен (но может) содержаться в пути
+		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_]+\[\d+\]\:$`),                                              // dockerd[1341]:
+		dateTimeRegex:                regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`), // YYYY-MM-DDTHH:MM:SS.MS+HH:MM
+		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2})\b`),       // DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD
+		timeRegex:                    regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2})?\b`),                                          // HH:MM || HH:MM:SS
+		ipAddressRegex:               regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`),                                         // 255.255.255.255
 	}
 	// Создаем GUI
 	g, err := gocui.NewGui(gocui.OutputNormal, true) // 2-й параметр для форка
@@ -163,9 +173,12 @@ func main() {
 	// Определяем используемую ОС (linux/darwin/windows)
 	app.getOS = runtime.GOOS
 
+	// Определяем переменные и массивы для покраски вывода
+	// Текущее имя хоста и пользователя
 	app.hostName, _ = os.Hostname()
 	currentUser, _ := user.Current()
 	app.userName = currentUser.Username
+	// Имена пользователей
 	passwd, _ := os.Open("/etc/passwd")
 	scanner := bufio.NewScanner(passwd)
 	for scanner.Scan() {
@@ -173,6 +186,13 @@ func main() {
 		user := strings.Split(line, ":")
 		if len(user) > 0 {
 			app.userNameArray = append(app.userNameArray, user[0])
+		}
+	}
+	// Список корневых каталогов (ls -d /*/)
+	files, _ := os.ReadDir("/")
+	for _, file := range files {
+		if file.IsDir() {
+			app.rootDirArray = append(app.rootDirArray, filepath.Join("/", file.Name())+"/")
 		}
 	}
 
@@ -876,7 +896,7 @@ func (app *App) loadFiles(logPath string) {
 			// Берем первое и последнее слово
 			firstWord := words[0]
 			lastWord := words[len(words)-1]
-			logName = "\x1b[0;33m" + firstWord + "\033[0m" + ": " + lastWord
+			logName = "\x1b[0;44m" + firstWord + "\033[0m" + ": " + lastWord
 		}
 		// Получаем информацию о файле
 		// cmd := exec.Command("bash", "-c", "stat --format='%y' /var/log/apache2/access.log | awk '{print $1}' | awk -F- '{print $3\".\"$2\".\"$1}'")
@@ -909,7 +929,7 @@ func (app *App) loadFiles(logPath string) {
 					if strings.HasPrefix(line, "c") {
 						// Удаляем префикс
 						processName := line[1:]
-						logName = "\x1b[0;33m" + processName + "\033[0m" + ": " + logName
+						logName = "\x1b[0;44m" + processName + "\033[0m" + ": " + logName
 						break
 					}
 				}
@@ -1620,7 +1640,7 @@ func (app *App) applyFilter(color bool) {
 							}
 						}
 						// Заменяем временные символы на ANSI escape-последовательности
-						originalLine = strings.ReplaceAll(originalLine, startColor, "\x1b[0;33m")
+						originalLine = strings.ReplaceAll(originalLine, startColor, "\x1b[0;44m")
 						originalLine = strings.ReplaceAll(originalLine, endColor, "\033[0m")
 						app.filteredLogLines = append(app.filteredLogLines, originalLine)
 					}
@@ -1632,24 +1652,19 @@ func (app *App) applyFilter(color bool) {
 						// Находим все найденные совпадени
 						matches := regex.FindAllString(originalLine, -1)
 						// Красим только первое найденное совпадение
-						originalLine = strings.ReplaceAll(originalLine, matches[0], "\x1b[0;33m"+matches[0]+"\033[0m")
+						originalLine = strings.ReplaceAll(originalLine, matches[0], "\x1b[0;44m"+matches[0]+"\033[0m")
 						app.filteredLogLines = append(app.filteredLogLines, originalLine)
 					}
 					// Default (точный поиск с учетом регистра)
 				} else {
 					filter = app.filterText
 					if filter == "" || strings.Contains(line, filter) {
-						lineColor := strings.ReplaceAll(line, filter, "\x1b[0;33m"+filter+"\033[0m")
+						lineColor := strings.ReplaceAll(line, filter, "\x1b[0;44m"+filter+"\033[0m")
 						app.filteredLogLines = append(app.filteredLogLines, lineColor)
 					}
 				}
 			}
 		}
-		// Пропускаем вывод после фильтрации через tailspin для покраски
-		// tailspinFormatted, err := app.processTailspin(app.filteredLogLines)
-		// if err == nil {
-		// 	app.filteredLogLines = tailspinFormatted
-		// }
 		// Пропускаем вывод построчно после фильтрации для покраски
 		var colorLogLines []string
 		for _, line := range app.filteredLogLines {
@@ -1683,8 +1698,8 @@ func (app *App) lineColor(inputLine string) string {
 	var colorLine string
 	var filterColor bool = false
 	for _, word := range words {
-		// Исключаем строки с покраской при поиске
-		if strings.Contains(word, "\x1b[0;33m") {
+		// Исключаем строки с покраской при поиске (Background)
+		if strings.Contains(word, "\x1b[0;44m") {
 			filterColor = true
 		}
 		// Красим слово в функции
@@ -1708,9 +1723,20 @@ func (app *App) replaceWordLower(word, keyword, color string) string {
 	})
 }
 
+// Поиск пользователей
 func (app *App) containsUser(searchWord string) bool {
 	for _, user := range app.userNameArray {
 		if user == searchWord {
+			return true
+		}
+	}
+	return false
+}
+
+// Поиск корневых директорий
+func (app *App) containsPath(searchWord string) bool {
+	for _, dir := range app.rootDirArray {
+		if strings.Contains(searchWord, dir) {
 			return true
 		}
 	}
@@ -1723,24 +1749,7 @@ func (app *App) wordColor(inputWord string) string {
 	// Опускаем регистр слова
 	inputWordLower := strings.ToLower(inputWord)
 	switch {
-	// Красный
-	case strings.Contains(inputWordLower, "stderr"):
-		coloredWord = app.replaceWordLower(inputWord, "stderr", "\033[31m")
-	case strings.Contains(inputWordLower, "error"):
-		coloredWord = app.replaceWordLower(inputWord, "error", "\033[31m")
-	case strings.Contains(inputWordLower, "erro"):
-		coloredWord = app.replaceWordLower(inputWord, "erro", "\033[31m")
-	case strings.HasPrefix(inputWordLower, "err"):
-		coloredWord = app.replaceWordLower(inputWord, "err", "\033[31m")
-	case strings.Contains(inputWordLower, "critical"):
-		coloredWord = app.replaceWordLower(inputWord, "critical", "\033[31m")
-	case strings.Contains(inputWordLower, "failed"):
-		coloredWord = app.replaceWordLower(inputWord, "failed", "\033[31m")
-	case strings.Contains(inputWordLower, "fatal"):
-		coloredWord = app.replaceWordLower(inputWord, "fatal", "\033[31m")
-	case strings.Contains(inputWordLower, "false"):
-		coloredWord = app.replaceWordLower(inputWord, "false", "\033[31m")
-	// Зеленый
+	// Зеленый (успех) [32m]
 	case strings.Contains(inputWordLower, "stdout"):
 		coloredWord = app.replaceWordLower(inputWord, "stdout", "\033[32m")
 	case strings.Contains(inputWordLower, "[ok]"):
@@ -1761,22 +1770,30 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "active", "\033[32m")
 	case strings.Contains(inputWordLower, "true"):
 		coloredWord = app.replaceWordLower(inputWord, "true", "\033[32m")
-	// Пурпурный
-	case strings.HasPrefix(inputWord, "http://"):
-		coloredWord = strings.ReplaceAll(inputWord, inputWord, "\033[35m"+inputWord+"\033[0m")
-	case strings.HasPrefix(inputWord, "https://"):
-		coloredWord = strings.ReplaceAll(inputWord, inputWord, "\033[35m"+inputWord+"\033[0m")
-	case app.ipAddress.MatchString(inputWord):
-		coloredWord = app.ipAddress.ReplaceAllStringFunc(inputWord, func(match string) string {
-			return "\033[35m" + match + "\033[0m"
-		})
-	case strings.Contains(inputWordLower, app.hostName):
-		coloredWord = app.replaceWordLower(inputWord, app.hostName, "\033[35m")
-	case strings.Contains(inputWordLower, app.userName):
-		coloredWord = app.replaceWordLower(inputWord, app.userName, "\033[35m")
-	case app.containsUser(inputWord):
-		coloredWord = app.replaceWordLower(inputWord, inputWord, "\033[35m")
-	// Синий
+	// Красный (ошибки) [31m]
+	case strings.Contains(inputWordLower, "stderr"):
+		coloredWord = app.replaceWordLower(inputWord, "stderr", "\033[31m")
+	case strings.Contains(inputWordLower, "error"):
+		coloredWord = app.replaceWordLower(inputWord, "error", "\033[31m")
+	case strings.Contains(inputWordLower, "erro"):
+		coloredWord = app.replaceWordLower(inputWord, "erro", "\033[31m")
+	case strings.HasPrefix(inputWordLower, "err"):
+		coloredWord = app.replaceWordLower(inputWord, "err", "\033[31m")
+	case strings.Contains(inputWordLower, "critical"):
+		coloredWord = app.replaceWordLower(inputWord, "critical", "\033[31m")
+	case strings.Contains(inputWordLower, "failed"):
+		coloredWord = app.replaceWordLower(inputWord, "failed", "\033[31m")
+	case strings.Contains(inputWordLower, "fatal"):
+		coloredWord = app.replaceWordLower(inputWord, "fatal", "\033[31m")
+	case strings.Contains(inputWordLower, "false"):
+		coloredWord = app.replaceWordLower(inputWord, "false", "\033[31m")
+	case strings.Contains(inputWordLower, "null"):
+		coloredWord = app.replaceWordLower(inputWord, "null", "\033[31m")
+	case strings.Contains(inputWordLower, "none"):
+		coloredWord = app.replaceWordLower(inputWord, "none", "\033[31m")
+	case strings.Contains(inputWordLower, "delete"):
+		coloredWord = app.replaceWordLower(inputWord, "delete", "\033[31m")
+	// Синий (статусы) [36m]
 	case strings.Contains(inputWordLower, "info"):
 		coloredWord = app.replaceWordLower(inputWord, "info", "\033[36m")
 	case strings.Contains(inputWordLower, "level"):
@@ -1784,10 +1801,30 @@ func (app *App) wordColor(inputWord string) string {
 	case strings.Contains(inputWordLower, "warning"):
 		coloredWord = app.replaceWordLower(inputWord, "warning", "\033[36m")
 	case strings.HasPrefix(inputWordLower, "warn"):
-		coloredWord = app.replaceWordLower(inputWord, "warn", "\033[31m")
-	// Голубой
-	case strings.Contains(inputWord, "⎯"):
-		coloredWord = app.replaceWordLower(inputWord, "⎯", "\033[34m")
+		coloredWord = app.replaceWordLower(inputWord, "warn", "\033[36m")
+	// Пурпурный (пути: url и директории) [35m]
+	case strings.Contains(inputWord, "http://"):
+		cleanedWord := app.trimHttpRegex.ReplaceAllString(inputWord, "")
+		coloredWord = strings.ReplaceAll(inputWord, "http://"+cleanedWord, "\033[35m"+"http://"+cleanedWord+"\033[0m")
+	case strings.Contains(inputWord, "https://"):
+		cleanedWord := app.trimHttpsRegex.ReplaceAllString(inputWord, "")
+		coloredWord = strings.ReplaceAll(inputWord, "https://"+cleanedWord, "\033[35m"+"https://"+cleanedWord+"\033[0m")
+	case app.containsPath(inputWord):
+		cleanedWord := app.trimPrefixPathRegex.ReplaceAllString(inputWord, "")
+		cleanedWord = app.trimPostfixPathRegex.ReplaceAllString(cleanedWord, "")
+		coloredWord = strings.ReplaceAll(inputWord, cleanedWord, "\033[35m"+cleanedWord+"\033[0m")
+	case app.syslogUnitRegex.MatchString(inputWord):
+		// Красим только имя службы
+		cleanedWord := strings.Split(inputWord, "[")[0]
+		coloredWord = strings.ReplaceAll(inputWord, cleanedWord, "\033[35m"+cleanedWord+"\033[0m")
+	// Желтый (известные имена: hostname и username) [33m]
+	case strings.Contains(inputWordLower, app.hostName):
+		coloredWord = app.replaceWordLower(inputWord, app.hostName, "\033[33m")
+	case strings.Contains(inputWordLower, app.userName):
+		coloredWord = app.replaceWordLower(inputWord, app.userName, "\033[33m")
+	case app.containsUser(inputWord):
+		coloredWord = app.replaceWordLower(inputWord, inputWord, "\033[33m")
+	// Голубой (цифры: date/time/ip) [34m]
 	case app.dateTimeRegex.MatchString(inputWord):
 		coloredWord = app.dateTimeRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
 			return "\033[34m" + match + "\033[0m"
@@ -1800,38 +1837,17 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.timeRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
 			return "\033[34m" + match + "\033[0m"
 		})
+	case app.ipAddressRegex.MatchString(inputWord):
+		coloredWord = app.ipAddressRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
+			return "\033[34m" + match + "\033[0m"
+		})
+	// Update date delimiter
+	case strings.Contains(inputWord, "⎯"):
+		coloredWord = app.replaceWordLower(inputWord, "⎯", "\033[34m")
 	default:
 		coloredWord = inputWord
 	}
 	return coloredWord
-}
-
-// Функция для покраски вывода через процесс tailsping
-func (app *App) processTailspin(formattedLines []string) ([]string, error) {
-	var tailspiCommand string = "tailspin"
-	// Проверяем, что tailspin установлен в системе
-	tailspinVersion := exec.Command(tailspiCommand, "--version")
-	err := tailspinVersion.Run()
-	if err != nil {
-		tailspiCommand = "tspin"
-		tailspinVersion = exec.Command(tailspiCommand, "--version")
-		err = tailspinVersion.Run()
-		if err != nil {
-			return nil, err
-		}
-	}
-	// Собираем все строки в одну строку
-	input := strings.Join(formattedLines, "\n")
-	// Передаем строки в стандартный ввод команды
-	cmd := exec.Command(tailspiCommand, "-p")
-	cmd.Stdin = strings.NewReader(input)
-	// Буфер для захвата вывода команды
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	// Запускаем команду
-	cmd.Run()
-	// Разделяем полученный вывод вывод на строки и сохраняем их в currentLogLines
-	return strings.Split(out.String(), "\n"), nil
 }
 
 // Функция для обновления вывода журнала (параметр для прокрутки в самый вниз)
