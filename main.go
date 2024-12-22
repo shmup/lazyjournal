@@ -133,14 +133,14 @@ func main() {
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
 		autoScroll:                   true,
-		trimHttpRegex:                regexp.MustCompile(`^.+http://|[^a-zA-Z0-9/.-_?&=].+$`),                                   // исключаем все до http:// (включительно) в начале строки
-		trimHttpsRegex:               regexp.MustCompile(`^.+https://|[^a-zA-Z0-9/.-_?&=].+$`),                                  // и после любого символа, который не может содержать в себе url
+		trimHttpRegex:                regexp.MustCompile(`^.*http://|[^a-zA-Z0-9/.-_?&=].*$`),                                   // исключаем все до http:// (включительно) в начале строки
+		trimHttpsRegex:               regexp.MustCompile(`^.*https://|[^a-zA-Z0-9/.-_?&=].*$`),                                  // и после любого символа, который не может содержать в себе url
 		trimPrefixPathRegex:          regexp.MustCompile(`^[^/]+`),                                                              // иключаем все до первого символа слэша (не включительно)
 		trimPostfixPathRegex:         regexp.MustCompile(`[=:'"(){}\[\]]+.*$`),                                                  // исключаем все после первого символа, который не должен (но может) содержаться в пути
 		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]\:$`),                                             // unit_daemon-name.service[1341]:
 		dateTimeRegex:                regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`), // YYYY-MM-DDTHH:MM:SS.MS+HH:MM
 		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2})\b`),       // DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD
-		timeRegex:                    regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2})?\b`),                                          // HH:MM || HH:MM:SS
+		timeRegex:                    regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2}(,\d+)?)?\b`),                                   // H:MM || HH:MM || HH:MM:SS || HH:MM:SS,XXX
 		ipAddressRegex:               regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`),                                         // 255.255.255.255
 	}
 	// Создаем GUI
@@ -1144,7 +1144,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			// Выводим содержимое
 			app.currentLogLines = strings.Split(string(output), "\n")
 			// Читаем бинарные файлы с помощью last/lastb
-		} else if strings.HasSuffix(logFullPath, "wtmp") {
+		} else if strings.Contains(logFullPath, "wtmp") {
 			cmd := exec.Command("last", "-f", logFullPath)
 			output, err := cmd.Output()
 			if err != nil {
@@ -1153,8 +1153,22 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				fmt.Fprintln(v, "\033[31mError reading log using last tool", err, "\033[0m")
 				return
 			}
-			app.currentLogLines = strings.Split(string(output), "\n")
-		} else if strings.HasSuffix(logFullPath, "btmp") {
+			// Разбиваем вывод на строки
+			lines := strings.Split(string(output), "\n")
+			var filteredLines []string
+			// Фильтруем строки, исключая последнюю строку и пустые строки
+			for _, line := range lines {
+				trimmedLine := strings.TrimSpace(line)
+				if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "wtmp begins") {
+					filteredLines = append(filteredLines, trimmedLine)
+				}
+			}
+			// Переворачиваем порядок строк
+			for i, j := 0, len(filteredLines)-1; i < j; i, j = i+1, j-1 {
+				filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
+			}
+			app.currentLogLines = filteredLines
+		} else if strings.Contains(logFullPath, "btmp") {
 			cmd := exec.Command("lastb", "-f", logFullPath)
 			output, err := cmd.Output()
 			if err != nil {
@@ -1163,7 +1177,18 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				fmt.Fprintln(v, "\033[31mError reading log using lastb tool", err, "\033[0m")
 				return
 			}
-			app.currentLogLines = strings.Split(string(output), "\n")
+			lines := strings.Split(string(output), "\n")
+			var filteredLines []string
+			for _, line := range lines {
+				trimmedLine := strings.TrimSpace(line)
+				if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "btmp begins") {
+					filteredLines = append(filteredLines, trimmedLine)
+				}
+			}
+			for i, j := 0, len(filteredLines)-1; i < j; i, j = i+1, j-1 {
+				filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
+			}
+			app.currentLogLines = filteredLines
 		} else if strings.HasSuffix(logFullPath, "lastlog") {
 			cmd := exec.Command("lastlog")
 			output, err := cmd.Output()
@@ -1962,9 +1987,11 @@ func (app *App) wordColor(inputWord string) string {
 		unitId := strings.ReplaceAll(unitSplit[1], "]:", "")
 		coloredWord = strings.ReplaceAll(inputWord, inputWord, "\033[36m"+unitName+"\033[0m"+"["+"\033[34m"+unitId+"\033[0m"+"]:")
 	case strings.HasPrefix(inputWordLower, "kernel:"):
-		coloredWord = app.replaceWordLower(inputWord, "kernel", "\033[34m")
+		coloredWord = app.replaceWordLower(inputWord, "kernel", "\033[36m")
 	case strings.HasPrefix(inputWordLower, "rsyslogd:"):
-		coloredWord = app.replaceWordLower(inputWord, "rsyslogd", "\033[34m")
+		coloredWord = app.replaceWordLower(inputWord, "rsyslogd", "\033[36m")
+	case strings.HasPrefix(inputWordLower, "sudo:"):
+		coloredWord = app.replaceWordLower(inputWord, "sudo", "\033[36m")
 	default:
 		coloredWord = inputWord
 	}
