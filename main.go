@@ -108,11 +108,13 @@ type App struct {
 	trimHttpsRegex       *regexp.Regexp
 	trimPrefixPathRegex  *regexp.Regexp
 	trimPostfixPathRegex *regexp.Regexp
-	syslogUnitRegex      *regexp.Regexp
+	ipAddressRegex       *regexp.Regexp
+	macAddressRegex      *regexp.Regexp
+	hexByteRegex         *regexp.Regexp
 	dateTimeRegex        *regexp.Regexp
 	dateRegex            *regexp.Regexp
 	timeRegex            *regexp.Regexp
-	ipAddressRegex       *regexp.Regexp
+	syslogUnitRegex      *regexp.Regexp
 }
 
 func main() {
@@ -133,15 +135,17 @@ func main() {
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
 		autoScroll:                   true,
-		trimHttpRegex:                regexp.MustCompile(`^.*http://|[^a-zA-Z0-9/.-_?&=].*$`),                                   // исключаем все до http:// (включительно) в начале строки
-		trimHttpsRegex:               regexp.MustCompile(`^.*https://|[^a-zA-Z0-9/.-_?&=].*$`),                                  // и после любого символа, который не может содержать в себе url
-		trimPrefixPathRegex:          regexp.MustCompile(`^[^/]+`),                                                              // иключаем все до первого символа слэша (не включительно)
-		trimPostfixPathRegex:         regexp.MustCompile(`[=:'"(){}\[\]]+.*$`),                                                  // исключаем все после первого символа, который не должен (но может) содержаться в пути
-		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]\:$`),                                             // unit_daemon-name.service[1341]:
-		dateTimeRegex:                regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`), // YYYY-MM-DDTHH:MM:SS.MS+HH:MM
-		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2})\b`),       // DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD
-		timeRegex:                    regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2}(,\d+)?)?\b`),                                   // H:MM || HH:MM || HH:MM:SS || HH:MM:SS,XXX
-		ipAddressRegex:               regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`),                                         // 255.255.255.255
+		trimHttpRegex:                regexp.MustCompile(`^.*http://|([^a-zA-Z0-9/._?&=-].*)$`),                                    // исключаем все до http:// (включительно) в начале строки
+		trimHttpsRegex:               regexp.MustCompile(`^.*https://|([^a-zA-Z0-9/._?&=-].*)$`),                                   // и после любого символа, который не может содержать в себе url
+		trimPrefixPathRegex:          regexp.MustCompile(`^[^/]+`),                                                                 // иключаем все до первого символа слэша (не включительно)
+		trimPostfixPathRegex:         regexp.MustCompile(`[=:'"(){}\[\]]+.*$`),                                                     // исключаем все после первого символа, который не должен (но может) содержаться в пути
+		ipAddressRegex:               regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`),                                            // 255.255.255.255
+		macAddressRegex:              regexp.MustCompile(`\b([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b`),                                 // XX:XX:XX:XX:XX:XX
+		hexByteRegex:                 regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`),                                                     // Байты (или числа в шестнадцатеричном формате): 0x2 || 0xc0000001
+		dateTimeRegex:                regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`),    // YYYY-MM-DDTHH:MM:SS.MS+HH:MM
+		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d+\.\d+)\b`), // DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD || 5.709076
+		timeRegex:                    regexp.MustCompile(`\b\d{1,2}:\d{1,2}(:\d{1,2}([,.+]\d{3})?)?(:\d{1,2})?\b`),                 // H:MM || HH:MM || HH:MM:SS || XX:XX:XX:XX || HH:MM:SS,XXX || HH:MM:SS.XXX || HH:MM:SS+03
+		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]\:$`),                                                // unit_daemon-name.service[1341]:
 	}
 	// Создаем GUI
 	g, err := gocui.NewGui(gocui.OutputNormal, true) // 2-й параметр для форка
@@ -1864,6 +1868,10 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "stopped", "\033[31m")
 	case strings.Contains(inputWordLower, "stopping"):
 		coloredWord = app.replaceWordLower(inputWord, "stopping", "\033[31m")
+	case strings.Contains(inputWordLower, "disabled"):
+		coloredWord = app.replaceWordLower(inputWord, "disabled", "\033[31m")
+	case strings.Contains(inputWordLower, "disable"):
+		coloredWord = app.replaceWordLower(inputWord, "disable", "\033[31m")
 	case strings.Contains(inputWordLower, "false"):
 		coloredWord = app.replaceWordLower(inputWord, "false", "\033[31m")
 	case strings.Contains(inputWordLower, "null"):
@@ -1885,6 +1893,8 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "success", "\033[32m")
 	case strings.Contains(inputWordLower, "completed"):
 		coloredWord = app.replaceWordLower(inputWord, "completed", "\033[32m")
+	case strings.Contains(inputWordLower, "completing"):
+		coloredWord = app.replaceWordLower(inputWord, "completing", "\033[32m")
 	case strings.Contains(inputWordLower, "complete"):
 		coloredWord = app.replaceWordLower(inputWord, "complete", "\033[32m")
 	case strings.Contains(inputWordLower, "active"):
@@ -1901,47 +1911,18 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "finished", "\033[32m")
 	case strings.Contains(inputWordLower, "finish"):
 		coloredWord = app.replaceWordLower(inputWord, "finish", "\033[32m")
-	case strings.Contains(inputWordLower, "ready"):
-		coloredWord = app.replaceWordLower(inputWord, "ready", "\033[32m")
 	case strings.Contains(inputWordLower, "started"):
 		coloredWord = app.replaceWordLower(inputWord, "started", "\033[32m")
 	case strings.Contains(inputWordLower, "starting"):
 		coloredWord = app.replaceWordLower(inputWord, "starting", "\033[32m")
 	case strings.Contains(inputWordLower, "launched"):
 		coloredWord = app.replaceWordLower(inputWord, "launched", "\033[32m")
+	case strings.Contains(inputWordLower, "enabled"):
+		coloredWord = app.replaceWordLower(inputWord, "enabled", "\033[32m")
+	case strings.Contains(inputWordLower, "enable"):
+		coloredWord = app.replaceWordLower(inputWord, "enable", "\033[32m")
 	case strings.Contains(inputWordLower, "true"):
 		coloredWord = app.replaceWordLower(inputWord, "true", "\033[32m")
-	// Синий (статусы) [36m]
-	case strings.Contains(inputWordLower, "stdout"):
-		coloredWord = app.replaceWordLower(inputWord, "stdout", "\033[36m")
-	case strings.Contains(inputWordLower, "debug"):
-		coloredWord = app.replaceWordLower(inputWord, "debug", "\033[36m")
-	case strings.Contains(inputWordLower, "information"):
-		coloredWord = app.replaceWordLower(inputWord, "information", "\033[36m")
-	case strings.Contains(inputWordLower, "info"):
-		coloredWord = app.replaceWordLower(inputWord, "info", "\033[36m")
-	case strings.Contains(inputWordLower, "warning"):
-		coloredWord = app.replaceWordLower(inputWord, "warning", "\033[36m")
-	case strings.HasPrefix(inputWordLower, "warn"):
-		coloredWord = app.replaceWordLower(inputWord, "warn", "\033[36m")
-	case strings.HasPrefix(inputWordLower, "trace"):
-		coloredWord = app.replaceWordLower(inputWord, "trace", "\033[36m")
-	case strings.Contains(inputWordLower, "notice"):
-		coloredWord = app.replaceWordLower(inputWord, "notice", "\033[36m")
-	case strings.Contains(inputWordLower, "alert"):
-		coloredWord = app.replaceWordLower(inputWord, "alert", "\033[36m")
-	case strings.HasPrefix(inputWordLower, "paused"):
-		coloredWord = app.replaceWordLower(inputWord, "paused", "\033[36m")
-	case strings.HasPrefix(inputWordLower, "loading"):
-		coloredWord = app.replaceWordLower(inputWord, "loading", "\033[36m")
-	case strings.HasPrefix(inputWordLower, "loaded"):
-		coloredWord = app.replaceWordLower(inputWord, "loaded", "\033[36m")
-	case strings.Contains(inputWordLower, "reboot"):
-		coloredWord = app.replaceWordLower(inputWord, "reboot", "\033[36m")
-	case strings.Contains(inputWordLower, "restart"):
-		coloredWord = app.replaceWordLower(inputWord, "restart", "\033[36m")
-	case strings.Contains(inputWordLower, "level"):
-		coloredWord = app.replaceWordLower(inputWord, "level", "\033[36m")
 	// Пурпурный (url и директории) [35m]
 	case strings.Contains(inputWord, "http://"):
 		cleanedWord := app.trimHttpRegex.ReplaceAllString(inputWord, "")
@@ -1960,7 +1941,68 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, app.userName, "\033[33m")
 	case app.containsUser(inputWord):
 		coloredWord = app.replaceWordLower(inputWord, inputWord, "\033[33m")
-	// Голубой (цифры: date/time/ip) [34m]
+	// Синий (статусы) [36m]
+	case strings.Contains(inputWordLower, "stdout"):
+		coloredWord = app.replaceWordLower(inputWord, "stdout", "\033[36m")
+	case strings.Contains(inputWordLower, "debug"):
+		coloredWord = app.replaceWordLower(inputWord, "debug", "\033[36m")
+	case strings.Contains(inputWordLower, "normal"):
+		coloredWord = app.replaceWordLower(inputWord, "normal", "\033[36m")
+	case strings.Contains(inputWordLower, "information"):
+		coloredWord = app.replaceWordLower(inputWord, "information", "\033[36m")
+	case strings.Contains(inputWordLower, "info"):
+		coloredWord = app.replaceWordLower(inputWord, "info", "\033[36m")
+	case strings.Contains(inputWordLower, "warning"):
+		coloredWord = app.replaceWordLower(inputWord, "warning", "\033[36m")
+	case strings.HasPrefix(inputWordLower, "warn"):
+		coloredWord = app.replaceWordLower(inputWord, "warn", "\033[36m")
+	case strings.HasPrefix(inputWordLower, "trace"):
+		coloredWord = app.replaceWordLower(inputWord, "trace", "\033[36m")
+	case strings.Contains(inputWordLower, "notice"):
+		coloredWord = app.replaceWordLower(inputWord, "notice", "\033[36m")
+	case strings.Contains(inputWordLower, "alert"):
+		coloredWord = app.replaceWordLower(inputWord, "alert", "\033[36m")
+	case strings.Contains(inputWordLower, "loading"):
+		coloredWord = app.replaceWordLower(inputWord, "loading", "\033[36m")
+	case strings.Contains(inputWordLower, "loaded"):
+		coloredWord = app.replaceWordLower(inputWord, "loaded", "\033[36m")
+	case strings.Contains(inputWordLower, "installed"):
+		coloredWord = app.replaceWordLower(inputWord, "installed", "\033[36m")
+	case strings.Contains(inputWordLower, "listening"):
+		coloredWord = app.replaceWordLower(inputWord, "listening", "\033[36m")
+	case strings.Contains(inputWordLower, "listener"):
+		coloredWord = app.replaceWordLower(inputWord, "listener", "\033[36m")
+	case strings.Contains(inputWordLower, "paused"):
+		coloredWord = app.replaceWordLower(inputWord, "paused", "\033[36m")
+	case strings.Contains(inputWordLower, "skipping"):
+		coloredWord = app.replaceWordLower(inputWord, "skipping", "\033[36m")
+	case strings.Contains(inputWordLower, "skipped"):
+		coloredWord = app.replaceWordLower(inputWord, "skipped", "\033[36m")
+	case strings.Contains(inputWordLower, "missed"):
+		coloredWord = app.replaceWordLower(inputWord, "missed", "\033[36m")
+	case strings.Contains(inputWordLower, "missing"):
+		coloredWord = app.replaceWordLower(inputWord, "missing", "\033[36m")
+	case strings.Contains(inputWordLower, "reboot"):
+		coloredWord = app.replaceWordLower(inputWord, "reboot", "\033[36m")
+	case strings.Contains(inputWordLower, "restart"):
+		coloredWord = app.replaceWordLower(inputWord, "restart", "\033[36m")
+	case strings.Contains(inputWordLower, "authorization"):
+		coloredWord = app.replaceWordLower(inputWord, "authorization", "\033[36m")
+	case strings.Contains(inputWordLower, "level"):
+		coloredWord = app.replaceWordLower(inputWord, "level", "\033[36m")
+	// Голубой (цифры: ip/mac/date/time) [34m]
+	case app.ipAddressRegex.MatchString(inputWord):
+		coloredWord = app.ipAddressRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
+			return "\033[34m" + match + "\033[0m"
+		})
+	case app.macAddressRegex.MatchString(inputWord):
+		coloredWord = app.macAddressRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
+			return "\033[34m" + match + "\033[0m"
+		})
+	case app.hexByteRegex.MatchString(inputWord):
+		coloredWord = app.hexByteRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
+			return "\033[34m" + match + "\033[0m"
+		})
 	case app.dateTimeRegex.MatchString(inputWord):
 		coloredWord = app.dateTimeRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
 			return "\033[34m" + match + "\033[0m"
@@ -1973,13 +2015,9 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.timeRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
 			return "\033[34m" + match + "\033[0m"
 		})
-	case app.ipAddressRegex.MatchString(inputWord):
-		coloredWord = app.ipAddressRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
-			return "\033[34m" + match + "\033[0m"
-		})
 	// Update date delimiter
 	case strings.Contains(inputWord, "⎯"):
-		coloredWord = app.replaceWordLower(inputWord, "⎯", "\033[34m")
+		coloredWord = app.replaceWordLower(inputWord, "⎯", "\033[32m")
 	// Custom (Unix processes)
 	case app.syslogUnitRegex.MatchString(inputWord):
 		unitSplit := strings.Split(inputWord, "[")
@@ -2164,13 +2202,13 @@ func (app *App) updateDelimiter(newUpdate bool, g *gocui.Gui) {
 		// Формируем длинну делимитра
 		v, _ := g.View("logs")
 		width, _ := v.Size()
-		lengthDelimiter := width/2 - 12
+		lengthDelimiter := width/2 - 5
 		delimiter1 := strings.Repeat("⎯", lengthDelimiter)
 		delimiter2 := delimiter1
-		if width > lengthDelimiter+lengthDelimiter+24 {
+		if width > lengthDelimiter+lengthDelimiter+10 {
 			delimiter2 = strings.Repeat("⎯", lengthDelimiter+1)
 		}
-		var delimiterString string = delimiter1 + " Updates after " + app.updateTime + " " + delimiter2
+		var delimiterString string = delimiter1 + " " + app.updateTime + " " + delimiter2
 		// Вставляем новую строку после указанного индекса, сдвигая остальные строки массива
 		app.currentLogLines = append(app.currentLogLines[:app.newUpdateIndex],
 			append([]string{delimiterString}, app.currentLogLines[app.newUpdateIndex:]...)...)
