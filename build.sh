@@ -1,14 +1,27 @@
 #!/bin/bash
 
-version=${1:-"0.5.0"}
+version=${1:-"0.6.0"}
 mkdir -p bin
 rm -rf bin/*
 
-architectures=(amd64 arm64)
-for arch in "${architectures[@]}"; do
-    GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
-    GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-darwin-$arch
-    GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
-done
+go get -u golang.org/x/sys
 
-ls -lh bin
+if ! command -v golangci-lint &> /dev/null; then
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+else
+    golangci-lint --version
+fi
+
+output=$(golangci-lint run ./... --build-tags=buildvcs=false)
+
+if [ -z "$output" ]; then
+    architectures=(amd64 arm64)
+    for arch in "${architectures[@]}"; do
+        GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
+        GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-darwin-$arch
+        GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
+    done
+    ls -lh bin
+else
+    echo "$output"
+fi
