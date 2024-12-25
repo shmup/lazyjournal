@@ -27,7 +27,8 @@ touch $shellRc
 mkdir -p $HOME/.local/bin
 
 grep -F 'export PATH=$PATH:$HOME/.local/bin' $shellRc > /dev/null || { 
-    echo 'export PATH=$PATH:$HOME/.local/bin' >> $shellRc && source $shellRc; 
+    echo 'export PATH=$PATH:$HOME/.local/bin' >> $shellRc
+    source $shellRc
 }
 
 GITHUB_LATEST_VERSION=$(curl -L -s -H 'Accept: application/json' https://github.com/Lifailon/lazyjournal/releases/latest | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/')
@@ -38,6 +39,9 @@ else
     BIN_URL="https://github.com/Lifailon/lazyjournal/releases/download/$GITHUB_LATEST_VERSION/lazyjournal-$GITHUB_LATEST_VERSION-$OS-$ARCH"
     curl -L -s "$BIN_URL" -o $HOME/.local/bin/lazyjournal
     chmod +x $HOME/.local/bin/lazyjournal
+    if [ $OS = "darwin" ]; then
+        xattr -d com.apple.quarantine $HOME/.local/bin/lazyjournal
+    fi
     echo -e "✔  Installation completed \033[32msuccessfully\033[0m"
     exit 0
 fi
