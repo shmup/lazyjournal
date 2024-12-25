@@ -3,3 +3,6 @@
 /DEBIAN/
 /usr/
 *.snap
+*.deb
+*.rpm
+*.exe
