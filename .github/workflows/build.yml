@@ -1,4 +1,4 @@
-name: Build
+name: CI
 
 on:
     workflow_dispatch:
@@ -24,14 +24,16 @@ jobs:
       - name: Install dependencies
         run: |
           go mod tidy
-          go get -u golang.org/x/sys # for Windows
+          go get -u golang.org/x/sys # for Windows build
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Linters check
+        run: golangci-lint run ./...
 
       - name: Build binaries
         run: |
           version="${{ github.event.inputs.version }}"
-          if [ -z "$version" ]; then
-              version="latest"
-          fi
+          [ -z "$version" ] && version="latest"
           mkdir -p bin
           architectures=("amd64" "arm64")
           for arch in "${architectures[@]}"; do
@@ -39,9 +41,10 @@ jobs:
               GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-darwin-$arch
               GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
           done
+          echo "ARTIFACT_NAME=lazyjournal-$(date +'%d.%m.%Y')" >> $GITHUB_ENV
 
-      - name: Upload binaries to GitHub Actions
+      - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: binaries
+          name: ${{ env.ARTIFACT_NAME }}
           path: bin/
