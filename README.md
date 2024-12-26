@@ -5,17 +5,16 @@
 <p align="center">
     <a href="https://pkg.go.dev/github.com/Lifailon/lazyjournal"><img src="https://pkg.go.dev/badge/github.com/Lifailon/lazyjournal.svg" alt="Go Reference"></a>
     <a href="https://goreportcard.com/report/github.com/Lifailon/lazyjournal"><img src="https://goreportcard.com/badge/github.com/Lifailon/lazyjournal" alt="Go Report"></a>
+    <a href="https://github.com/Lifailon/lazyjournal/actions/workflows/build.yml"><img title="Actions Build"src="https://img.shields.io/github/actions/workflow/status/Lifailon/lazyjournal/build.yml?logo=GitHub-Actions"></a>
     <a href="https://github.com/Lifailon/lazyjournal"><img title="Go Version"src="https://img.shields.io/github/go-mod/go-version/Lifailon/lazyjournal?logo=go"></a>
     <a href="https://github.com/Lifailon/Kinozal-Bot/blob/rsa/LICENSE"><img title="License"src="https://img.shields.io/github/license/Lifailon/Kinozal-Bot?logo=readme&color=white"></a>
 </p>
 
-Terminal user interface for `journalctl`, file system logs, as well Docker and Podman containers for quick viewing and filtering with fuzzy find, regex support (like `fzf` and `grep`) and coloring the output (like `tailspin`), written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
+Terminal user interface for `journalctl`, file system logs, as well *Docker* and *Podman* containers for quick viewing and filtering with fuzzy find, regex support (like `fzf` and `grep`) and coloring the output, written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
-This tool is inspired by and with love for [lazydocker](https://github.com/jesseduffield/lazydocker) and [lazygit](https://github.com/jesseduffield/lazygit).
+This tool is inspired by and with love for [LazyDocker](https://github.com/jesseduffield/lazydocker) and [LazyGit](https://github.com/jesseduffield/lazygit), as well as is listed as [Awesome-TUIs](https://github.com/rothgar/awesome-tuis), check out the other useful projects in the repository page.
 
-![interface](/img/fuzzy.png)
-
-![interface](/img/regex.png)
+![interface](/img/fuzzy.jpg)
 
 ## Functional
 
@@ -26,7 +25,7 @@ This tool is inspired by and with love for [lazydocker](https://github.com/jesse
 - File system logs (example, for Apache or Nginx), as well as `syslog` or `messages`, `dmesg` (kernel), etc.
 - List of all log files of descriptors used by processes, as well as all log files in the home directories of users.
 - Reading archived logs (`gz` format).
-- Podman pods, Docker containers and Swarm services logs for all systems.
+- *Podman* pods, *Docker* containers and *Swarm* services logs for all systems.
 - Displays the currently selected log and filters output in real-time.
 
 Supports 3 filtering modes:
@@ -35,14 +34,25 @@ Supports 3 filtering modes:
 - **Fuzzy** - custom inexact case-insensitive search (searches for all phrases separated by a space anywhere on a line).
 - **Regex** - search with regular expression support (based on `regexp` library), case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
 
+Supported coloring groups for output:
+
+- **Green** - keywords indicating success.
+- **Red** - keywords indicating an error.
+- **Blue** - statuses and action messages (debug, warning, etc and install, update, etc).
+- **Light Blue** - numbers (date, time, bytes, ip and mac-addresses).
+- **Yellow** - known names (host name and system users).
+- **Purple** - url and full paths in the file system.
+- **Custom** - unix processes.
+
 ## Roadmap
 
 This is an up-to-date roadmap in addition to the functionality described above.
 
-- [X] File system support for MacOS and the RHEL based systems.
-- [X] Syntax coloring for logging output (this functionality will be improved in major versions as part of minor version `0.6`).
-- [ ] Interface for scrolling and mouse support.
-- [ ] Windows support (`Windows Events` via `PowerShell` and log files from `Program Files` and others directories).
+- [X] File system support for `MacOS` (darwin system) and the `RHEL` based systems.
+- [X] Syntax coloring for logging output (like `tailspin`).
+- [ ] Windows file system support (log files from `Program Files` and others directories).
+- [ ] Windows events via `PowerShell`.
+- [ ] Interface for scrolling and the mouse support.
 - [ ] Support remote machines via `ssh` protocol.
 
 ## Install
@@ -51,7 +61,7 @@ This is an up-to-date roadmap in addition to the functionality described above.
 
 Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
-Development is carried out on the Ubuntu Server system, and is also tested on the Raspberry Pi (`aarch64` platform), the WSL environment on the Oracle Linux system and the Darwin system (`x64` platform).
+Development is carried out on the Ubuntu Server system, and is also tested on the Raspberry Pi (`aarch64` platform), MacOS (`x64` platform) and the WSL environment on the Oracle Linux system.
 
 Run the command in the console to quickly install or update the stable version on Linux or MacOS:
 
@@ -109,7 +119,7 @@ go mod tidy
 go run main.go
 ```
 
-Build executable files for different platforms and all systems:
+Check the code for linters using [golangci-lint](https://github.com/golangci/golangci-lint) and build executables for different platforms and all systems:
 
 ```shell
 bash build.sh
@@ -143,28 +153,3 @@ If you like using TUI tools, try [multranslate](https://github.com/Lifailon/mult
 This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
 
 Copyright (C) 2024 Lifailon (Alex Kup)
-
-
-<!--
-```j
- /$$                                                            
-| $$                                                            
-| $$        /$$$$$$  /$$$$$$$$ /$$   /$$                        
-| $$       |____  $$|____ /$$/| $$  | $$                        
-| $$        /$$$$$$$   /$$$$/ | $$  | $$                        
-| $$       /$$__  $$  /$$__/  | $$  | $$                        
-| $$$$$$$$|  $$$$$$$ /$$$$$$$$|  $$$$$$$                        
-|________/ \_______/|________/ \____  $$                        
-                               /$$  | $$                        
-                              |  $$$$$$/                        
-                               \______/                         
-    /$$$$$                                                   /$$
-   |__  $$                                                  | $$
-      | $$  /$$$$$$  /$$   /$$  /$$$$$$  /$$$$$$$   /$$$$$$ | $$
-      | $$ /$$__  $$| $$  | $$ /$$__  $$| $$__  $$ |____  $$| $$
- /$$  | $$| $$  \ $$| $$  | $$| $$  \__/| $$  \ $$  /$$$$$$$| $$
-| $$  | $$| $$  | $$| $$  | $$| $$      | $$  | $$ /$$__  $$| $$
-|  $$$$$$/|  $$$$$$/|  $$$$$$/| $$      | $$  | $$|  $$$$$$$| $$
- \______/  \______/  \______/ |__/      |__/  |__/ \_______/|__/
-```
--->
