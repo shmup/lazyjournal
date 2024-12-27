@@ -14,9 +14,10 @@ case $ARCH in
 esac
 
 case "$SHELL" in
-    */bash) shellRc="$HOME/.bashrc" ;;
-    */zsh) shellRc="$HOME/.zshrc" ;; # MacOS
-    */ksh) shellRc="$HOME/.kshrc" ;; # OpenBSD
+    */bash) shellRc="$HOME/.bashrc" ;; # Debian/RHEL
+    */zsh) shellRc="$HOME/.zshrc" ;;   # MacOS
+    */ksh) shellRc="$HOME/.kshrc" ;;   # OpenBSD
+    */sh) shellRc="$HOME/.shrc" ;;     # FreeBSD
     *)
         shellRc="$HOME/.profile"
         echo -e "Shell not supported: $SHELL, profile is used"

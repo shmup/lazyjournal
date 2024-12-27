@@ -19,6 +19,7 @@ if [ -z "$output" ]; then
         GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
         GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-darwin-$arch
         GOOS=openbsd GOARCH=$arch go build -o bin/lazyjournal-$version-openbsd-$arch
+        GOOS=freebsd GOARCH=$arch go build -o bin/lazyjournal-$version-freebsd-$arch
         GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
     done
     ls -lh bin
