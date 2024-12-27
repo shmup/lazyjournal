@@ -13,6 +13,8 @@ case $ARCH in
         ;;
 esac
 
+echo -e "Current system: \033[32m$OS\033[0m (architecture: \033[32m$ARCH\033[0m)"
+
 case "$SHELL" in
     */bash) shellRc="$HOME/.bashrc" ;; # Debian/RHEL
     */zsh) shellRc="$HOME/.zshrc" ;;   # MacOS
@@ -20,7 +22,7 @@ case "$SHELL" in
     */sh) shellRc="$HOME/.shrc" ;;     # FreeBSD
     *)
         shellRc="$HOME/.profile"
-        echo -e "Shell not supported: $SHELL, profile is used"
+        echo -e "Shell \033[31m$SHELL\033[0m not supported, \033[32m.profile\033[0m is used"
         ;;
 esac
 
@@ -29,7 +31,8 @@ mkdir -p $HOME/.local/bin
 
 grep -F 'export PATH=$PATH:$HOME/.local/bin' $shellRc > /dev/null || { 
     echo 'export PATH=$PATH:$HOME/.local/bin' >> $shellRc
-    source $shellRc 2> /dev/null || . $shellRc
+    source "$shellRc" 2> /dev/null || . "$shellRc"
+    echo -e "Added environment variable \033[32m$HOME/.local/bin\033[0m to \033[32m$shellRc\033[0m"
 }
 
 GITHUB_LATEST_VERSION=$(curl -L -sS -H 'Accept: application/json' https://github.com/Lifailon/lazyjournal/releases/latest | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/')
@@ -43,6 +46,6 @@ else
     if [ $OS = "darwin" ]; then
         xattr -d com.apple.quarantine $HOME/.local/bin/lazyjournal
     fi
-    echo -e "✔  Installation completed \033[32msuccessfully\033[0m"
+    echo -e "✔  Installation completed \033[32msuccessfully\033[0m in $HOME/.local/bin/lazyjournal (to launch the interface from anywhere, re-login to the current session)"
     exit 0
 fi
