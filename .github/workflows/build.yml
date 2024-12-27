@@ -6,7 +6,7 @@ on:
         version:
           description: "Version"
           required: false
-          default: "0.6.0"
+          default: "0.7.0"
 
 jobs:
   build:
@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           go mod tidy
-          go get -u golang.org/x/sys # for Windows build
+          go get -u golang.org/x/sys
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
       - name: Linters check
@@ -39,6 +39,7 @@ jobs:
           for arch in "${architectures[@]}"; do
               GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
               GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-darwin-$arch
+              GOOS=openbsd GOARCH=$arch go build -o bin/lazyjournal-$version-openbsd-$arch
               GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
           done
           echo "ARTIFACT_NAME=lazyjournal-$(date +'%d.%m.%Y')" >> $GITHUB_ENV
