@@ -22,7 +22,7 @@ case "$SHELL" in
     */sh) shellRc="$HOME/.shrc" ;;     # FreeBSD
     *)
         shellRc="$HOME/.profile"
-        echo -e "Shell \033[31m$SHELL\033[0m not supported, \033[32m.profile\033[0m is used"
+        echo -e "Shell \033[34m$SHELL\033[0m not supported, \033[32mprofile\033[0m is used to add path to environment variables"
         ;;
 esac
 
@@ -32,7 +32,7 @@ mkdir -p $HOME/.local/bin
 grep -F 'export PATH=$PATH:$HOME/.local/bin' $shellRc > /dev/null || { 
     echo 'export PATH=$PATH:$HOME/.local/bin' >> $shellRc
     source "$shellRc" 2> /dev/null || . "$shellRc"
-    echo -e "Added environment variable \033[32m$HOME/.local/bin\033[0m to \033[32m$shellRc\033[0m"
+    echo -e "Added environment variable \033[34m$HOME/.local/bin\033[0m in \033[34m$shellRc\033[0m"
 }
 
 GITHUB_LATEST_VERSION=$(curl -L -sS -H 'Accept: application/json' https://github.com/Lifailon/lazyjournal/releases/latest | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/')
@@ -46,6 +46,7 @@ else
     if [ $OS = "darwin" ]; then
         xattr -d com.apple.quarantine $HOME/.local/bin/lazyjournal
     fi
-    echo -e "✔  Installation completed \033[32msuccessfully\033[0m in $HOME/.local/bin/lazyjournal (to launch the interface from anywhere, re-login to the current session)"
+    echo -e "✔  Installation completed \033[32msuccessfully\033[0m in \033[34m$HOME/.local/bin/lazyjournal\033[0m"
+    echo -e "To launch the interface from anywhere, \033[32mre-login\033[0m to the current session or run the command: \033[32m. $shellRc\033[0m"
     exit 0
 fi
