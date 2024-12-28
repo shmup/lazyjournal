@@ -796,11 +796,23 @@ func (app *App) loadFiles(logPath string) {
 			cmd = exec.Command(
 				"find", logPath, "/Library/Logs",
 				"-type", "f",
-				"(", "-name", "*.log", "-o", "-name", "*.gz", "-o", "-name", "*.1", ")",
+				"-name", "*.log", "-o",
+				"-name", "*log*", "-o",
+				"-name", "*.1", "-o",
+				"-name", "*.gz", "-o",
+				"-name", "*.pcap",
 			)
 		} else {
-			// Загрузка системных журналов для Linux
-			cmd = exec.Command("find", logPath, "-type", "f", "-name", "*.log", "-o", "-name", "*.gz", "-o", "-name", "*.1")
+			// Загрузка системных журналов для Linux (все файлы, которые содержат log в расширение или названии, а также расширение .1, gz и pcap)
+			cmd = exec.Command(
+				"find", logPath,
+				"-type", "f",
+				"-name", "*.log", "-o",
+				"-name", "*log*", "-o",
+				"-name", "*.1", "-o",
+				"-name", "*.gz", "-o",
+				"-name", "*.pcap",
+			)
 		}
 		output, _ = cmd.Output()
 		// Преобразуем вывод команды в строку и делим на массив строк
@@ -826,21 +838,28 @@ func (app *App) loadFiles(logPath string) {
 		}
 		// Добавляем пути по умолчанию для /var/log
 		logPaths := []string{
-			"/var/log/syslog\n",
-			"/var/log/syslog.1\n",
+			// Ядро
 			"/var/log/dmesg\n",
-			"/var/log/dmesg.1\n",
 			// Информация о входах и выходах пользователей, перезагрузках и остановках системы
 			"/var/log/wtmp\n",
 			// Информация о неудачных попытках входа в систему (например, неправильные пароли)
 			"/var/log/btmp\n",
-			// Oracle/RHEL
-			"/var/log/messages\n",
-			"/var/log/messages.1\n",
+			// Информация о текущих пользователях, их сеансах и входах в систему
+			"/var/run/utmp\n",
+			"/run/utmp\n",
+			// MacOS/BSD/RHEL
 			"/var/log/secure\n",
-			"/var/log/secure.1\n",
-			"/var/log/lastlog\n",
-			"/var/log/maillog\n",
+			"/var/log/messages\n",
+			"/var/log/daemon\n",
+			"/var/log/lpd-errs\n",
+			"/var/log/security.out\n",
+			"/var/log/daily.out\n",
+			// Службы
+			"/var/log/cron\n",
+			"/var/log/ftpd\n",
+			"/var/log/ntpd\n",
+			"/var/log/named\n",
+			"/var/log/dhcpd\n",
 		}
 		for _, path := range logPaths {
 			output = append([]byte(path), output...)
@@ -851,8 +870,8 @@ func (app *App) loadFiles(logPath string) {
 			logPath = "/Users/"
 		}
 		// Ищем файлы с помощью системной утилиты find
-		// cmd := exec.Command("find", logPath, "-type", "f", "-name", "*.log")
-		cmd := exec.Command("find", logPath,
+		cmd := exec.Command(
+			"find", logPath,
 			"-type", "d",
 			"(",
 			"-name", "Library", "-o",
@@ -863,7 +882,12 @@ func (app *App) loadFiles(logPath string) {
 			"-name", ".cache",
 			")",
 			"-prune", "-o",
-			"-type", "f", "-name", "*.log", "-print",
+			"-type", "f",
+			"(",
+			"-name", "*.log", "-o",
+			"-name", "*.pcap",
+			")",
+			"-print",
 		)
 		output, _ = cmd.Output()
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -890,7 +914,12 @@ func (app *App) loadFiles(logPath string) {
 			vError.Highlight = true
 		}
 		// Получаем содержимое файлов из домашнего каталога пользователя root
-		cmdRootDir := exec.Command("find", "/root/", "-type", "f", "-name", "*.log")
+		cmdRootDir := exec.Command(
+			"find", "/root/",
+			"-type", "f",
+			"-name", "*.log", "-o",
+			"-name", "*.pcap",
+		)
 		outputRootDir, err := cmdRootDir.Output()
 		// Добавляем содержимое директории /root/ в общий массив, если есть доступ
 		if err == nil {
@@ -1164,25 +1193,25 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			if err := cmdGzip.Wait(); err != nil {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, "\033[31mError reading archive log using gzip tool", err, "\033[0m")
+				fmt.Fprintln(v, " \033[31mError reading archive log using gzip tool.\n", err, "\033[0m")
 				return
 			}
 			if err := cmdTail.Wait(); err != nil {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, "\033[31mError reading log using tail tool", err, "\033[0m")
+				fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
 				return
 			}
 			// Выводим содержимое
 			app.currentLogLines = strings.Split(string(output), "\n")
-			// Читаем бинарные файлы с помощью last/lastb
-		} else if strings.Contains(logFullPath, "wtmp") {
+			// Читаем бинарные файлы с помощью last/lastb для wtmp/btmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
+		} else if strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log") {
 			cmd := exec.Command("last", "-f", logFullPath)
 			output, err := cmd.Output()
 			if err != nil {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, "\033[31mError reading log using last tool", err, "\033[0m")
+				fmt.Fprintln(v, " \033[31mError reading log using last tool.\n", err, "\033[0m")
 				return
 			}
 			// Разбиваем вывод на строки
@@ -1191,7 +1220,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			// Фильтруем строки, исключая последнюю строку и пустые строки
 			for _, line := range lines {
 				trimmedLine := strings.TrimSpace(line)
-				if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "wtmp begins") {
+				if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "begins") {
 					filteredLines = append(filteredLines, trimmedLine)
 				}
 			}
@@ -1206,14 +1235,14 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			if err != nil {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, "\033[31mError reading log using lastb tool", err, "\033[0m")
+				fmt.Fprintln(v, " \033[31mError reading log using lastb tool.\n", err, "\033[0m")
 				return
 			}
 			lines := strings.Split(string(output), "\n")
 			var filteredLines []string
 			for _, line := range lines {
 				trimmedLine := strings.TrimSpace(line)
-				if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "btmp begins") {
+				if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "begins") {
 					filteredLines = append(filteredLines, trimmedLine)
 				}
 			}
@@ -1227,7 +1256,40 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			if err != nil {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, "\033[31mError reading log using lastlog tool", err, "\033[0m")
+				fmt.Fprintln(v, " \033[31mError reading log using lastlog tool.\n", err, "\033[0m")
+				return
+			}
+			app.currentLogLines = strings.Split(string(output), "\n")
+			// FreeBSD
+		} else if strings.HasSuffix(logFullPath, "lastlogin") {
+			cmd := exec.Command("lastlogin")
+			output, err := cmd.Output()
+			if err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, " \033[31mError reading log using lastlogin tool.\n", err, "\033[0m")
+				return
+			}
+			app.currentLogLines = strings.Split(string(output), "\n")
+			// Packet Filter (PF) Firewall OpenBSD
+		} else if strings.HasSuffix(logFullPath, "pflog") {
+			cmd := exec.Command("tcpdump", "-e", "-n", "-r", logFullPath)
+			output, err := cmd.Output()
+			if err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
+				return
+			}
+			app.currentLogLines = strings.Split(string(output), "\n")
+			// pcap (Packet Capture)
+		} else if strings.HasSuffix(logFullPath, "pcap") {
+			cmd := exec.Command("tcpdump", "-n", "-r", logFullPath)
+			output, err := cmd.Output()
+			if err != nil {
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
 				return
 			}
 			app.currentLogLines = strings.Split(string(output), "\n")
@@ -1237,7 +1299,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			if err != nil {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, "\033[31mError reading log using tail tool", err, "\033[0m")
+				fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
 				return
 			}
 			app.currentLogLines = strings.Split(string(output), "\n")
