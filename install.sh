@@ -46,7 +46,7 @@ else
     if [ $OS = "darwin" ]; then
         xattr -d com.apple.quarantine $HOME/.local/bin/lazyjournal
     fi
-    echo -e "✔  Installation completed \033[32msuccessfully\033[0m in \033[34m$HOME/.local/bin/lazyjournal\033[0m"
+    echo -e "✔  Installation completed \033[32msuccessfully\033[0m in \033[34m$HOME/.local/bin/lazyjournal\033[0m (version: $GITHUB_LATEST_VERSION)"
     echo -e "To launch the interface from anywhere, \033[32mre-login\033[0m to the current session or run the command: \033[32m. $shellRc\033[0m"
     exit 0
 fi
