@@ -395,8 +395,25 @@ func (app *App) loadServices(journalName string) {
 		// Чтение данных в формате JSON
 		var units []map[string]interface{}
 		err = json.Unmarshal(output, &units)
+		// Если ошибка JSON, создаем массив вручную
 		if err != nil {
-			log.Fatalf("Failed to decode JSON: %v", err)
+			lines := strings.Split(string(output), "\n")
+			for _, line := range lines {
+				// Разбиваем строку на поля (эквивалентно: awk '{print $1,$3,$4}')
+				fields := strings.Fields(line)
+				// Пропускаем строки с недостаточным количеством полей
+				if len(fields) < 3 {
+					continue
+				}
+				// Заполняем временный массив из строки
+				unit := map[string]interface{}{
+					"unit":   fields[0],
+					"active": fields[2],
+					"sub":    fields[3],
+				}
+				// Добавляем временный массив строки в основной массив
+				units = append(units, unit)
+			}
 		}
 		serviceMap := make(map[string]bool)
 		// Обработка записей
@@ -794,7 +811,7 @@ func (app *App) loadFiles(logPath string) {
 		// Загрузка системных журналов для MacOS
 		if app.getOS == "darwin" {
 			cmd = exec.Command(
-				"find", logPath, "/Library/Logs",
+				"find", logPath, "/Library/Logs", "/opt/",
 				"-type", "f",
 				"-name", "*.log", "-o",
 				"-name", "*log*", "-o",
@@ -805,7 +822,7 @@ func (app *App) loadFiles(logPath string) {
 		} else {
 			// Загрузка системных журналов для Linux (все файлы, которые содержат log в расширение или названии, а также расширение .1, gz и pcap)
 			cmd = exec.Command(
-				"find", logPath,
+				"find", logPath, "/opt/",
 				"-type", "f",
 				"-name", "*.log", "-o",
 				"-name", "*log*", "-o",
