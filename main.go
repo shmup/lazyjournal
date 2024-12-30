@@ -787,7 +787,7 @@ func (app *App) loadFiles(logPath string) {
 			vError.FrameColor = app.fileSystemFrameColor
 			// Отключаем курсор и выводим сообщение об ошибке
 			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mPermission denied\033[0m")
+			fmt.Fprintln(vError, "\033[31mPermission denied (files not found)\033[0m")
 			return
 		} else {
 			vError, _ := app.gui.View("varLogs")
@@ -881,8 +881,8 @@ func (app *App) loadFiles(logPath string) {
 		for _, path := range logPaths {
 			output = append([]byte(path), output...)
 		}
-		// Домашние каталоги пользователей: /home/ для Linux и /Users/ для MacOS
 	} else {
+		// Домашние каталоги пользователей: /home/ для Linux и /Users/ для MacOS
 		if app.getOS == "darwin" {
 			logPath = "/Users/"
 		}
@@ -961,7 +961,6 @@ func (app *App) loadFiles(logPath string) {
 		if logPath != "descriptor" {
 			logName = strings.TrimPrefix(logFullPath, logPath)
 		}
-		// logName := strings.TrimPrefix(logFullPath, logPath)
 		logName = strings.TrimSuffix(logName, ".log")
 		logName = strings.TrimSuffix(logName, ".gz")
 		logName = strings.ReplaceAll(logName, "/", " ")
@@ -1013,7 +1012,7 @@ func (app *App) loadFiles(logPath string) {
 			}
 			// Добавляем в список
 			app.logfiles = append(app.logfiles, Logfile{
-				name: "[" + formattedDate + "] " + logName,
+				name: "[" + "\033[34m" + formattedDate + "\033[0m" + "] " + logName,
 				path: logFullPath,
 			})
 		}
@@ -1523,7 +1522,8 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 	} else {
 		containerId = app.lastContainerId
 	}
-	// Читаем локальный JSON лог для Docker
+	// Читаем локальный лог Docker в формате JSON
+	var readFileContainer bool = false
 	if ContainerizationSystem == "docker" {
 		basePath := "/var/lib/docker/containers"
 		var logFilePath string
@@ -1531,54 +1531,59 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 		_ = filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
 			if err == nil && strings.Contains(info.Name(), containerId) && strings.HasSuffix(info.Name(), "-json.log") {
 				logFilePath = path
+				// Фиксируем, если найден файловый журнал
+				readFileContainer = true
 				// Останавливаем поиск
 				return filepath.SkipDir
 			}
 			return nil
 		})
 		// Читаем файл с конца с помощью tail
-		cmd := exec.Command("tail", "-n", app.logViewCount, logFilePath)
-		output, err := cmd.Output()
-		if err != nil {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError reading log:", err, "\033[0m")
-			return
-		}
-		// Разбиваем строки на массив
-		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-		var formattedLines []string
-		// Обрабатываем вывод в формате JSON построчно
-		for i, line := range lines {
-			// JSON-структура для парсинга
-			var jsonData map[string]interface{}
-			err := json.Unmarshal([]byte(line), &jsonData)
+		if readFileContainer {
+			cmd := exec.Command("tail", "-n", app.logViewCount, logFilePath)
+			output, err := cmd.Output()
 			if err != nil {
-				continue
+				v, _ := app.gui.View("logs")
+				v.Clear()
+				fmt.Fprintln(v, "\033[31mError reading log:", err, "\033[0m")
+				return
 			}
-			// Извлекаем JSON данные
-			stream, _ := jsonData["stream"].(string)
-			timeStr, _ := jsonData["time"].(string)
-			logMessage, _ := jsonData["log"].(string)
-			// Удаляем встроенный экранированный символ переноса строки
-			logMessage = strings.TrimSuffix(logMessage, "\n")
-			// Парсим строку времени в объект time.Time
-			parsedTime, err := time.Parse(time.RFC3339Nano, timeStr)
-			if err == nil {
-				// Форматируем дату в формат: DD:MM:YYYY HH:MM:SS
-				timeStr = parsedTime.Format("02.01.2006 15:04:05")
+			// Разбиваем строки на массив
+			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+			var formattedLines []string
+			// Обрабатываем вывод в формате JSON построчно
+			for i, line := range lines {
+				// JSON-структура для парсинга
+				var jsonData map[string]interface{}
+				err := json.Unmarshal([]byte(line), &jsonData)
+				if err != nil {
+					continue
+				}
+				// Извлекаем JSON данные
+				stream, _ := jsonData["stream"].(string)
+				timeStr, _ := jsonData["time"].(string)
+				logMessage, _ := jsonData["log"].(string)
+				// Удаляем встроенный экранированный символ переноса строки
+				logMessage = strings.TrimSuffix(logMessage, "\n")
+				// Парсим строку времени в объект time.Time
+				parsedTime, err := time.Parse(time.RFC3339Nano, timeStr)
+				if err == nil {
+					// Форматируем дату в формат: DD:MM:YYYY HH:MM:SS
+					timeStr = parsedTime.Format("02.01.2006 15:04:05")
+				}
+				// Заполняем строку в формате: stream time: log
+				formattedLine := fmt.Sprintf("%s %s: %s", stream, timeStr, logMessage)
+				formattedLines = append(formattedLines, formattedLine)
+				// Если это последняя строка в выводе, добавляем перенос строки
+				if i == len(lines)-1 {
+					formattedLines = append(formattedLines, "\n")
+				}
 			}
-			// Заполняем строку в формате: stream time: log
-			formattedLine := fmt.Sprintf("%s %s: %s", stream, timeStr, logMessage)
-			formattedLines = append(formattedLines, formattedLine)
-			// Если это последняя строка в выводе, добавляем перенос строки
-			if i == len(lines)-1 {
-				formattedLines = append(formattedLines, "\n")
-			}
+			app.currentLogLines = formattedLines
 		}
-		app.currentLogLines = formattedLines
-	} else {
-		// Читаем лог через podman cli
+	}
+	// Читаем лог через Podman или Docker cli (если файл не найден)
+	if ContainerizationSystem == "podman" || !readFileContainer {
 		cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
 		output, err := cmd.Output()
 		if err != nil {
