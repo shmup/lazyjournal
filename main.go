@@ -225,12 +225,19 @@ func main() {
 	// Загрузка списков журналов
 	app.loadServices(app.selectUnits)
 
-	// /var/logs
+	// Filesystem
 	if v, err := g.View("varLogs"); err == nil {
 		_, viewHeight := v.Size()
 		app.maxVisibleFiles = viewHeight
 	}
-	app.loadFiles(app.selectPath)
+
+	// Определяем ОС и загружаем файловые журналы
+	if app.getOS == "windows" {
+		app.selectPath = "ProgramFiles"
+		app.loadWinFiles(app.selectPath)
+	} else {
+		app.loadFiles(app.selectPath)
+	}
 
 	// Docker
 	if v, err := g.View("docker"); err == nil {
@@ -1031,6 +1038,90 @@ func (app *App) loadFiles(logPath string) {
 	app.applyFilterList()
 }
 
+func (app *App) loadWinFiles(logPath string) {
+	// Узнать имя пользователя (app.userName) и диск с виндой
+	if logPath == "ProgramFiles" {
+		logPath = "C:\\Program Files"
+	} else if logPath == "AppData" {
+		logPath = "C:\\Users\\Lifailon\\AppData"
+	} else if logPath == "Documents" {
+		logPath = "C:\\Users\\Lifailon\\Documents"
+	}
+	cmd := exec.Command(
+		"powershell", "-Command",
+		fmt.Sprintf("Get-ChildItem -Path '%s' -Recurse -File -Filter *.log -Name", logPath),
+	)
+	cmd.Stderr = nil
+	output, _ := cmd.Output()
+	// Разбиваем на массив из строк (TrimSpace) и преобразуем вывод байт в строку (string())
+	files := strings.Split(strings.TrimSpace(string(output)), "\n")
+	// Проверяем вывод
+	// for _, file := range files {
+	// 	debugOutput, _ := app.gui.View("logs")
+	// 	fmt.Fprintln(debugOutput, file)
+	// }
+	// Если список файлов пустой, возвращаем ошибку
+	if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+		vError, _ := app.gui.View("varLogs")
+		vError.Clear()
+		app.fileSystemFrameColor = gocui.ColorRed
+		vError.FrameColor = app.fileSystemFrameColor
+		vError.Highlight = false
+		fmt.Fprintln(vError, "\033[31mPermission denied (files not found)\033[0m")
+		return
+	} else {
+		vError, _ := app.gui.View("varLogs")
+		app.fileSystemFrameColor = gocui.ColorDefault
+		if vError.FrameColor != gocui.ColorDefault {
+			vError.FrameColor = gocui.ColorGreen
+		}
+		vError.Highlight = true
+	}
+	serviceMap := make(map[string]bool)
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		// Формируем полный путь к файлу
+		logFullPath := logPath + "\\" + scanner.Text()
+		// Формируем имя файла для списка
+		logName := scanner.Text()
+		logName = strings.TrimSuffix(logName, ".log")
+		logName = strings.ReplaceAll(logName, "\\", " ")
+		// Получаем информацию о файле
+		fileInfo, err := os.Stat(logFullPath)
+		// Пропускаем файлы, к которым нет доступа
+		if err != nil {
+			continue
+		}
+		// Пропускаем пустые файлы
+		if fileInfo.Size() == 0 {
+			continue
+		}
+		// Получаем дату изменения
+		modTime := fileInfo.ModTime()
+		// Форматирование даты в формат DD.MM.YYYY
+		formattedDate := modTime.Format("02.01.2006")
+		// Проверяем, что полного пути до файла еще нет в списке
+		if logName != "" && !serviceMap[logFullPath] {
+			// Добавляем путь в массив для проверки уникальных путей
+			serviceMap[logFullPath] = true
+			// Добавляем в список
+			app.logfiles = append(app.logfiles, Logfile{
+				name: "[" + "\033[34m" + formattedDate + "\033[0m" + "] " + logName,
+				path: logFullPath,
+			})
+		}
+	}
+	// Сортируем по дате
+	sort.Slice(app.logfiles, func(i, j int) bool {
+		layout := "02.01.2006"
+		dateI, _ := time.Parse(layout, extractDate(app.logfiles[i].name))
+		dateJ, _ := time.Parse(layout, extractDate(app.logfiles[j].name))
+		return dateI.After(dateJ)
+	})
+	app.logfilesNotFilter = app.logfiles
+	app.applyFilterList()
+}
+
 // Функция для извлечения первой втречающейся даты в формате DD.MM.YYYY
 func extractDate(name string) string {
 	re := regexp.MustCompile(`\d{2}\.\d{2}\.\d{4}`)
@@ -1179,146 +1270,164 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 	}
 	// Читаем файл, толькое если были изменения
 	if app.updateFile {
-		// Читаем архивные логи (decompress + stdout)
-		if strings.HasSuffix(logFullPath, ".gz") {
-			cmdGzip := exec.Command("gzip", "-dc", logFullPath)
-			cmdTail := exec.Command("tail", "-n", app.logViewCount)
-			pipe, err := cmdGzip.StdoutPipe()
-			if err != nil {
-				log.Fatalf("Error creating pipe: %v", err)
-			}
-			// Стандартный вывод gzip передаем в stdin tail
-			cmdTail.Stdin = pipe
-			out, err := cmdTail.StdoutPipe()
-			if err != nil {
-				log.Fatalf("Error creating stdout pipe for tail: %v", err)
-			}
-			// Запуск команд
-			if err := cmdGzip.Start(); err != nil {
-				log.Fatalf("Error starting gzip: %v", err)
-			}
-			if err := cmdTail.Start(); err != nil {
-				log.Fatalf("Error starting tail: %v", err)
-			}
-			// Чтение вывода
-			output, err := io.ReadAll(out)
-			if err != nil {
-				log.Fatalf("Error reading output from tail: %v", err)
-			}
-			// Ожидание завершения команд
-			if err := cmdGzip.Wait(); err != nil {
-				v, _ := app.gui.View("logs")
-				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading archive log using gzip tool.\n", err, "\033[0m")
-				return
-			}
-			if err := cmdTail.Wait(); err != nil {
-				v, _ := app.gui.View("logs")
-				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
-				return
-			}
-			// Выводим содержимое
-			app.currentLogLines = strings.Split(string(output), "\n")
-			// Читаем бинарные файлы с помощью last/lastb для wtmp/btmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
-		} else if strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log") {
-			cmd := exec.Command("last", "-f", logFullPath)
+		// Читаем логи в системе Windows
+		if app.getOS == "windows" {
+			cmd := exec.Command(
+				"powershell", "-Command",
+				// 	fmt.Sprintf("Get-Content -Path '%s' -Tail %s", logFullPath, app.logViewCount),
+				fmt.Sprintf("[System.IO.File]::ReadAllText('%s', [System.Text.Encoding]::GetEncoding(1251))", logFullPath),
+			)
 			output, err := cmd.Output()
 			if err != nil {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading log using last tool.\n", err, "\033[0m")
-				return
-			}
-			// Разбиваем вывод на строки
-			lines := strings.Split(string(output), "\n")
-			var filteredLines []string
-			// Фильтруем строки, исключая последнюю строку и пустые строки
-			for _, line := range lines {
-				trimmedLine := strings.TrimSpace(line)
-				if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "begins") {
-					filteredLines = append(filteredLines, trimmedLine)
-				}
-			}
-			// Переворачиваем порядок строк
-			for i, j := 0, len(filteredLines)-1; i < j; i, j = i+1, j-1 {
-				filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
-			}
-			app.currentLogLines = filteredLines
-		} else if strings.Contains(logFullPath, "btmp") {
-			cmd := exec.Command("lastb", "-f", logFullPath)
-			output, err := cmd.Output()
-			if err != nil {
-				v, _ := app.gui.View("logs")
-				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading log using lastb tool.\n", err, "\033[0m")
-				return
-			}
-			lines := strings.Split(string(output), "\n")
-			var filteredLines []string
-			for _, line := range lines {
-				trimmedLine := strings.TrimSpace(line)
-				if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "begins") {
-					filteredLines = append(filteredLines, trimmedLine)
-				}
-			}
-			for i, j := 0, len(filteredLines)-1; i < j; i, j = i+1, j-1 {
-				filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
-			}
-			app.currentLogLines = filteredLines
-		} else if strings.HasSuffix(logFullPath, "lastlog") {
-			cmd := exec.Command("lastlog")
-			output, err := cmd.Output()
-			if err != nil {
-				v, _ := app.gui.View("logs")
-				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading log using lastlog tool.\n", err, "\033[0m")
-				return
-			}
-			app.currentLogLines = strings.Split(string(output), "\n")
-			// FreeBSD
-		} else if strings.HasSuffix(logFullPath, "lastlogin") {
-			cmd := exec.Command("lastlogin")
-			output, err := cmd.Output()
-			if err != nil {
-				v, _ := app.gui.View("logs")
-				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading log using lastlogin tool.\n", err, "\033[0m")
-				return
-			}
-			app.currentLogLines = strings.Split(string(output), "\n")
-			// Packet Filter (PF) Firewall OpenBSD
-		} else if strings.HasSuffix(logFullPath, "pflog") {
-			cmd := exec.Command("tcpdump", "-e", "-n", "-r", logFullPath)
-			output, err := cmd.Output()
-			if err != nil {
-				v, _ := app.gui.View("logs")
-				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
-				return
-			}
-			app.currentLogLines = strings.Split(string(output), "\n")
-			// pcap (Packet Capture)
-		} else if strings.HasSuffix(logFullPath, "pcap") {
-			cmd := exec.Command("tcpdump", "-n", "-r", logFullPath)
-			output, err := cmd.Output()
-			if err != nil {
-				v, _ := app.gui.View("logs")
-				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
+				fmt.Fprintln(v, " \033[31mError reading log using Get-Content via Windows PowerShell.\n", err, "\033[0m")
 				return
 			}
 			app.currentLogLines = strings.Split(string(output), "\n")
 		} else {
-			cmd := exec.Command("tail", "-n", app.logViewCount, logFullPath)
-			output, err := cmd.Output()
-			if err != nil {
-				v, _ := app.gui.View("logs")
-				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
-				return
+			// Читаем логи в системах UNIX (Linux/Darwin/*BSD)
+			// Читаем архивные логи (decompress + stdout)
+			if strings.HasSuffix(logFullPath, ".gz") {
+				cmdGzip := exec.Command("gzip", "-dc", logFullPath)
+				cmdTail := exec.Command("tail", "-n", app.logViewCount)
+				pipe, err := cmdGzip.StdoutPipe()
+				if err != nil {
+					log.Fatalf("Error creating pipe: %v", err)
+				}
+				// Стандартный вывод gzip передаем в stdin tail
+				cmdTail.Stdin = pipe
+				out, err := cmdTail.StdoutPipe()
+				if err != nil {
+					log.Fatalf("Error creating stdout pipe for tail: %v", err)
+				}
+				// Запуск команд
+				if err := cmdGzip.Start(); err != nil {
+					log.Fatalf("Error starting gzip: %v", err)
+				}
+				if err := cmdTail.Start(); err != nil {
+					log.Fatalf("Error starting tail: %v", err)
+				}
+				// Чтение вывода
+				output, err := io.ReadAll(out)
+				if err != nil {
+					log.Fatalf("Error reading output from tail: %v", err)
+				}
+				// Ожидание завершения команд
+				if err := cmdGzip.Wait(); err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading archive log using gzip tool.\n", err, "\033[0m")
+					return
+				}
+				if err := cmdTail.Wait(); err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
+					return
+				}
+				// Выводим содержимое
+				app.currentLogLines = strings.Split(string(output), "\n")
+				// Читаем бинарные файлы с помощью last/lastb для wtmp/btmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
+			} else if strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log") {
+				cmd := exec.Command("last", "-f", logFullPath)
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using last tool.\n", err, "\033[0m")
+					return
+				}
+				// Разбиваем вывод на строки
+				lines := strings.Split(string(output), "\n")
+				var filteredLines []string
+				// Фильтруем строки, исключая последнюю строку и пустые строки
+				for _, line := range lines {
+					trimmedLine := strings.TrimSpace(line)
+					if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "begins") {
+						filteredLines = append(filteredLines, trimmedLine)
+					}
+				}
+				// Переворачиваем порядок строк
+				for i, j := 0, len(filteredLines)-1; i < j; i, j = i+1, j-1 {
+					filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
+				}
+				app.currentLogLines = filteredLines
+			} else if strings.Contains(logFullPath, "btmp") {
+				cmd := exec.Command("lastb", "-f", logFullPath)
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using lastb tool.\n", err, "\033[0m")
+					return
+				}
+				lines := strings.Split(string(output), "\n")
+				var filteredLines []string
+				for _, line := range lines {
+					trimmedLine := strings.TrimSpace(line)
+					if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "begins") {
+						filteredLines = append(filteredLines, trimmedLine)
+					}
+				}
+				for i, j := 0, len(filteredLines)-1; i < j; i, j = i+1, j-1 {
+					filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
+				}
+				app.currentLogLines = filteredLines
+			} else if strings.HasSuffix(logFullPath, "lastlog") {
+				cmd := exec.Command("lastlog")
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using lastlog tool.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
+				// FreeBSD
+			} else if strings.HasSuffix(logFullPath, "lastlogin") {
+				cmd := exec.Command("lastlogin")
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using lastlogin tool.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
+				// Packet Filter (PF) Firewall OpenBSD
+			} else if strings.HasSuffix(logFullPath, "pflog") {
+				cmd := exec.Command("tcpdump", "-e", "-n", "-r", logFullPath)
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
+				// pcap (Packet Capture)
+			} else if strings.HasSuffix(logFullPath, "pcap") {
+				cmd := exec.Command("tcpdump", "-n", "-r", logFullPath)
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
+			} else {
+				cmd := exec.Command("tail", "-n", app.logViewCount, logFullPath)
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
 			}
-			app.currentLogLines = strings.Split(string(output), "\n")
 		}
 		app.updateDelimiter(newUpdate, g)
 		// app.filterText = ""
