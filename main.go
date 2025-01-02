@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/awesome-gocui/gocui"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding/unicode"
 )
 
 // Структура хранения информации о журналах
@@ -1043,9 +1045,9 @@ func (app *App) loadWinFiles(logPath string) {
 	if logPath == "ProgramFiles" {
 		logPath = "C:\\Program Files"
 	} else if logPath == "AppData" {
-		logPath = "C:\\Users\\Lifailon\\AppData"
+		logPath = "C:\\Users\\" + app.userName + "\\AppData"
 	} else if logPath == "Documents" {
-		logPath = "C:\\Users\\Lifailon\\Documents"
+		logPath = "C:\\Users\\" + app.userName + "\\Documents"
 	}
 	cmd := exec.Command(
 		"powershell", "-Command",
@@ -1055,11 +1057,6 @@ func (app *App) loadWinFiles(logPath string) {
 	output, _ := cmd.Output()
 	// Разбиваем на массив из строк (TrimSpace) и преобразуем вывод байт в строку (string())
 	files := strings.Split(strings.TrimSpace(string(output)), "\n")
-	// Проверяем вывод
-	// for _, file := range files {
-	// 	debugOutput, _ := app.gui.View("logs")
-	// 	fmt.Fprintln(debugOutput, file)
-	// }
 	// Если список файлов пустой, возвращаем ошибку
 	if len(files) == 0 || (len(files) == 1 && files[0] == "") {
 		vError, _ := app.gui.View("varLogs")
@@ -1226,6 +1223,82 @@ func (app *App) selectFile(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+// Функция для чтения файла с опредиление кодировки в Windows
+func (app *App) loadWinFileLog(filePath string) ([]byte, string) {
+	// Открываем файл
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Sprintf("open file: %v", err)
+	}
+	defer file.Close()
+	// Получаем информацию о файле
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Sprintf("get file stat: %v", err)
+	}
+	// Получаем размер файла
+	fileSize := stat.Size()
+	// Буфер для хранения последних строк
+	var buffer []byte
+	lineCount := 0
+	// Размер буфера чтения (читаем по 1КБ за раз)
+	readSize := int64(1024)
+	// Преобразуем строку с максимальным количеством строк в int
+	logViewCountInt, _ := strconv.Atoi(app.logViewCount)
+	// Читаем файл с конца
+	for fileSize > 0 && lineCount < logViewCountInt {
+		if fileSize < readSize {
+			readSize = fileSize
+		}
+		file.Seek(fileSize-readSize, 0)
+		tempBuffer := make([]byte, readSize)
+		_, err = file.Read(tempBuffer)
+		if err != nil {
+			return nil, fmt.Sprintf("read file: %v", err)
+		}
+		buffer = append(tempBuffer, buffer...)
+		lineCount = strings.Count(string(buffer), "\n")
+		fileSize -= int64(readSize)
+	}
+	// Проверка на UTF-16 с BOM
+	isUTF16WithBOM := func(data []byte) bool {
+		return len(data) >= 2 && ((data[0] == 0xFF && data[1] == 0xFE) || (data[0] == 0xFE && data[1] == 0xFF))
+	}
+	// Проверка на UTF-16 LE без BOM
+	isUTF16LE := func(data []byte) bool {
+		if len(data)%2 != 0 {
+			return false
+		}
+		for i := 1; i < len(data); i += 2 {
+			if data[i] != 0x00 {
+				return false
+			}
+		}
+		return true
+	}
+	var decodedOutput []byte
+	if isUTF16WithBOM(buffer) {
+		// Декодируем UTF-16 с BOM
+		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder().Bytes(buffer)
+		if err != nil {
+			return nil, fmt.Sprintf("decoding from UTF-16 with BOM: %v", err)
+		}
+	} else if isUTF16LE(buffer) {
+		// Декодируем UTF-16 LE без BOM
+		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM).NewDecoder().Bytes(buffer)
+		if err != nil {
+			return nil, fmt.Sprintf("decoding from UTF-16 LE without BOM: %v", err)
+		}
+	} else {
+		// Декодируем Windows-1251
+		decodedOutput, err = charmap.Windows1251.NewDecoder().Bytes(buffer)
+		if err != nil {
+			return nil, fmt.Sprintf("decoding from Windows-1251: %v", err)
+		}
+	}
+	return decodedOutput, "nil"
+}
+
 func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 	// В параметре logName имя файла при выборе возвращяется без символов покраски
 	// Получаем путь из массива по имени
@@ -1259,7 +1332,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		}
 		fileModTime := fileInfo.ModTime()
 		fileSize := fileInfo.Size()
-		// Обновлять файл в горутине, только если есть изменения (дата модификации и размер)
+		// Обновлять файл в горутине, только если есть изменения (проверяем дату модификации и размер)
 		if fileModTime != app.lastDateUpdateFile || fileSize != app.lastSizeFile {
 			app.lastDateUpdateFile = fileModTime
 			app.lastSizeFile = fileSize
@@ -1272,19 +1345,14 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 	if app.updateFile {
 		// Читаем логи в системе Windows
 		if app.getOS == "windows" {
-			cmd := exec.Command(
-				"powershell", "-Command",
-				// 	fmt.Sprintf("Get-Content -Path '%s' -Tail %s", logFullPath, app.logViewCount),
-				fmt.Sprintf("[System.IO.File]::ReadAllText('%s', [System.Text.Encoding]::GetEncoding(1251))", logFullPath),
-			)
-			output, err := cmd.Output()
-			if err != nil {
+			decodedOutput, errors := app.loadWinFileLog(logFullPath)
+			if errors != "nil" {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, " \033[31mError reading log using Get-Content via Windows PowerShell.\n", err, "\033[0m")
+				fmt.Fprintln(v, "\033[31mError", errors, "\033[0m")
 				return
 			}
-			app.currentLogLines = strings.Split(string(output), "\n")
+			app.currentLogLines = strings.Split(string(decodedOutput), "\n")
 		} else {
 			// Читаем логи в системах UNIX (Linux/Darwin/*BSD)
 			// Читаем архивные логи (decompress + stdout)
@@ -2233,7 +2301,7 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "null", "\033[31m")
 	// Зеленый (успех) [32m]
 	case strings.Contains(inputWordLower, "succe"):
-		words := []string{"successfully", "successfull", "successful", "succeed", "succeeded", "success"}
+		words := []string{"successfully", "successfull", "successful", "succeeded", "succeed", "success"}
 		for _, word := range words {
 			if strings.Contains(inputWordLower, word) {
 				coloredWord = app.replaceWordLower(inputWord, word, "\033[32m")
