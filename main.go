@@ -1061,19 +1061,48 @@ func (app *App) loadWinFiles(logPath string) {
 	} else if logPath == "AppDataRoaming" {
 		logPath = "C:\\Users\\" + app.userName + "\\AppData\\Roaming"
 	}
+	// Ищем файлы с помощью WalkDir
 	var files []string
-	filepath.WalkDir(logPath, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			// Игнорируем ошибки, чтобы не прерывать поиск
-			return nil
+	// Доступ к срезу files из нескольких горутин
+	var mu sync.Mutex
+	// Группа ожидания для отслеживания завершения всех горутин
+	var wg sync.WaitGroup
+	// Получаем список корневых директорий
+	rootDirs, _ := os.ReadDir(logPath)
+	for _, rootDir := range rootDirs {
+		// Проверяем, является ли текущий элемент директорие
+		if rootDir.IsDir() {
+			// Увеличиваем счетчик ожидаемых горутин
+			wg.Add(1)
+			go func(dir string) {
+				// Уменьшаем счетчик горутин после завершения текущей
+				defer wg.Done()
+				// Рекурсивно обходим все файлы и подкаталоги в текущей директории
+				filepath.WalkDir(filepath.Join(logPath, dir), func(path string, d os.DirEntry, err error) error {
+					if err != nil {
+						// Игнорируем ошибки, чтобы не прерывать поиск
+						return nil
+					}
+					// Проверяем, что текущий элемент не является директорией и имеет расширение .log
+					if !d.IsDir() && strings.HasSuffix(strings.ToLower(d.Name()), ".log") {
+						// Получаем относительный путь (без корневого пути logPath)
+						relPath, _ := filepath.Rel(logPath, path)
+						// Используем мьютекс для добавления файла в срез
+						mu.Lock()
+						files = append(files, relPath)
+						mu.Unlock()
+					}
+					return nil
+				})
+			}(
+				// Передаем имя текущей директории в горутину
+				rootDir.Name(),
+			)
 		}
-		if !d.IsDir() && strings.HasSuffix(strings.ToLower(d.Name()), ".log") {
-			// Получаем относительный путь (без root пути)
-			relPath, _ := filepath.Rel(logPath, path)
-			files = append(files, relPath)
-		}
-		return nil
-	})
+	}
+	// Ждем завершения всех запущенных горутин
+	wg.Wait()
+	// Объединяем все пути в одну строку, разделенную символом новой строки
 	output := strings.Join(files, "\n")
 	// Если список файлов пустой, возвращаем ошибку
 	if len(files) == 0 || (len(files) == 1 && files[0] == "") {
