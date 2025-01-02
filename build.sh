@@ -4,7 +4,7 @@ version=${1:-"0.7.0"}
 mkdir -p bin
 rm -rf bin/*
 
-go get -u golang.org/x/sys
+go mod tidy
 
 golangci_lint_version=$(golangci-lint --version 2> /dev/null)
 if [ -z "$golangci_lint_version" ]; then
