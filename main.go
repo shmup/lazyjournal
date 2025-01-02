@@ -193,14 +193,19 @@ func main() {
 	app.getOS = runtime.GOOS
 
 	// Определяем переменные и массивы для покраски вывода
-	// Текущее имя хоста и пользователя
+	// Текущее имя хоста
 	app.hostName, _ = os.Hostname()
 	// Удаляем доменную часть, если она есть
 	if strings.Contains(app.hostName, ".") {
 		app.hostName = strings.Split(app.hostName, ".")[0]
 	}
+	// Текущее имя пользователя
 	currentUser, _ := user.Current()
 	app.userName = currentUser.Username
+	// Удаляем доменную часть, если она есть
+	if strings.Contains(app.userName, "\\") {
+		app.userName = strings.Split(app.userName, "\\")[1]
+	}
 	// Имена пользователей
 	passwd, _ := os.Open("/etc/passwd")
 	scanner := bufio.NewScanner(passwd)
@@ -235,8 +240,21 @@ func main() {
 
 	// Определяем ОС и загружаем файловые журналы
 	if app.getOS == "windows" {
+		selectedVarLog, err := g.View("varLogs")
+		if err != nil {
+			log.Panicln(err)
+		}
+		g.Update(func(g *gocui.Gui) error {
+			selectedVarLog.Clear()
+			fmt.Fprintln(selectedVarLog, "Searching log files...")
+			selectedVarLog.Highlight = false
+			return nil
+		})
+		selectedVarLog.Title = " < Program Files (0) > "
 		app.selectPath = "ProgramFiles"
-		app.loadWinFiles(app.selectPath)
+		go func() {
+			app.loadWinFiles(app.selectPath)
+		}()
 	} else {
 		app.loadFiles(app.selectPath)
 	}
@@ -917,14 +935,6 @@ func (app *App) loadFiles(logPath string) {
 		)
 		output, _ = cmd.Output()
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
-		// Ищем файлы с помощью WalkDir
-		// var files []string
-		// _ = filepath.WalkDir(logPath, func(path string, d os.DirEntry, err error) error {
-		// 	if !d.IsDir() && strings.HasSuffix(d.Name(), ".log") {
-		// 		files = append(files, path)
-		// 	}
-		// 	return nil
-		// })
 		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
 			vError, _ := app.gui.View("varLogs")
 			vError.Clear()
@@ -1044,19 +1054,27 @@ func (app *App) loadWinFiles(logPath string) {
 	// Узнать имя пользователя (app.userName) и диск с виндой
 	if logPath == "ProgramFiles" {
 		logPath = "C:\\Program Files"
-	} else if logPath == "AppData" {
-		logPath = "C:\\Users\\" + app.userName + "\\AppData"
-	} else if logPath == "Documents" {
-		logPath = "C:\\Users\\" + app.userName + "\\Documents"
+	} else if logPath == "ProgramFiles86" {
+		logPath = "C:\\Program Files (x86)"
+	} else if logPath == "AppDataLocal" {
+		logPath = "C:\\Users\\" + app.userName + "\\AppData\\Local"
+	} else if logPath == "AppDataRoaming" {
+		logPath = "C:\\Users\\" + app.userName + "\\AppData\\Roaming"
 	}
-	cmd := exec.Command(
-		"powershell", "-Command",
-		fmt.Sprintf("Get-ChildItem -Path '%s' -Recurse -File -Filter *.log -Name", logPath),
-	)
-	cmd.Stderr = nil
-	output, _ := cmd.Output()
-	// Разбиваем на массив из строк (TrimSpace) и преобразуем вывод байт в строку (string())
-	files := strings.Split(strings.TrimSpace(string(output)), "\n")
+	var files []string
+	filepath.WalkDir(logPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			// Игнорируем ошибки, чтобы не прерывать поиск
+			return nil
+		}
+		if !d.IsDir() && strings.HasSuffix(strings.ToLower(d.Name()), ".log") {
+			// Получаем относительный путь (без root пути)
+			relPath, _ := filepath.Rel(logPath, path)
+			files = append(files, relPath)
+		}
+		return nil
+	})
+	output := strings.Join(files, "\n")
 	// Если список файлов пустой, возвращаем ошибку
 	if len(files) == 0 || (len(files) == 1 && files[0] == "") {
 		vError, _ := app.gui.View("varLogs")
@@ -3283,8 +3301,7 @@ func (app *App) setUnitListLeft(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-// Функция для переключения выбора журналов из файловой системы и файловый дескрипторы
-
+// Функция для переключения выбора журналов файловой системы
 func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 	selectedVarLog, err := g.View("varLogs")
 	if err != nil {
@@ -3300,25 +3317,51 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 	// Полсекундная задержка, для корректного обновления интерфейса после выполнения функции
 	time.Sleep(500 * time.Millisecond)
 	// Запускаем функцию загрузки журнала в горутине
-	go func() {
-		app.logfiles = app.logfiles[:0]
-		app.startFiles = 0
-		app.selectedFile = 0
-		switch app.selectPath {
-		case "/var/log/":
-			app.selectPath = "/home/"
-			selectedVarLog.Title = " < Users home logs (0) > "
-			app.loadFiles(app.selectPath)
-		case "/home/":
-			app.selectPath = "descriptor"
-			selectedVarLog.Title = " < Process descriptor logs (0) > "
-			app.loadFiles(app.selectPath)
-		case "descriptor":
-			app.selectPath = "/var/log/"
-			selectedVarLog.Title = " < System var logs (0) > "
-			app.loadFiles(app.selectPath)
-		}
-	}()
+	if app.getOS == "windows" {
+		go func() {
+			app.logfiles = app.logfiles[:0]
+			app.startFiles = 0
+			app.selectedFile = 0
+			switch app.selectPath {
+			case "ProgramFiles":
+				app.selectPath = "ProgramFiles86"
+				selectedVarLog.Title = " < Program Files x86 (0) > "
+				app.loadWinFiles(app.selectPath)
+			case "ProgramFiles86":
+				app.selectPath = "AppDataLocal"
+				selectedVarLog.Title = " < AppData Local (0) > "
+				app.loadWinFiles(app.selectPath)
+			case "AppDataLocal":
+				app.selectPath = "AppDataRoaming"
+				selectedVarLog.Title = " < AppData Roaming (0) > "
+				app.loadWinFiles(app.selectPath)
+			case "AppDataRoaming":
+				app.selectPath = "ProgramFiles"
+				selectedVarLog.Title = " < Program Files (0) > "
+				app.loadWinFiles(app.selectPath)
+			}
+		}()
+	} else {
+		go func() {
+			app.logfiles = app.logfiles[:0]
+			app.startFiles = 0
+			app.selectedFile = 0
+			switch app.selectPath {
+			case "/var/log/":
+				app.selectPath = "/home/"
+				selectedVarLog.Title = " < Users home logs (0) > "
+				app.loadFiles(app.selectPath)
+			case "/home/":
+				app.selectPath = "descriptor"
+				selectedVarLog.Title = " < Process descriptor logs (0) > "
+				app.loadFiles(app.selectPath)
+			case "descriptor":
+				app.selectPath = "/var/log/"
+				selectedVarLog.Title = " < System var logs (0) > "
+				app.loadFiles(app.selectPath)
+			}
+		}()
+	}
 	return nil
 }
 
@@ -3334,25 +3377,51 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 		return nil
 	})
 	time.Sleep(500 * time.Millisecond)
-	go func() {
-		app.logfiles = app.logfiles[:0]
-		app.startFiles = 0
-		app.selectedFile = 0
-		switch app.selectPath {
-		case "/var/log/":
-			app.selectPath = "descriptor"
-			selectedVarLog.Title = " < Process descriptor logs (0) > "
-			app.loadFiles(app.selectPath)
-		case "descriptor":
-			app.selectPath = "/home/"
-			selectedVarLog.Title = " < Users home logs (0) > "
-			app.loadFiles(app.selectPath)
-		case "/home/":
-			app.selectPath = "/var/log/"
-			selectedVarLog.Title = " < System var logs (0) > "
-			app.loadFiles(app.selectPath)
-		}
-	}()
+	if app.getOS == "windows" {
+		go func() {
+			app.logfiles = app.logfiles[:0]
+			app.startFiles = 0
+			app.selectedFile = 0
+			switch app.selectPath {
+			case "ProgramFiles":
+				app.selectPath = "AppDataRoaming"
+				selectedVarLog.Title = " < AppData Roaming (0) > "
+				app.loadWinFiles(app.selectPath)
+			case "AppDataRoaming":
+				app.selectPath = "AppDataLocal"
+				selectedVarLog.Title = " < AppData Local (0) > "
+				app.loadWinFiles(app.selectPath)
+			case "AppDataLocal":
+				app.selectPath = "ProgramFiles86"
+				selectedVarLog.Title = " < Program Files x86 (0) > "
+				app.loadWinFiles(app.selectPath)
+			case "ProgramFiles86":
+				app.selectPath = "ProgramFiles"
+				selectedVarLog.Title = " < Program Files (0) > "
+				app.loadWinFiles(app.selectPath)
+			}
+		}()
+	} else {
+		go func() {
+			app.logfiles = app.logfiles[:0]
+			app.startFiles = 0
+			app.selectedFile = 0
+			switch app.selectPath {
+			case "/var/log/":
+				app.selectPath = "descriptor"
+				selectedVarLog.Title = " < Process descriptor logs (0) > "
+				app.loadFiles(app.selectPath)
+			case "descriptor":
+				app.selectPath = "/home/"
+				selectedVarLog.Title = " < Users home logs (0) > "
+				app.loadFiles(app.selectPath)
+			case "/home/":
+				app.selectPath = "/var/log/"
+				selectedVarLog.Title = " < System var logs (0) > "
+				app.loadFiles(app.selectPath)
+			}
+		}()
+	}
 	return nil
 }
 
