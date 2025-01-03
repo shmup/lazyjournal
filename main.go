@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/awesome-gocui/gocui"
 	"golang.org/x/text/encoding/charmap"
@@ -110,6 +111,9 @@ type App struct {
 	// Фиксируем последнее время загрузки журнала
 	debugLoadTime string
 
+	// Отключение привязки горячих клавиш на время загрузки списка
+	keybindingsEnabled bool
+
 	// Регулярные выражения для покраски строк
 	trimHttpRegex        *regexp.Regexp
 	trimHttpsRegex       *regexp.Regexp
@@ -145,8 +149,8 @@ func main() {
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
 		autoScroll:                   true,
-		trimHttpRegex:                regexp.MustCompile(`^.*http://|([^a-zA-Z0-9/._?&=-].*)$`),                                                                                              // исключаем все до http:// (включительно) в начале строки
-		trimHttpsRegex:               regexp.MustCompile(`^.*https://|([^a-zA-Z0-9/._?&=-].*)$`),                                                                                             // и после любого символа, который не может содержать в себе url
+		trimHttpRegex:                regexp.MustCompile(`^.*http://|([^a-zA-Z0-9:/._?&=-].*)$`),                                                                                             // исключаем все до http:// (включительно) в начале строки
+		trimHttpsRegex:               regexp.MustCompile(`^.*https://|([^a-zA-Z0-9:/._?&=-].*)$`),                                                                                            // и после любого символа, который не может содержать в себе url
 		trimPrefixPathRegex:          regexp.MustCompile(`^[^/]+`),                                                                                                                           // иключаем все до первого символа слэша (не включительно)
 		trimPostfixPathRegex:         regexp.MustCompile(`[=:'"(){}\[\]]+.*$`),                                                                                                               // исключаем все после первого символа, который не должен (но может) содержаться в пути
 		hexByteRegex:                 regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`),                                                                                                               // Байты или числа в шестнадцатеричном формате: 0x2 || 0xc0000001
@@ -159,6 +163,7 @@ func main() {
 		ipAddressRegex:               regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?\b`),                                                                                  // IP: 255.255.255.255 || 255.255.255.255:443 || 255.255.255.255.443 || 255.255.255.255/24
 		procRegex:                    regexp.MustCompile(`(\d+)%`),                                                                                                                           // int%
 		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]\:$`),                                                                                                          // unit_daemon-name.service[1341]:
+		keybindingsEnabled:           true,
 	}
 
 	// Создаем GUI
@@ -1308,11 +1313,11 @@ func (app *App) loadWinFileLog(filePath string) ([]byte, string) {
 		fileSize -= int64(readSize)
 	}
 	// Проверка на UTF-16 с BOM
-	isUTF16WithBOM := func(data []byte) bool {
+	utf16withBOM := func(data []byte) bool {
 		return len(data) >= 2 && ((data[0] == 0xFF && data[1] == 0xFE) || (data[0] == 0xFE && data[1] == 0xFF))
 	}
 	// Проверка на UTF-16 LE без BOM
-	isUTF16LE := func(data []byte) bool {
+	utf16withoutBOM := func(data []byte) bool {
 		if len(data)%2 != 0 {
 			return false
 		}
@@ -1324,18 +1329,21 @@ func (app *App) loadWinFileLog(filePath string) ([]byte, string) {
 		return true
 	}
 	var decodedOutput []byte
-	if isUTF16WithBOM(buffer) {
+	if utf16withBOM(buffer) {
 		// Декодируем UTF-16 с BOM
 		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder().Bytes(buffer)
 		if err != nil {
 			return nil, fmt.Sprintf("decoding from UTF-16 with BOM: %v", err)
 		}
-	} else if isUTF16LE(buffer) {
+	} else if utf16withoutBOM(buffer) {
 		// Декодируем UTF-16 LE без BOM
 		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM).NewDecoder().Bytes(buffer)
 		if err != nil {
 			return nil, fmt.Sprintf("decoding from UTF-16 LE without BOM: %v", err)
 		}
+	} else if utf8.Valid(buffer) {
+		// Декодируем UTF-8
+		decodedOutput = buffer
 	} else {
 		// Декодируем Windows-1251
 		decodedOutput, err = charmap.Windows1251.NewDecoder().Bytes(buffer)
@@ -1573,7 +1581,7 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		app.dockerFrameColor = gocui.ColorRed
 		vError.FrameColor = app.dockerFrameColor
 		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[31mAccess denied\033[0m")
+		fmt.Fprintln(vError, "\033[31mAccess denied or "+ContainerizationSystem+" not running\033[0m")
 		return
 	} else {
 		vError, _ := app.gui.View("docker")
@@ -2164,6 +2172,14 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = strings.ReplaceAll(inputWord, app.userName, "\033[33m"+app.userName+"\033[0m")
 	case app.containsUser(inputWord):
 		coloredWord = app.replaceWordLower(inputWord, inputWord, "\033[33m")
+	case strings.Contains(inputWordLower, "warn"):
+		words := []string{"warnings", "warning", "warn"}
+		for _, word := range words {
+			if strings.Contains(inputWordLower, word) {
+				coloredWord = app.replaceWordLower(inputWord, word, "\033[33m")
+				break
+			}
+		}
 	// Custom (UNIX processes)
 	case app.syslogUnitRegex.MatchString(inputWord):
 		unitSplit := strings.Split(inputWord, "[")
@@ -2202,7 +2218,7 @@ func (app *App) wordColor(inputWord string) string {
 			}
 		}
 	case strings.Contains(inputWordLower, "delet"):
-		words := []string{"deletion", "deleted", "deletes", "delete"}
+		words := []string{"deletion", "deleted", "deleting", "deletes", "delete"}
 		for _, word := range words {
 			if strings.Contains(inputWordLower, word) {
 				coloredWord = app.replaceWordLower(inputWord, word, "\033[31m")
@@ -2475,6 +2491,14 @@ func (app *App) wordColor(inputWord string) string {
 				break
 			}
 		}
+	case strings.Contains(inputWordLower, "patch"):
+		words := []string{"patched", "patching", "patch"}
+		for _, word := range words {
+			if strings.Contains(inputWordLower, word) {
+				coloredWord = app.replaceWordLower(inputWord, word, "\033[32m")
+				break
+			}
+		}
 	case strings.Contains(inputWordLower, "ok"):
 		coloredWord = app.replaceWordLower(inputWord, "ok", "\033[32m")
 	case strings.Contains(inputWordLower, "available"):
@@ -2555,14 +2579,6 @@ func (app *App) wordColor(inputWord string) string {
 		}
 	case strings.Contains(inputWordLower, "listen"):
 		words := []string{"listening", "listener", "listen"}
-		for _, word := range words {
-			if strings.Contains(inputWordLower, word) {
-				coloredWord = app.replaceWordLower(inputWord, word, "\033[36m")
-				break
-			}
-		}
-	case strings.Contains(inputWordLower, "warn"):
-		words := []string{"warnings", "warning", "warn"}
 		for _, word := range words {
 			if strings.Contains(inputWordLower, word) {
 				coloredWord = app.replaceWordLower(inputWord, word, "\033[36m")
@@ -2784,6 +2800,9 @@ func (app *App) wordColor(inputWord string) string {
 				break
 			}
 		}
+	// Исключения
+	case strings.Contains(inputWordLower, "not"):
+		coloredWord = app.replaceWordLower(inputWord, "not", "\033[31m")
 	}
 	return coloredWord
 }
@@ -3099,11 +3118,22 @@ func (app *App) setupKeybindings() error {
 		return err
 	}
 	// Переключение выбора журналов для File System
-	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowRight, gocui.ModNone, app.setLogFilesListRight); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowLeft, gocui.ModNone, app.setLogFilesListLeft); err != nil {
-		return err
+	if app.keybindingsEnabled {
+		// Установка привязок
+		if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowRight, gocui.ModNone, app.setLogFilesListRight); err != nil {
+			return err
+		}
+		if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowLeft, gocui.ModNone, app.setLogFilesListLeft); err != nil {
+			return err
+		}
+	} else {
+		// Удаление привязок
+		if err := app.gui.DeleteKeybinding("varLogs", gocui.KeyArrowRight, gocui.ModNone); err != nil {
+			return err
+		}
+		if err := app.gui.DeleteKeybinding("varLogs", gocui.KeyArrowLeft, gocui.ModNone); err != nil {
+			return err
+		}
 	}
 	// Переключение выбора журналов для Containerization System
 	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowRight, gocui.ModNone, app.setContainersList); err != nil {
@@ -3343,14 +3373,17 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 		selectedVarLog.Highlight = false
 		return nil
 	})
+	// Отключаем переключение списков
+	app.keybindingsEnabled = false
+	app.setupKeybindings()
 	// Полсекундная задержка, для корректного обновления интерфейса после выполнения функции
 	time.Sleep(500 * time.Millisecond)
+	app.logfiles = app.logfiles[:0]
+	app.startFiles = 0
+	app.selectedFile = 0
 	// Запускаем функцию загрузки журнала в горутине
 	if app.getOS == "windows" {
 		go func() {
-			app.logfiles = app.logfiles[:0]
-			app.startFiles = 0
-			app.selectedFile = 0
 			switch app.selectPath {
 			case "ProgramFiles":
 				app.selectPath = "ProgramFiles86"
@@ -3369,12 +3402,12 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 				selectedVarLog.Title = " < Program Files (0) > "
 				app.loadWinFiles(app.selectPath)
 			}
+			// Включаем переключение списков
+			app.keybindingsEnabled = true
+			app.setupKeybindings()
 		}()
 	} else {
 		go func() {
-			app.logfiles = app.logfiles[:0]
-			app.startFiles = 0
-			app.selectedFile = 0
 			switch app.selectPath {
 			case "/var/log/":
 				app.selectPath = "/home/"
@@ -3389,6 +3422,9 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 				selectedVarLog.Title = " < System var logs (0) > "
 				app.loadFiles(app.selectPath)
 			}
+			// Включаем переключение списков
+			app.keybindingsEnabled = true
+			app.setupKeybindings()
 		}()
 	}
 	return nil
@@ -3405,12 +3441,14 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 		selectedVarLog.Highlight = false
 		return nil
 	})
+	app.keybindingsEnabled = false
+	app.setupKeybindings()
 	time.Sleep(500 * time.Millisecond)
+	app.logfiles = app.logfiles[:0]
+	app.startFiles = 0
+	app.selectedFile = 0
 	if app.getOS == "windows" {
 		go func() {
-			app.logfiles = app.logfiles[:0]
-			app.startFiles = 0
-			app.selectedFile = 0
 			switch app.selectPath {
 			case "ProgramFiles":
 				app.selectPath = "AppDataRoaming"
@@ -3429,12 +3467,11 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 				selectedVarLog.Title = " < Program Files (0) > "
 				app.loadWinFiles(app.selectPath)
 			}
+			app.keybindingsEnabled = true
+			app.setupKeybindings()
 		}()
 	} else {
 		go func() {
-			app.logfiles = app.logfiles[:0]
-			app.startFiles = 0
-			app.selectedFile = 0
 			switch app.selectPath {
 			case "/var/log/":
 				app.selectPath = "descriptor"
@@ -3449,6 +3486,8 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 				selectedVarLog.Title = " < System var logs (0) > "
 				app.loadFiles(app.selectPath)
 			}
+			app.keybindingsEnabled = true
+			app.setupKeybindings()
 		}()
 	}
 	return nil
