@@ -162,7 +162,7 @@ func main() {
 		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d+\.\d+\.\d+|\d+\.\d+)\b`),                                             // Date: DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD || 5.7.5 (version) || 5.709076
 		ipAddressRegex:               regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?\b`),                                                                                  // IP: 255.255.255.255 || 255.255.255.255:443 || 255.255.255.255.443 || 255.255.255.255/24
 		procRegex:                    regexp.MustCompile(`(\d+)%`),                                                                                                                           // int%
-		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]\:$`),                                                                                                          // unit_daemon-name.service[1341]:
+		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]:$`),                                                                                                           // unit_daemon-name.service[1341]:
 		keybindingsEnabled:           true,
 	}
 
@@ -186,7 +186,7 @@ func main() {
 
 	// Привязка клавиш для работы с интерфейсом из функции setupKeybindings()
 	if err := app.setupKeybindings(); err != nil {
-		log.Panicln(err)
+		log.Panicln("Error key bindings", err)
 	}
 
 	// Выполняем layout для инициализации интерфейса
@@ -216,16 +216,16 @@ func main() {
 	scanner := bufio.NewScanner(passwd)
 	for scanner.Scan() {
 		line := scanner.Text()
-		user := strings.Split(line, ":")
-		if len(user) > 0 {
-			app.userNameArray = append(app.userNameArray, user[0])
+		userName := strings.Split(line, ":")
+		if len(userName) > 0 {
+			app.userNameArray = append(app.userNameArray, userName[0])
 		}
 	}
 	// Список корневых каталогов (ls -d /*/)
 	files, _ := os.ReadDir("/")
 	for _, file := range files {
 		if file.IsDir() {
-			app.rootDirArray = append(app.rootDirArray, filepath.Join("/", file.Name())+"/")
+			app.rootDirArray = append(app.rootDirArray, file.Name())
 		}
 	}
 
@@ -324,9 +324,7 @@ func (app *App) layout(g *gocui.Gui) error {
 		// Цветовая схема из форка awesome-gocui/gocui
 		v.SelBgColor = gocui.ColorGreen // Цвет фона при выборе в списке
 		v.SelFgColor = gocui.ColorBlack // Цвет текста
-		// v.BgColor = gocui.ColorRed      // Цвет текста
-		// v.FgColor = gocui.ColorYellow   // Цвет фона внутри окна
-		app.updateServicesList() // выводим список журналов в это окно
+		app.updateServicesList()        // выводим список журналов в это окно
 	}
 
 	// Окно для списка логов из файловой системы
@@ -405,7 +403,8 @@ func (app *App) loadServices(journalName string) {
 		fmt.Fprintln(vError, "\033[31msystemd-journald not supported\033[0m")
 		return
 	}
-	if journalName == "services" {
+	switch {
+	case journalName == "services":
 		// Получаем список всех юнитов в системе через systemctl в формате JSON
 		unitsList := exec.Command("systemctl", "list-units", "--all", "--plain", "--no-legend", "--no-pager", "--output=json") // "--type=service"
 		output, err := unitsList.Output()
@@ -477,7 +476,7 @@ func (app *App) loadServices(journalName string) {
 				})
 			}
 		}
-	} else if journalName == "kernel" {
+	case journalName == "kernel":
 		// Получаем список загрузок системы
 		bootCmd := exec.Command("journalctl", "--list-boots", "-o", "json")
 		bootOutput, err := bootCmd.Output()
@@ -566,7 +565,7 @@ func (app *App) loadServices(journalName string) {
 			// Сравниваем по второй дате в обратном порядке
 			return endDate1.After(endDate2) // Используем After для сортировки по убыванию
 		})
-	} else {
+	default:
 		cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
 		output, err := cmd.Output()
 		if err != nil {
@@ -801,7 +800,8 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 
 func (app *App) loadFiles(logPath string) {
 	var output []byte
-	if logPath == "descriptor" {
+	switch {
+	case logPath == "descriptor":
 		// n - имя файла (путь)
 		// c - имя команды (процесса)
 		cmd := exec.Command("lsof", "-Fn")
@@ -838,7 +838,7 @@ func (app *App) loadFiles(logPath string) {
 				output = append(output, []byte(file+"\n")...)
 			}
 		}
-	} else if logPath == "/var/log/" {
+	case logPath == "/var/log/":
 		var cmd *exec.Cmd
 		// Загрузка системных журналов для MacOS
 		if app.getOS == "darwin" {
@@ -913,7 +913,7 @@ func (app *App) loadFiles(logPath string) {
 		for _, path := range logPaths {
 			output = append([]byte(path), output...)
 		}
-	} else {
+	default:
 		// Домашние каталоги пользователей: /home/ для Linux и /Users/ для MacOS
 		if app.getOS == "darwin" {
 			logPath = "/Users/"
@@ -1057,13 +1057,14 @@ func (app *App) loadFiles(logPath string) {
 
 func (app *App) loadWinFiles(logPath string) {
 	// Узнать имя пользователя (app.userName) и диск с виндой
-	if logPath == "ProgramFiles" {
+	switch {
+	case logPath == "ProgramFiles":
 		logPath = "C:\\Program Files"
-	} else if logPath == "ProgramFiles86" {
+	case logPath == "ProgramFiles86":
 		logPath = "C:\\Program Files (x86)"
-	} else if logPath == "AppDataLocal" {
+	case logPath == "AppDataLocal":
 		logPath = "C:\\Users\\" + app.userName + "\\AppData\\Local"
-	} else if logPath == "AppDataRoaming" {
+	case logPath == "AppDataRoaming":
 		logPath = "C:\\Users\\" + app.userName + "\\AppData\\Roaming"
 	}
 	// Ищем файлы с помощью WalkDir
@@ -1083,7 +1084,7 @@ func (app *App) loadWinFiles(logPath string) {
 				// Уменьшаем счетчик горутин после завершения текущей
 				defer wg.Done()
 				// Рекурсивно обходим все файлы и подкаталоги в текущей директории
-				filepath.WalkDir(filepath.Join(logPath, dir), func(path string, d os.DirEntry, err error) error {
+				err := filepath.WalkDir(filepath.Join(logPath, dir), func(path string, d os.DirEntry, err error) error {
 					if err != nil {
 						// Игнорируем ошибки, чтобы не прерывать поиск
 						return nil
@@ -1099,6 +1100,9 @@ func (app *App) loadWinFiles(logPath string) {
 					}
 					return nil
 				})
+				if err != nil {
+					return
+				}
 			}(
 				// Передаем имя текущей директории в горутину
 				rootDir.Name(),
@@ -1276,7 +1280,7 @@ func (app *App) selectFile(g *gocui.Gui, v *gocui.View) error {
 }
 
 // Функция для чтения файла с опредиление кодировки в Windows
-func (app *App) loadWinFileLog(filePath string) ([]byte, string) {
+func (app *App) loadWinFileLog(filePath string) (output []byte, errors string) {
 	// Открываем файл
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -1302,7 +1306,10 @@ func (app *App) loadWinFileLog(filePath string) ([]byte, string) {
 		if fileSize < readSize {
 			readSize = fileSize
 		}
-		file.Seek(fileSize-readSize, 0)
+		_, err := file.Seek(fileSize-readSize, 0)
+		if err != nil {
+			return nil, fmt.Sprintf("detect the end of a file via seek: %v", err)
+		}
 		tempBuffer := make([]byte, readSize)
 		_, err = file.Read(tempBuffer)
 		if err != nil {
@@ -1329,22 +1336,23 @@ func (app *App) loadWinFileLog(filePath string) ([]byte, string) {
 		return true
 	}
 	var decodedOutput []byte
-	if utf16withBOM(buffer) {
+	switch {
+	case utf16withBOM(buffer):
 		// Декодируем UTF-16 с BOM
 		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder().Bytes(buffer)
 		if err != nil {
 			return nil, fmt.Sprintf("decoding from UTF-16 with BOM: %v", err)
 		}
-	} else if utf16withoutBOM(buffer) {
+	case utf16withoutBOM(buffer):
 		// Декодируем UTF-16 LE без BOM
 		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM).NewDecoder().Bytes(buffer)
 		if err != nil {
 			return nil, fmt.Sprintf("decoding from UTF-16 LE without BOM: %v", err)
 		}
-	} else if utf8.Valid(buffer) {
+	case utf8.Valid(buffer):
 		// Декодируем UTF-8
 		decodedOutput = buffer
-	} else {
+	default:
 		// Декодируем Windows-1251
 		decodedOutput, err = charmap.Windows1251.NewDecoder().Bytes(buffer)
 		if err != nil {
@@ -1411,7 +1419,8 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		} else {
 			// Читаем логи в системах UNIX (Linux/Darwin/*BSD)
 			// Читаем архивные логи (decompress + stdout)
-			if strings.HasSuffix(logFullPath, ".gz") {
+			switch {
+			case strings.HasSuffix(logFullPath, ".gz"):
 				cmdGzip := exec.Command("gzip", "-dc", logFullPath)
 				cmdTail := exec.Command("tail", "-n", app.logViewCount)
 				pipe, err := cmdGzip.StdoutPipe()
@@ -1452,7 +1461,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				// Выводим содержимое
 				app.currentLogLines = strings.Split(string(output), "\n")
 				// Читаем бинарные файлы с помощью last/lastb для wtmp/btmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
-			} else if strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log") {
+			case strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log"):
 				cmd := exec.Command("last", "-f", logFullPath)
 				output, err := cmd.Output()
 				if err != nil {
@@ -1467,7 +1476,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				// Фильтруем строки, исключая последнюю строку и пустые строки
 				for _, line := range lines {
 					trimmedLine := strings.TrimSpace(line)
-					if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "begins") {
+					if trimmedLine != "" && !strings.Contains(trimmedLine, "begins") {
 						filteredLines = append(filteredLines, trimmedLine)
 					}
 				}
@@ -1476,7 +1485,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
 				}
 				app.currentLogLines = filteredLines
-			} else if strings.Contains(logFullPath, "btmp") {
+			case strings.Contains(logFullPath, "btmp"):
 				cmd := exec.Command("lastb", "-f", logFullPath)
 				output, err := cmd.Output()
 				if err != nil {
@@ -1489,7 +1498,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				var filteredLines []string
 				for _, line := range lines {
 					trimmedLine := strings.TrimSpace(line)
-					if len(trimmedLine) > 0 && !strings.Contains(trimmedLine, "begins") {
+					if trimmedLine != "" && !strings.Contains(trimmedLine, "begins") {
 						filteredLines = append(filteredLines, trimmedLine)
 					}
 				}
@@ -1497,7 +1506,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
 				}
 				app.currentLogLines = filteredLines
-			} else if strings.HasSuffix(logFullPath, "lastlog") {
+			case strings.HasSuffix(logFullPath, "lastlog"):
 				cmd := exec.Command("lastlog")
 				output, err := cmd.Output()
 				if err != nil {
@@ -1508,7 +1517,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 				// FreeBSD
-			} else if strings.HasSuffix(logFullPath, "lastlogin") {
+			case strings.HasSuffix(logFullPath, "lastlogin"):
 				cmd := exec.Command("lastlogin")
 				output, err := cmd.Output()
 				if err != nil {
@@ -1519,7 +1528,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 				// Packet Filter (PF) Firewall OpenBSD
-			} else if strings.HasSuffix(logFullPath, "pflog") {
+			case strings.HasSuffix(logFullPath, "pflog"):
 				cmd := exec.Command("tcpdump", "-e", "-n", "-r", logFullPath)
 				output, err := cmd.Output()
 				if err != nil {
@@ -1530,7 +1539,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 				// pcap (Packet Capture)
-			} else if strings.HasSuffix(logFullPath, "pcap") {
+			case strings.HasSuffix(logFullPath, "pcap"):
 				cmd := exec.Command("tcpdump", "-n", "-r", logFullPath)
 				output, err := cmd.Output()
 				if err != nil {
@@ -1540,7 +1549,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					return
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
-			} else {
+			default:
 				cmd := exec.Command("tail", "-n", app.logViewCount, logFullPath)
 				output, err := cmd.Output()
 				if err != nil {
@@ -1553,16 +1562,15 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			}
 		}
 		app.updateDelimiter(newUpdate, g)
-		// app.filterText = ""
 		app.applyFilter(false)
 	}
 }
 
 // ---------------------------------------- Docker/Podman ----------------------------------------
 
-func (app *App) loadDockerContainer(ContainerizationSystem string) {
+func (app *App) loadDockerContainer(containerizationSystem string) {
 	// Получаем версию для проверки, что система контейнеризации установлена
-	cmd := exec.Command(ContainerizationSystem, "--version")
+	cmd := exec.Command(containerizationSystem, "--version")
 	_, err := cmd.Output()
 	if err != nil {
 		vError, _ := app.gui.View("docker")
@@ -1570,10 +1578,10 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		app.dockerFrameColor = gocui.ColorRed
 		vError.FrameColor = app.dockerFrameColor
 		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[31m"+ContainerizationSystem+" not installed (environment not found)\033[0m")
+		fmt.Fprintln(vError, "\033[31m"+containerizationSystem+" not installed (environment not found)\033[0m")
 		return
 	}
-	cmd = exec.Command(ContainerizationSystem, "ps", "-a", "--format", "{{.ID}} {{.Names}} {{.State}}")
+	cmd = exec.Command(containerizationSystem, "ps", "-a", "--format", "{{.ID}} {{.Names}} {{.State}}")
 	output, err := cmd.Output()
 	if err != nil {
 		vError, _ := app.gui.View("docker")
@@ -1581,7 +1589,7 @@ func (app *App) loadDockerContainer(ContainerizationSystem string) {
 		app.dockerFrameColor = gocui.ColorRed
 		vError.FrameColor = app.dockerFrameColor
 		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[31mAccess denied or "+ContainerizationSystem+" not running\033[0m")
+		fmt.Fprintln(vError, "\033[31mAccess denied or "+containerizationSystem+" not running\033[0m")
 		return
 	} else {
 		vError, _ := app.gui.View("docker")
@@ -1733,12 +1741,12 @@ func (app *App) selectDocker(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gui) {
-	ContainerizationSystem := app.selectContainerizationSystem
+	containerizationSystem := app.selectContainerizationSystem
 	// Сохраняем систему контейнеризации для автообновления при смене окна
 	if newUpdate {
 		app.lastContainerizationSystem = app.selectContainerizationSystem
 	} else {
-		ContainerizationSystem = app.lastContainerizationSystem
+		containerizationSystem = app.lastContainerizationSystem
 	}
 	var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	var containerId string
@@ -1756,7 +1764,7 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 	}
 	// Читаем локальный лог Docker в формате JSON
 	var readFileContainer bool = false
-	if ContainerizationSystem == "docker" {
+	if containerizationSystem == "docker" {
 		basePath := "/var/lib/docker/containers"
 		var logFilePath string
 		// Ищем файл лога в локальной системе по id
@@ -1815,8 +1823,8 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 		}
 	}
 	// Читаем лог через Podman или Docker cli (если файл не найден)
-	if ContainerizationSystem == "podman" || !readFileContainer {
-		cmd := exec.Command(ContainerizationSystem, "logs", "--tail", app.logViewCount, containerId)
+	if containerizationSystem == "podman" || !readFileContainer {
+		cmd := exec.Command(containerizationSystem, "logs", "--tail", app.logViewCount, containerId)
 		output, err := cmd.Output()
 		if err != nil {
 			v, _ := app.gui.View("logs")
@@ -1958,7 +1966,7 @@ func (app *App) applyFilter(color bool) {
 		// Debug start time
 		startTime := time.Now()
 		// Debug: если текст фильтра пустой или равен любому символу, возвращяем вывод без фильтрации
-		if len(filter) == 0 || filter == "." {
+		if filter == "" || filter == "." {
 			app.filteredLogLines = app.currentLogLines
 		} else {
 			app.filteredLogLines = make([]string, 0)
@@ -1980,7 +1988,8 @@ func (app *App) applyFilter(color bool) {
 			// Проходимся по каждой строке
 			for _, line := range app.currentLogLines {
 				// Fuzzy (неточный поиск без учета регистра)
-				if app.selectFilterMode == "fuzzy" {
+				switch {
+				case app.selectFilterMode == "fuzzy":
 					// Разбиваем текст фильтра на массив из строк
 					filterWords := strings.Fields(filter)
 					// Опускаем регистр текущей строки цикла
@@ -2023,7 +2032,7 @@ func (app *App) applyFilter(color bool) {
 						app.filteredLogLines = append(app.filteredLogLines, originalLine)
 					}
 					// Regex (с использованием регулярных выражений Go и без учета регистра по умолчанию)
-				} else if app.selectFilterMode == "regex" {
+				case app.selectFilterMode == "regex":
 					// Проверяем, что строка подходит под регулярное выражение
 					if regex.MatchString(line) {
 						originalLine := line
@@ -2034,7 +2043,7 @@ func (app *App) applyFilter(color bool) {
 						app.filteredLogLines = append(app.filteredLogLines, originalLine)
 					}
 					// Default (точный поиск с учетом регистра)
-				} else {
+				default:
 					filter = app.filterText
 					if filter == "" || strings.Contains(line, filter) {
 						lineColor := strings.ReplaceAll(line, filter, "\x1b[0;44m"+filter+"\033[0m")
@@ -2876,8 +2885,7 @@ func (app *App) updateLogsView(lowerDown bool) {
 		// Стартовая позиция + размер текущего вывода логов и округляем в большую сторону (math)
 		percentage := int(math.Ceil(float64((startLine+viewHeight)*100) / float64(len(app.filteredLogLines))))
 		if percentage > 100 {
-			// v.Title = fmt.Sprintf("Logs: 100%% (%d) [Max lines: "+app.logViewCount+"/Load time: "+app.debugLoadTime+"]", len(app.filteredLogLines))
-			v.Title = fmt.Sprintf("Logs: 100%% (%d) ["+app.debugLoadTime+"]", len(app.filteredLogLines))
+			v.Title = fmt.Sprintf("Logs: 100%% (%d) ["+app.debugLoadTime+"]", len(app.filteredLogLines)) // "Logs: 100%% (%d) [Max lines: "+app.logViewCount+"/Load time: "+app.debugLoadTime+"]"
 		} else {
 			v.Title = fmt.Sprintf("Logs: %d%% (%d/%d) ["+app.debugLoadTime+"]", percentage, startLine+1+viewHeight, len(app.filteredLogLines))
 		}
@@ -3375,7 +3383,9 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 	})
 	// Отключаем переключение списков
 	app.keybindingsEnabled = false
-	app.setupKeybindings()
+	if err := app.setupKeybindings(); err != nil {
+		log.Panicln("Error key bindings", err)
+	}
 	// Полсекундная задержка, для корректного обновления интерфейса после выполнения функции
 	time.Sleep(500 * time.Millisecond)
 	app.logfiles = app.logfiles[:0]
@@ -3404,7 +3414,9 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 			}
 			// Включаем переключение списков
 			app.keybindingsEnabled = true
-			app.setupKeybindings()
+			if err := app.setupKeybindings(); err != nil {
+				log.Panicln("Error key bindings", err)
+			}
 		}()
 	} else {
 		go func() {
@@ -3424,7 +3436,9 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 			}
 			// Включаем переключение списков
 			app.keybindingsEnabled = true
-			app.setupKeybindings()
+			if err := app.setupKeybindings(); err != nil {
+				log.Panicln("Error key bindings", err)
+			}
 		}()
 	}
 	return nil
@@ -3442,7 +3456,9 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 		return nil
 	})
 	app.keybindingsEnabled = false
-	app.setupKeybindings()
+	if err := app.setupKeybindings(); err != nil {
+		log.Panicln("Error key bindings", err)
+	}
 	time.Sleep(500 * time.Millisecond)
 	app.logfiles = app.logfiles[:0]
 	app.startFiles = 0
@@ -3468,7 +3484,9 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 				app.loadWinFiles(app.selectPath)
 			}
 			app.keybindingsEnabled = true
-			app.setupKeybindings()
+			if err := app.setupKeybindings(); err != nil {
+				log.Panicln("Error key bindings", err)
+			}
 		}()
 	} else {
 		go func() {
@@ -3487,7 +3505,9 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 				app.loadFiles(app.selectPath)
 			}
 			app.keybindingsEnabled = true
-			app.setupKeybindings()
+			if err := app.setupKeybindings(); err != nil {
+				log.Panicln("Error key bindings", err)
+			}
 		}()
 	}
 	return nil
