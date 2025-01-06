@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -46,6 +47,7 @@ type App struct {
 	gui *gocui.Gui // графический интерфейс (gocui)
 
 	getOS         string   // название ОС
+	getArch       string   // архитектура процессора
 	hostName      string   // текущее имя хоста для покраски в логах
 	userName      string   // текущее имя пользователя
 	userNameArray []string // список всех пользователей
@@ -131,6 +133,51 @@ type App struct {
 	syslogUnitRegex      *regexp.Regexp
 }
 
+func showHelp() {
+	fmt.Println("lazydocker - terminal user interface  for journalctl, file system logs, as well Docker and Podman containers")
+	fmt.Println("Source code: https://github.com/Lifailon/lazyjournal")
+	fmt.Println("")
+	fmt.Println("  Flags:")
+	fmt.Println("    lazyjournal                Run interface")
+	fmt.Println("    lazyjournal --help, -h     Show help")
+	fmt.Println("    lazyjournal --version, -v  Show version")
+}
+
+func (app *App) showVersion() {
+	fmt.Println("Version:", "0.7.0") // Текущая версия
+	if app.getOS != "windows" {
+		data, err := os.ReadFile("/etc/os-release")
+		if err != nil {
+			fmt.Printf("OS: %s\n", app.getOS)
+			return
+		} else {
+			var name, version string
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.HasPrefix(line, "NAME=") {
+					name = strings.Trim(line[5:], "\"")
+				}
+				if strings.HasPrefix(line, "VERSION=") {
+					version = strings.Trim(line[8:], "\"")
+				}
+			}
+			fmt.Printf("OS: %s %s %s\n", app.getOS, name, version)
+		}
+	} else {
+		fmt.Printf("OS: %s\n", app.getOS)
+	}
+	fmt.Printf("Arch: %s\n", app.getArch)
+	execPath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	if strings.Contains(execPath, "tmp/go-build") || strings.Contains(execPath, "Temp\\go-build") {
+		fmt.Printf("Executable type: source code (%s)\n", execPath)
+	} else {
+		fmt.Printf("Executable type: binary file (%s)\n", execPath)
+	}
+	fmt.Println("If you have problems with the application, please open issue: https://github.com/Lifailon/lazyjournal/issues")
+}
+
 func main() {
 	// Инициализация значений по умолчанию + компиляция регулярных выражений для покраски
 	app := &App{
@@ -166,6 +213,27 @@ func main() {
 		keybindingsEnabled:           true,
 	}
 
+	// Определяем используемую ОС (linux/darwin/*bsd/windows) и архитектуру
+	app.getOS = runtime.GOOS
+	app.getArch = runtime.GOARCH
+
+	// Аргументы
+	help := flag.Bool("help", false, "Show help")
+	flag.BoolVar(help, "h", false, "Show help")
+	version := flag.Bool("version", false, "Show version")
+	flag.BoolVar(version, "v", false, "Show version")
+
+	// Обработка аргументов
+	flag.Parse()
+	if *help {
+		showHelp()
+		os.Exit(0)
+	}
+	if *version {
+		app.showVersion()
+		os.Exit(0)
+	}
+
 	// Создаем GUI
 	g, err := gocui.NewGui(gocui.OutputNormal, true) // 2-й параметр для форка
 	if err != nil {
@@ -193,9 +261,6 @@ func main() {
 	if err := app.layout(g); err != nil {
 		log.Panicln(err)
 	}
-
-	// Определяем используемую ОС (linux/darwin/windows)
-	app.getOS = runtime.GOOS
 
 	// Определяем переменные и массивы для покраски вывода
 	// Текущее имя хоста
