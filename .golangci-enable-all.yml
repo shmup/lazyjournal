@@ -1,0 +1,37 @@
+linters:
+  # https://golangci-lint.run/usage/linters
+  enable-all: true
+  disable:
+    - dupl
+    - gocognit
+    - goconst
+    - gosec
+    - revive
+    - cyclop
+    - depguard
+    - forbidigo
+    - funlen
+    - godot
+    - gofumpt
+    - lll
+    - makezero
+    - misspell
+    - mnd
+    - nestif
+    - nilerr
+    - nlreturn
+    - tagliatelle
+    - varnamelen
+    - wrapcheck
+    - wsl
+    - gocyclo
+    - unconvert
+    - errorlint
+    - ireturn
+    - maintidx
+    - nonamedreturns
+    - stylecheck
+    - exhaustruct
+    - exportloopref
+    - copyloopvar
+    - intrange

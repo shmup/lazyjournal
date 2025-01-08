@@ -28,7 +28,9 @@ jobs:
           go install -v github.com/go-critic/go-critic/cmd/gocritic@latest
 
       - name: Golangci linters check
-        run: golangci-lint run ./...
+        run: |
+          golangci-lint run ./...
+          golangci-lint run ./... --config ./.golangci-enable-all.yml
 
       - name: Gocritic linters check
         run: gocritic check -enableAll ./...

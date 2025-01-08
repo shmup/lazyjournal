@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -350,7 +351,7 @@ func main() {
 	}()
 
 	// Запус GUI
-	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
+	if err := g.MainLoop(); err != nil && !errors.Is(err, gocui.ErrQuit) {
 		log.Panicln(err)
 	}
 }
@@ -365,7 +366,7 @@ func (app *App) layout(g *gocui.Gui) error {
 
 	// Поле ввода для фильтрации списков
 	if v, err := g.SetView("filterList", 0, 0, leftPanelWidth-1, inputHeight-1, 0); err != nil {
-		if err != gocui.ErrUnknownView {
+		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
 		v.Title = "Filtering lists"
@@ -379,7 +380,7 @@ func (app *App) layout(g *gocui.Gui) error {
 	// Окно для отображения списка доступных журналов (UNIT)
 	// Размеры окна: заголовок, отступ слева, отступ сверху, ширина, высота, 5-й параметр из форка для продолжение окна (2)
 	if v, err := g.SetView("services", 0, inputHeight, leftPanelWidth-1, inputHeight+panelHeight-1, 0); err != nil {
-		if err != gocui.ErrUnknownView {
+		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
 		v.Title = " < Unit list (0) > " // заголовок окна
@@ -394,7 +395,7 @@ func (app *App) layout(g *gocui.Gui) error {
 
 	// Окно для списка логов из файловой системы
 	if v, err := g.SetView("varLogs", 0, inputHeight+panelHeight, leftPanelWidth-1, inputHeight+2*panelHeight-1, 0); err != nil {
-		if err != gocui.ErrUnknownView {
+		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
 		v.Title = " < System var logs (0) > "
@@ -408,7 +409,7 @@ func (app *App) layout(g *gocui.Gui) error {
 
 	// Окно для списка контейнеров Docker и Podman
 	if v, err := g.SetView("docker", 0, inputHeight+2*panelHeight, leftPanelWidth-1, maxY-1, 0); err != nil {
-		if err != gocui.ErrUnknownView {
+		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
 		v.Title = " < Docker containers (0) > "
@@ -421,7 +422,7 @@ func (app *App) layout(g *gocui.Gui) error {
 
 	// Окно ввода текста для фильтрации
 	if v, err := g.SetView("filter", leftPanelWidth+1, 0, maxX-1, 2, 0); err != nil {
-		if err != gocui.ErrUnknownView {
+		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
 		v.Title = "Filter (Default)"
@@ -432,7 +433,7 @@ func (app *App) layout(g *gocui.Gui) error {
 
 	// Окно для вывода записей выбранного журнала
 	if v, err := g.SetView("logs", leftPanelWidth+1, 3, maxX-1, maxY-1, 0); err != nil {
-		if err != gocui.ErrUnknownView {
+		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
 		v.Title = "Logs"
@@ -1345,7 +1346,7 @@ func (app *App) selectFile(g *gocui.Gui, v *gocui.View) error {
 }
 
 // Функция для чтения файла с опредиление кодировки в Windows
-func (app *App) loadWinFileLog(filePath string) (output []byte, errors string) {
+func (app *App) loadWinFileLog(filePath string) (output []byte, stringErrors string) {
 	// Открываем файл
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -1473,11 +1474,11 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 	if app.updateFile {
 		// Читаем логи в системе Windows
 		if app.getOS == "windows" {
-			decodedOutput, errors := app.loadWinFileLog(logFullPath)
-			if errors != "nil" {
+			decodedOutput, stringErrors := app.loadWinFileLog(logFullPath)
+			if stringErrors != "nil" {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, "\033[31mError", errors, "\033[0m")
+				fmt.Fprintln(v, "\033[31mError", stringErrors, "\033[0m")
 				return
 			}
 			app.currentLogLines = strings.Split(string(decodedOutput), "\n")
