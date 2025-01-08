@@ -915,10 +915,11 @@ func (app *App) loadFiles(logPath string) {
 				"-name", "*log*", "-o",
 				"-name", "*.1", "-o",
 				"-name", "*.gz", "-o",
+				"-name", "*.bz2", "-o",
 				"-name", "*.pcap",
 			)
 		} else {
-			// Загрузка системных журналов для Linux (все файлы, которые содержат log в расширение или названии, а также расширение .1, gz и pcap)
+			// Загрузка системных журналов для Linux (все файлы, которые содержат log в расширение или названии, а также расширение .1, gz, bz2 и pcap)
 			cmd = exec.Command(
 				"find", logPath, "/opt/",
 				"-type", "f",
@@ -926,6 +927,7 @@ func (app *App) loadFiles(logPath string) {
 				"-name", "*log*", "-o",
 				"-name", "*.1", "-o",
 				"-name", "*.gz", "-o",
+				"-name", "*.bz2", "-o",
 				"-name", "*.pcap",
 			)
 		}
@@ -1053,6 +1055,7 @@ func (app *App) loadFiles(logPath string) {
 		}
 		logName = strings.TrimSuffix(logName, ".log")
 		logName = strings.TrimSuffix(logName, ".gz")
+		logName = strings.TrimSuffix(logName, ".bz2")
 		logName = strings.ReplaceAll(logName, "/", " ")
 		logName = strings.ReplaceAll(logName, ".log.", "")
 		logName = strings.TrimPrefix(logName, " ")
@@ -1484,8 +1487,8 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			app.currentLogLines = strings.Split(string(decodedOutput), "\n")
 		} else {
 			// Читаем логи в системах UNIX (Linux/Darwin/*BSD)
-			// Читаем архивные логи (decompress + stdout)
 			switch {
+			// Читаем архивные логи (decompress + stdout)
 			case strings.HasSuffix(logFullPath, ".gz"):
 				cmdGzip := exec.Command("gzip", "-dc", logFullPath)
 				cmdTail := exec.Command("tail", "-n", app.logViewCount)
@@ -1526,7 +1529,43 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				}
 				// Выводим содержимое
 				app.currentLogLines = strings.Split(string(output), "\n")
-				// Читаем бинарные файлы с помощью last/lastb для wtmp/btmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
+			// Читаем архивные логи в формате bz2 в FreeBSD
+			case strings.HasSuffix(logFullPath, ".bz2"):
+				cmdBzip2 := exec.Command("bzip2", "-dc", logFullPath)
+				cmdTail := exec.Command("tail", "-n", app.logViewCount)
+				pipe, err := cmdBzip2.StdoutPipe()
+				if err != nil {
+					log.Fatalf("Error creating pipe: %v", err)
+				}
+				cmdTail.Stdin = pipe
+				out, err := cmdTail.StdoutPipe()
+				if err != nil {
+					log.Fatalf("Error creating stdout pipe for tail: %v", err)
+				}
+				if err := cmdBzip2.Start(); err != nil {
+					log.Fatalf("Error starting gzip: %v", err)
+				}
+				if err := cmdTail.Start(); err != nil {
+					log.Fatalf("Error starting tail: %v", err)
+				}
+				output, err := io.ReadAll(out)
+				if err != nil {
+					log.Fatalf("Error reading output from tail: %v", err)
+				}
+				if err := cmdBzip2.Wait(); err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading archive log using gzip tool.\n", err, "\033[0m")
+					return
+				}
+				if err := cmdTail.Wait(); err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
+			// Читаем бинарные файлы с помощью last/lastb для wtmp/btmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
 			case strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log"):
 				cmd := exec.Command("last", "-f", logFullPath)
 				output, err := cmd.Output()
@@ -1572,6 +1611,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
 				}
 				app.currentLogLines = filteredLines
+			// Выводим содержимое из команды lastlog
 			case strings.HasSuffix(logFullPath, "lastlog"):
 				cmd := exec.Command("lastlog")
 				output, err := cmd.Output()
@@ -1582,7 +1622,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					return
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
-				// FreeBSD
+			// lastlogin for FreeBSD
 			case strings.HasSuffix(logFullPath, "lastlogin"):
 				cmd := exec.Command("lastlogin")
 				output, err := cmd.Output()
@@ -1593,7 +1633,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					return
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
-				// Packet Filter (PF) Firewall OpenBSD
+			// Packet Filter (PF) Firewall OpenBSD
 			case strings.HasSuffix(logFullPath, "pflog"):
 				cmd := exec.Command("tcpdump", "-e", "-n", "-r", logFullPath)
 				output, err := cmd.Output()
@@ -1604,7 +1644,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					return
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
-				// pcap (Packet Capture)
+			// Packet Capture (pcap format)
 			case strings.HasSuffix(logFullPath, "pcap"):
 				cmd := exec.Command("tcpdump", "-n", "-r", logFullPath)
 				output, err := cmd.Output()
@@ -2424,6 +2464,8 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "unavailable", "\033[31m")
 	case strings.Contains(inputWordLower, "unsuccessful"):
 		coloredWord = app.replaceWordLower(inputWord, "unsuccessful", "\033[31m")
+	case strings.Contains(inputWordLower, "found"):
+		coloredWord = app.replaceWordLower(inputWord, "found", "\033[31m")
 	case strings.Contains(inputWordLower, "denied"):
 		coloredWord = app.replaceWordLower(inputWord, "denied", "\033[31m")
 	case strings.Contains(inputWordLower, "conflict"):
