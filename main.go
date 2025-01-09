@@ -135,7 +135,7 @@ type App struct {
 }
 
 func showHelp() {
-	fmt.Println("lazydocker - terminal user interface  for journalctl, file system logs, as well Docker and Podman containers")
+	fmt.Println("lazydocker - terminal user interface for journalctl, file system logs, as well Docker and Podman containers")
 	fmt.Println("Source code: https://github.com/Lifailon/lazyjournal")
 	fmt.Println("")
 	fmt.Println("  Flags:")
@@ -146,35 +146,30 @@ func showHelp() {
 
 func (app *App) showVersion() {
 	fmt.Println("Version:", "0.7.0") // Текущая версия
-	if app.getOS != "windows" {
-		data, err := os.ReadFile("/etc/os-release")
-		if err != nil {
-			fmt.Printf("OS: %s\n", app.getOS)
-			return
-		} else {
-			var name, version string
-			for _, line := range strings.Split(string(data), "\n") {
-				if strings.HasPrefix(line, "NAME=") {
-					name = strings.Trim(line[5:], "\"")
-				}
-				if strings.HasPrefix(line, "VERSION=") {
-					version = strings.Trim(line[8:], "\"")
-				}
-			}
-			fmt.Printf("OS: %s %s %s\n", app.getOS, name, version)
-		}
-	} else {
+	data, err := os.ReadFile("/etc/os-release")
+	// Если ошибка при чтении файла, то возвращаем только название ОС
+	if err != nil {
 		fmt.Printf("OS: %s\n", app.getOS)
+	} else {
+		var name, version string
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(line, "NAME=") {
+				name = strings.Trim(line[5:], "\"")
+			}
+			if strings.HasPrefix(line, "VERSION=") {
+				version = strings.Trim(line[8:], "\"")
+			}
+		}
+		fmt.Printf("OS: %s %s %s\n", app.getOS, name, version)
 	}
 	fmt.Printf("Arch: %s\n", app.getArch)
 	execPath, err := os.Executable()
-	if err != nil {
-		return
-	}
-	if strings.Contains(execPath, "tmp/go-build") || strings.Contains(execPath, "Temp\\go-build") {
-		fmt.Printf("Executable type: source code (%s)\n", execPath)
-	} else {
-		fmt.Printf("Executable type: binary file (%s)\n", execPath)
+	if err == nil {
+		if strings.Contains(execPath, "tmp/go-build") || strings.Contains(execPath, "Temp\\go-build") {
+			fmt.Printf("Executable type: source code (%s)\n", execPath)
+		} else {
+			fmt.Printf("Executable type: binary file (%s)\n", execPath)
+		}
 	}
 	fmt.Println("If you have problems with the application, please open issue: https://github.com/Lifailon/lazyjournal/issues")
 }
@@ -913,21 +908,19 @@ func (app *App) loadFiles(logPath string) {
 				"-type", "f",
 				"-name", "*.log", "-o",
 				"-name", "*log*", "-o",
-				"-name", "*.1", "-o",
-				"-name", "*.gz", "-o",
-				"-name", "*.bz2", "-o",
+				"-name", "*.[0-9]*", "-o",
+				"-name", "*.[0-9].*", "-o",
 				"-name", "*.pcap",
 			)
 		} else {
-			// Загрузка системных журналов для Linux (все файлы, которые содержат log в расширение или названии, а также расширение .1, gz, bz2 и pcap)
+			// Загрузка системных журналов для Linux: все файлы, которые содержат log в расширение или названии (архивы включительно), а также расширение с цифрой (архивные) и pcap
 			cmd = exec.Command(
 				"find", logPath, "/opt/",
 				"-type", "f",
 				"-name", "*.log", "-o",
 				"-name", "*log*", "-o",
-				"-name", "*.1", "-o",
-				"-name", "*.gz", "-o",
-				"-name", "*.bz2", "-o",
+				"-name", "*.[0-9]*", "-o",
+				"-name", "*.[0-9].*", "-o",
 				"-name", "*.pcap",
 			)
 		}
@@ -1055,9 +1048,10 @@ func (app *App) loadFiles(logPath string) {
 		}
 		logName = strings.TrimSuffix(logName, ".log")
 		logName = strings.TrimSuffix(logName, ".gz")
+		logName = strings.TrimSuffix(logName, ".xz")
 		logName = strings.TrimSuffix(logName, ".bz2")
 		logName = strings.ReplaceAll(logName, "/", " ")
-		logName = strings.ReplaceAll(logName, ".log.", "")
+		logName = strings.ReplaceAll(logName, ".log.", ".")
 		logName = strings.TrimPrefix(logName, " ")
 		if logPath == "/home/" || logPath == "/Users/" {
 			// Разбиваем строку на слова
@@ -1488,7 +1482,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		} else {
 			// Читаем логи в системах UNIX (Linux/Darwin/*BSD)
 			switch {
-			// Читаем архивные логи (decompress + stdout)
+			// Читаем архивные логи (decompress + stdout) в формате gz
 			case strings.HasSuffix(logFullPath, ".gz"):
 				cmdGzip := exec.Command("gzip", "-dc", logFullPath)
 				cmdTail := exec.Command("tail", "-n", app.logViewCount)
@@ -1529,7 +1523,43 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				}
 				// Выводим содержимое
 				app.currentLogLines = strings.Split(string(output), "\n")
-			// Читаем архивные логи в формате bz2 в FreeBSD
+			// Читаем архивные логи в формате xz
+			case strings.HasSuffix(logFullPath, ".xz"):
+				cmdXz := exec.Command("xz", "-dc", logFullPath)
+				cmdTail := exec.Command("tail", "-n", app.logViewCount)
+				pipe, err := cmdXz.StdoutPipe()
+				if err != nil {
+					log.Fatalf("Error creating pipe: %v", err)
+				}
+				cmdTail.Stdin = pipe
+				out, err := cmdTail.StdoutPipe()
+				if err != nil {
+					log.Fatalf("Error creating stdout pipe for tail: %v", err)
+				}
+				if err := cmdXz.Start(); err != nil {
+					log.Fatalf("Error starting xz: %v", err)
+				}
+				if err := cmdTail.Start(); err != nil {
+					log.Fatalf("Error starting tail: %v", err)
+				}
+				output, err := io.ReadAll(out)
+				if err != nil {
+					log.Fatalf("Error reading output from tail: %v", err)
+				}
+				if err := cmdXz.Wait(); err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading archive log using xz tool.\n", err, "\033[0m")
+					return
+				}
+				if err := cmdTail.Wait(); err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
+			// Читаем архивные логи в формате bz2 для FreeBSD
 			case strings.HasSuffix(logFullPath, ".bz2"):
 				cmdBzip2 := exec.Command("bzip2", "-dc", logFullPath)
 				cmdTail := exec.Command("tail", "-n", app.logViewCount)
@@ -1543,7 +1573,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					log.Fatalf("Error creating stdout pipe for tail: %v", err)
 				}
 				if err := cmdBzip2.Start(); err != nil {
-					log.Fatalf("Error starting gzip: %v", err)
+					log.Fatalf("Error starting bzip2: %v", err)
 				}
 				if err := cmdTail.Start(); err != nil {
 					log.Fatalf("Error starting tail: %v", err)
@@ -1555,7 +1585,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				if err := cmdBzip2.Wait(); err != nil {
 					v, _ := app.gui.View("logs")
 					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading archive log using gzip tool.\n", err, "\033[0m")
+					fmt.Fprintln(v, " \033[31mError reading archive log using bzip2 tool.\n", err, "\033[0m")
 					return
 				}
 				if err := cmdTail.Wait(); err != nil {
