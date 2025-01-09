@@ -1482,118 +1482,64 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		} else {
 			// Читаем логи в системах UNIX (Linux/Darwin/*BSD)
 			switch {
-			// Читаем архивные логи (decompress + stdout) в формате gz
-			case strings.HasSuffix(logFullPath, ".gz"):
-				cmdGzip := exec.Command("gzip", "-dc", logFullPath)
-				cmdTail := exec.Command("tail", "-n", app.logViewCount)
-				pipe, err := cmdGzip.StdoutPipe()
-				if err != nil {
-					log.Fatalf("Error creating pipe: %v", err)
+			// Читаем архивные логи (unpack + stdout) в формате: gz/xz/bz2
+			case strings.HasSuffix(logFullPath, ".gz") || strings.HasSuffix(logFullPath, ".xz") || strings.HasSuffix(logFullPath, ".bz2"):
+				var unpacker string
+				vError, _ := app.gui.View("logs")
+				switch {
+				case strings.HasSuffix(logFullPath, ".gz"):
+					unpacker = "gzip"
+				case strings.HasSuffix(logFullPath, ".xz"):
+					unpacker = "xz"
+				case strings.HasSuffix(logFullPath, ".bz2"):
+					unpacker = "bzip2"
 				}
-				// Стандартный вывод gzip передаем в stdin tail
+				cmdZip := exec.Command(unpacker, "-dc", logFullPath)
+				cmdTail := exec.Command("tail", "-n", app.logViewCount)
+				pipe, err := cmdZip.StdoutPipe()
+				if err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError creating pipe for", unpacker, "tool.\n", err, "\033[0m")
+					return
+				}
+				// Стандартный вывод программы передаем в stdin tail
 				cmdTail.Stdin = pipe
 				out, err := cmdTail.StdoutPipe()
 				if err != nil {
-					log.Fatalf("Error creating stdout pipe for tail: %v", err)
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError creating stdout pipe for tail.\n", err, "\033[0m")
+					return
 				}
 				// Запуск команд
-				if err := cmdGzip.Start(); err != nil {
-					log.Fatalf("Error starting gzip: %v", err)
+				if err := cmdZip.Start(); err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError starting", unpacker, "tool.\n", err, "\033[0m")
+					return
 				}
 				if err := cmdTail.Start(); err != nil {
-					log.Fatalf("Error starting tail: %v", err)
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError starting tail from", unpacker, "stdout.\n", err, "\033[0m")
+					return
 				}
 				// Чтение вывода
 				output, err := io.ReadAll(out)
 				if err != nil {
-					log.Fatalf("Error reading output from tail: %v", err)
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError reading output from tail.\n", err, "\033[0m")
+					return
 				}
 				// Ожидание завершения команд
-				if err := cmdGzip.Wait(); err != nil {
-					v, _ := app.gui.View("logs")
-					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading archive log using gzip tool.\n", err, "\033[0m")
+				if err := cmdZip.Wait(); err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError reading archive log using", unpacker, "tool.\n", err, "\033[0m")
 					return
 				}
 				if err := cmdTail.Wait(); err != nil {
-					v, _ := app.gui.View("logs")
-					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
 					return
 				}
 				// Выводим содержимое
-				app.currentLogLines = strings.Split(string(output), "\n")
-			// Читаем архивные логи в формате xz
-			case strings.HasSuffix(logFullPath, ".xz"):
-				cmdXz := exec.Command("xz", "-dc", logFullPath)
-				cmdTail := exec.Command("tail", "-n", app.logViewCount)
-				pipe, err := cmdXz.StdoutPipe()
-				if err != nil {
-					log.Fatalf("Error creating pipe: %v", err)
-				}
-				cmdTail.Stdin = pipe
-				out, err := cmdTail.StdoutPipe()
-				if err != nil {
-					log.Fatalf("Error creating stdout pipe for tail: %v", err)
-				}
-				if err := cmdXz.Start(); err != nil {
-					log.Fatalf("Error starting xz: %v", err)
-				}
-				if err := cmdTail.Start(); err != nil {
-					log.Fatalf("Error starting tail: %v", err)
-				}
-				output, err := io.ReadAll(out)
-				if err != nil {
-					log.Fatalf("Error reading output from tail: %v", err)
-				}
-				if err := cmdXz.Wait(); err != nil {
-					v, _ := app.gui.View("logs")
-					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading archive log using xz tool.\n", err, "\033[0m")
-					return
-				}
-				if err := cmdTail.Wait(); err != nil {
-					v, _ := app.gui.View("logs")
-					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
-					return
-				}
-				app.currentLogLines = strings.Split(string(output), "\n")
-			// Читаем архивные логи в формате bz2 для FreeBSD
-			case strings.HasSuffix(logFullPath, ".bz2"):
-				cmdBzip2 := exec.Command("bzip2", "-dc", logFullPath)
-				cmdTail := exec.Command("tail", "-n", app.logViewCount)
-				pipe, err := cmdBzip2.StdoutPipe()
-				if err != nil {
-					log.Fatalf("Error creating pipe: %v", err)
-				}
-				cmdTail.Stdin = pipe
-				out, err := cmdTail.StdoutPipe()
-				if err != nil {
-					log.Fatalf("Error creating stdout pipe for tail: %v", err)
-				}
-				if err := cmdBzip2.Start(); err != nil {
-					log.Fatalf("Error starting bzip2: %v", err)
-				}
-				if err := cmdTail.Start(); err != nil {
-					log.Fatalf("Error starting tail: %v", err)
-				}
-				output, err := io.ReadAll(out)
-				if err != nil {
-					log.Fatalf("Error reading output from tail: %v", err)
-				}
-				if err := cmdBzip2.Wait(); err != nil {
-					v, _ := app.gui.View("logs")
-					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading archive log using bzip2 tool.\n", err, "\033[0m")
-					return
-				}
-				if err := cmdTail.Wait(); err != nil {
-					v, _ := app.gui.View("logs")
-					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
-					return
-				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 			// Читаем бинарные файлы с помощью last/lastb для wtmp/btmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
 			case strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log"):
@@ -2484,6 +2430,14 @@ func (app *App) wordColor(inputWord string) string {
 		}
 	case strings.Contains(inputWordLower, "kill"):
 		words := []string{"killer", "killing", "kills", "kill"}
+		for _, word := range words {
+			if strings.Contains(inputWordLower, word) {
+				coloredWord = app.replaceWordLower(inputWord, word, "\033[31m")
+				break
+			}
+		}
+	case strings.Contains(inputWordLower, "cancel"):
+		words := []string{"cancellation", "cancelation", "canceled", "cancelling", "canceling", "cancel"}
 		for _, word := range words {
 			if strings.Contains(inputWordLower, word) {
 				coloredWord = app.replaceWordLower(inputWord, word, "\033[31m")
