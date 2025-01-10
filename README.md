@@ -6,15 +6,30 @@
     <a href="https://pkg.go.dev/github.com/Lifailon/lazyjournal"><img src="https://pkg.go.dev/badge/github.com/Lifailon/lazyjournal.svg" alt="Go Reference"></a>
     <a href="https://goreportcard.com/report/github.com/Lifailon/lazyjournal"><img src="https://goreportcard.com/badge/github.com/Lifailon/lazyjournal" alt="Go Report"></a>
     <a href="https://github.com/Lifailon/lazyjournal/actions/workflows/build.yml"><img title="Actions Build"src="https://img.shields.io/github/actions/workflow/status/Lifailon/lazyjournal/build.yml?logo=GitHub-Actions"></a>
-    <a href="https://github.com/Lifailon/lazyjournal"><img title="Go Version"src="https://img.shields.io/github/go-mod/go-version/Lifailon/lazyjournal?logo=go"></a>
+    <a href="https://aur.archlinux.org/packages/lazyjournal"><img title="Arch Linux"src="https://img.shields.io/aur/version/lazyjournal?logo=arch-linux"></a>
     <a href="https://github.com/Lifailon/Kinozal-Bot/blob/rsa/LICENSE"><img title="License"src="https://img.shields.io/github/license/Lifailon/Kinozal-Bot?logo=readme&color=white"></a>
 </p>
 
-Terminal user interface for `journalctl`, file system logs, as well *Docker* and *Podman* containers for quick viewing and filtering with fuzzy find, regex support (like `fzf` and `grep`) and coloring the output, written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
+Terminal user interface for `journalctl`, file system logs, as well **Docker** and **Podman** containers for quick viewing and filtering with fuzzy find, regex support (like `fzf` and `grep`) and coloring the output, written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
 This tool is inspired by and with love for [LazyDocker](https://github.com/jesseduffield/lazydocker) and [LazyGit](https://github.com/jesseduffield/lazygit), as well as is listed as [Awesome-TUIs](https://github.com/rothgar/awesome-tuis), check out the other useful projects in the repository page.
 
 ![interface](/img/fuzzy.jpg)
+
+- [Functional](#functional)
+- [Roadmap](#roadmap)
+- [Install](#install)
+  - [Unix-based](#unix-based)
+  - [Arch Linux](#arch-linux)
+  - [Windows](#windows)
+  - [Go Package](#go-package)
+  - [Others](#others)
+- [Usage](#usage)
+- [Build](#build)
+- [Hotkeys](#hotkeys)
+- [Contributing](#contributing)
+- [Alternatives](#alternatives)
+- [License](#license)
 
 ## Functional
 
@@ -24,8 +39,8 @@ This tool is inspired by and with love for [LazyDocker](https://github.com/jesse
 - List of all system boots for kernel log output.
 - File system logs (example, for Apache or Nginx), as well as `syslog` or `messages`, `dmesg` (kernel), etc.
 - List of all log files of descriptors used by processes, as well as all log files in the home directories of users.
-- Reading archived logs (`gz` format).
-- *Podman* pods, *Docker* containers and *Swarm* services logs for all systems.
+- Reading archived logs (`gz`, `xz` or `bz2` format) and packet capture files (`pcap` format).
+- Docker containers, Podman pods and Swarm services logs.
 - Displays the currently selected log and filters output in real-time.
 
 Supports 3 filtering modes:
@@ -38,53 +53,44 @@ Supported coloring groups for output:
 
 - **Green** - keywords indicating success.
 - **Red** - keywords indicating an error.
-- **Blue** - statuses and action messages (debug, warning, etc and install, update, etc).
+- **Blue** - statuses, (info, debug, etc), actions (install, update, etc) and HTTP methods (GET, POST, etc).
 - **Light Blue** - numbers (date, time, bytes, ip and mac-addresses).
-- **Yellow** - known names (host name and system users).
+- **Yellow** - known names (host name and system users) and warnings.
 - **Purple** - url and full paths in the file system.
 - **Custom** - unix processes.
 
 ## Roadmap
 
-This is an up-to-date roadmap in addition to the functionality described above.
+This is a backlog in addition to the functions described above.
 
-- [X] File system support for `MacOS` (darwin system) and the `RHEL` based systems.
 - [X] Syntax coloring for logging output (like `tailspin`).
-- [ ] Windows file system support (log files from `Program Files` and others directories).
-- [ ] Windows events via `PowerShell`.
+- [X] File system support for **MacOS** (darwin system) and the **RHEL** based systems.
+- [X] File system support for **BSD** based systems.
+- [X] File system support for **Windows**.
+- [ ] Code coverage by tests and passing all linters.
 - [ ] Interface for scrolling and the mouse support.
+- [ ] Windows events via PowerShell.
 - [ ] Support remote machines via `ssh` protocol.
 
 ## Install
 
-### Releases
+Binaries for all operating systems are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
-Binaries for the Linux operating system are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
+Development is carried out on the Ubuntu Server 24.04.1 system and Windows 10. Also tested on the Raspberry Pi (`aarch64` platform), MacOS Sequoia 15.2 (`x64` platform), Ubuntu Server 20.04.6, OpenBSD 7.6, FreeBSD 14.2 and the WSL environment on the Oracle Linux 9.1.
 
-Development is carried out on the Ubuntu Server system, and is also tested on the Raspberry Pi (`aarch64` platform), MacOS (`x64` platform) and the WSL environment on the Oracle Linux system.
+### Unix-based
 
-Run the command in the console to quickly install or update the stable version on Linux or MacOS:
+Run the command in the console to quickly install or update the stable version for Linux, MacOS or the BSD-based system:
 
 ```shell
-curl https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | bash
+curl -sS https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | bash
 ```
 
 This command will run a script that will download the latest executable from the GitHub repository into your current user's home directory along with other executables (or create a directory) and grant execution permission.
 
-### Latest
-
-You can also use Go for install the dev version. To do this, the Go interpreter must be installed on the system, for example, in Ubuntu you can use the SnapCraft package manager:
-
-```shell
-sudo snap install go --classic
-grep -F 'export PATH=$PATH:$HOME/go/bin' $HOME/.bashrc || echo 'export PATH=$PATH:$HOME/go/bin' >> $HOME/.bashrc && source $HOME/.bashrc
-
-go install github.com/Lifailon/lazyjournal@latest
-```
-
 ### Arch Linux
 
-If you're an Arch Linux user you can also install from the [AUR](https://aur.archlinux.org/packages/lazyjournal) with your favorite [AUR helper](https://wiki.archlinux.org/title/AUR_helpers), e.g.:
+If you an Arch Linux user you can also install from the [AUR](https://aur.archlinux.org/packages/lazyjournal):
 
 ```shell
 paru -S lazyjournal
@@ -92,34 +98,63 @@ paru -S lazyjournal
 
 Thank you [Matteo Giordano](https://github.com/malteo) for upload and update the package in AUR.
 
+### Windows
+
+Use the following command to quickly install in your PowerShell console:
+
+```PowerShell
+Invoke-RestMethod https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.ps1 | Invoke-Expression
+```
+
+Supports reading containers logs as well as searching for logs in the following directories:
+
+- `Program Files`
+- `Program Files (x86)`
+- `AppData\Local` for current user
+- `AppData\Roamin` for current user
+
+To read logs, automatic detection of the following encodings is supported:
+
+- `UTF-8`
+- `UTF-16 with BOM`
+- `UTF-16 without BOM`
+- `Windows-1251` by default
+
+### Go Package
+
+You can also use Go for install the dev version ([Go](https://go.dev/doc/install) must be installed in the system):
+
+```shell
+go install github.com/Lifailon/lazyjournal@latest
+```
+
 ### Others
 
-If you use other packag manager and want this package to be present there as well, open an issue or load it yourself and make `Pull requests`.
+If you use other packag manager and want this package to be present there as well, open an issue or load it yourself and make [Pull requests](https://github.com/Lifailon/lazyjournal/pulls).
 
 ## Usage
 
-You can launch the interface anywhere (no parameters are used):
+You can run the interface from anywhere:
 
 ```shell
-lazyjournal
+lazyjournal                # Run interface
+lazyjournal --help, -h     # Show help
+lazyjournal --version, -v  # Show version
 ```
 
 Access to all system logs and containers may require elevated privileges for the current user.
 
-Windows is not currently supported, but the project will work to access Docker and Podman containers logs.
-
 ## Build
 
-Clone the repository, install dependencies from `go.mod` and run the project:
+Clone the repository and run the project:
 
 ```shell
 git clone https://github.com/Lifailon/lazyjournal
 cd lazyjournal
-go mod tidy
 go run main.go
 ```
 
-Check the code for linters using [golangci-lint](https://github.com/golangci/golangci-lint) and build executables for different platforms and all systems:
+Check the source code on the linters using [golangci-lint](https://github.com/golangci/golangci-lint) and build binaries for different platforms and systems:
 
 ```shell
 bash build.sh
