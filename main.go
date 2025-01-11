@@ -906,6 +906,7 @@ func (app *App) loadFiles(logPath string) {
 			cmd = exec.Command(
 				"find", logPath, "/Library/Logs", "/opt/",
 				"-type", "f",
+				"-name", "*.asl", "-o",
 				"-name", "*.log", "-o",
 				"-name", "*log*", "-o",
 				"-name", "*.[0-9]*", "-o",
@@ -995,6 +996,7 @@ func (app *App) loadFiles(logPath string) {
 			"-type", "f",
 			"(",
 			"-name", "*.log", "-o",
+			"-name", "*.asl", "-o",
 			"-name", "*.pcap",
 			")",
 			"-print",
@@ -1047,6 +1049,7 @@ func (app *App) loadFiles(logPath string) {
 			logName = strings.TrimPrefix(logFullPath, logPath)
 		}
 		logName = strings.TrimSuffix(logName, ".log")
+		logName = strings.TrimSuffix(logName, ".asl")
 		logName = strings.TrimSuffix(logName, ".gz")
 		logName = strings.TrimSuffix(logName, ".xz")
 		logName = strings.TrimSuffix(logName, ".bz2")
@@ -1540,6 +1543,17 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					return
 				}
 				// Выводим содержимое
+				app.currentLogLines = strings.Split(string(output), "\n")
+			// Читаем файлы в формате ASL (Apple System Log)
+			case strings.HasSuffix(logFullPath, "asl"):
+				cmd := exec.Command("syslog", "-f", logFullPath)
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using syslog tool in ASL format (Apple System Log).\n", err, "\033[0m")
+					return
+				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 			// Читаем бинарные файлы с помощью last/lastb для wtmp/btmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
 			case strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log"):
