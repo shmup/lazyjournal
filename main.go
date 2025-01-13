@@ -912,9 +912,10 @@ func (app *App) loadFiles(logPath string) {
 				"-name", "*.[0-9]*", "-o",
 				"-name", "*.[0-9].*", "-o",
 				"-name", "*.pcap",
+				"-name", "*.pcapng",
 			)
 		} else {
-			// Загрузка системных журналов для Linux: все файлы, которые содержат log в расширение или названии (архивы включительно), а также расширение с цифрой (архивные) и pcap
+			// Загрузка системных журналов для Linux: все файлы, которые содержат log в расширение или названии (архивы включительно), а также расширение с цифрой (архивные) и pcap/pcapng
 			cmd = exec.Command(
 				"find", logPath, "/opt/",
 				"-type", "f",
@@ -923,6 +924,7 @@ func (app *App) loadFiles(logPath string) {
 				"-name", "*.[0-9]*", "-o",
 				"-name", "*.[0-9].*", "-o",
 				"-name", "*.pcap",
+				"-name", "*.pcapng",
 			)
 		}
 		output, _ = cmd.Output()
@@ -998,6 +1000,7 @@ func (app *App) loadFiles(logPath string) {
 			"-name", "*.log", "-o",
 			"-name", "*.asl", "-o",
 			"-name", "*.pcap",
+			"-name", "*.pcapng",
 			")",
 			"-print",
 		)
@@ -1023,6 +1026,7 @@ func (app *App) loadFiles(logPath string) {
 			"-type", "f",
 			"-name", "*.log", "-o",
 			"-name", "*.pcap",
+			"-name", "*.pcapng",
 		)
 		outputRootDir, err := cmdRootDir.Output()
 		// Добавляем содержимое директории /root/ в общий массив, если есть доступ
@@ -1485,6 +1489,102 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		} else {
 			// Читаем логи в системах UNIX (Linux/Darwin/*BSD)
 			switch {
+			// Читаем файлы в формате ASL (Apple System Log)
+			case strings.HasSuffix(logFullPath, "asl"):
+				cmd := exec.Command("syslog", "-f", logFullPath)
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using syslog tool in ASL (Apple System Log) format.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
+			// Читаем журналы Packet Capture в формате pcap/pcapng
+			case strings.HasSuffix(logFullPath, "pcap") || strings.HasSuffix(logFullPath, "pcapng"):
+				cmd := exec.Command("tcpdump", "-n", "-r", logFullPath)
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
+			// Packet Filter (PF) Firewall OpenBSD
+			case strings.HasSuffix(logFullPath, "pflog"):
+				cmd := exec.Command("tcpdump", "-e", "-n", "-r", logFullPath)
+				output, err := cmd.Output()
+				if err != nil {
+					v, _ := app.gui.View("logs")
+					v.Clear()
+					fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = strings.Split(string(output), "\n")
+			// Читаем архивные логи в формате pcap/pcapng (MacOS)
+			case strings.HasSuffix(logFullPath, "pcap.gz") || strings.HasSuffix(logFullPath, "pcapng.gz"):
+				var unpacker string = "gzip"
+				vError, _ := app.gui.View("logs")
+				// Создаем временный файл
+				tmpFile, err := os.CreateTemp("", "temp-*.pcap")
+				if err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError create temp file.\n", err, "\033[0m")
+					return
+				}
+				// Удаляем временный файл после обработки
+				defer os.Remove(tmpFile.Name())
+				cmdUnzip := exec.Command(unpacker, "-dc", logFullPath)
+				cmdUnzip.Stdout = tmpFile
+				if err := cmdUnzip.Start(); err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError starting", unpacker, "tool.\n", err, "\033[0m")
+					return
+				}
+				if err := cmdUnzip.Wait(); err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError decompressing file with", unpacker, "tool.\n", err, "\033[0m")
+					return
+				}
+				// Закрываем временный файл, чтобы tcpdump мог его открыть
+				if err := tmpFile.Close(); err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError closing temp file.\n", err, "\033[0m")
+					return
+				}
+				// Создаем команду для tcpdump
+				cmdTcpdump := exec.Command("tcpdump", "-n", "-r", tmpFile.Name())
+				tcpdumpOut, err := cmdTcpdump.StdoutPipe()
+				if err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError creating stdout pipe for tcpdump.\n", err, "\033[0m")
+					return
+				}
+				// Запускаем tcpdump
+				if err := cmdTcpdump.Start(); err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError starting tcpdump.\n", err, "\033[0m")
+					return
+				}
+				// Читаем вывод tcpdump построчно
+				scanner := bufio.NewScanner(tcpdumpOut)
+				var lines []string
+				for scanner.Scan() {
+					lines = append(lines, scanner.Text())
+				}
+				if err := scanner.Err(); err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError reading output from tcpdump.\n", err, "\033[0m")
+					return
+				}
+				// Ожидаем завершения tcpdump
+				if err := cmdTcpdump.Wait(); err != nil {
+					vError.Clear()
+					fmt.Fprintln(vError, " \033[31mError finishing tcpdump.\n", err, "\033[0m")
+					return
+				}
+				app.currentLogLines = lines
 			// Читаем архивные логи (unpack + stdout) в формате: gz/xz/bz2
 			case strings.HasSuffix(logFullPath, ".gz") || strings.HasSuffix(logFullPath, ".xz") || strings.HasSuffix(logFullPath, ".bz2"):
 				var unpacker string
@@ -1497,9 +1597,9 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				case strings.HasSuffix(logFullPath, ".bz2"):
 					unpacker = "bzip2"
 				}
-				cmdZip := exec.Command(unpacker, "-dc", logFullPath)
+				cmdUnzip := exec.Command(unpacker, "-dc", logFullPath)
 				cmdTail := exec.Command("tail", "-n", app.logViewCount)
-				pipe, err := cmdZip.StdoutPipe()
+				pipe, err := cmdUnzip.StdoutPipe()
 				if err != nil {
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError creating pipe for", unpacker, "tool.\n", err, "\033[0m")
@@ -1514,7 +1614,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					return
 				}
 				// Запуск команд
-				if err := cmdZip.Start(); err != nil {
+				if err := cmdUnzip.Start(); err != nil {
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError starting", unpacker, "tool.\n", err, "\033[0m")
 					return
@@ -1532,7 +1632,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					return
 				}
 				// Ожидание завершения команд
-				if err := cmdZip.Wait(); err != nil {
+				if err := cmdUnzip.Wait(); err != nil {
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError reading archive log using", unpacker, "tool.\n", err, "\033[0m")
 					return
@@ -1544,18 +1644,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				}
 				// Выводим содержимое
 				app.currentLogLines = strings.Split(string(output), "\n")
-			// Читаем файлы в формате ASL (Apple System Log)
-			case strings.HasSuffix(logFullPath, "asl"):
-				cmd := exec.Command("syslog", "-f", logFullPath)
-				output, err := cmd.Output()
-				if err != nil {
-					v, _ := app.gui.View("logs")
-					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading log using syslog tool in ASL format (Apple System Log).\n", err, "\033[0m")
-					return
-				}
-				app.currentLogLines = strings.Split(string(output), "\n")
-			// Читаем бинарные файлы с помощью last/lastb для wtmp/btmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
+			// Читаем бинарные файлы с помощью last для wtmp, а также utmp (OpenBSD) и utx.log (FreeBSD)
 			case strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log"):
 				cmd := exec.Command("last", "-f", logFullPath)
 				output, err := cmd.Output()
@@ -1580,6 +1669,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					filteredLines[i], filteredLines[j] = filteredLines[j], filteredLines[i]
 				}
 				app.currentLogLines = filteredLines
+			// lastb for btmp
 			case strings.Contains(logFullPath, "btmp"):
 				cmd := exec.Command("lastb", "-f", logFullPath)
 				output, err := cmd.Output()
@@ -1620,28 +1710,6 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 					v, _ := app.gui.View("logs")
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using lastlogin tool.\n", err, "\033[0m")
-					return
-				}
-				app.currentLogLines = strings.Split(string(output), "\n")
-			// Packet Filter (PF) Firewall OpenBSD
-			case strings.HasSuffix(logFullPath, "pflog"):
-				cmd := exec.Command("tcpdump", "-e", "-n", "-r", logFullPath)
-				output, err := cmd.Output()
-				if err != nil {
-					v, _ := app.gui.View("logs")
-					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
-					return
-				}
-				app.currentLogLines = strings.Split(string(output), "\n")
-			// Packet Capture (pcap format)
-			case strings.HasSuffix(logFullPath, "pcap"):
-				cmd := exec.Command("tcpdump", "-n", "-r", logFullPath)
-				output, err := cmd.Output()
-				if err != nil {
-					v, _ := app.gui.View("logs")
-					v.Clear()
-					fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
 					return
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
