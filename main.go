@@ -426,8 +426,18 @@ func (app *App) layout(g *gocui.Gui) error {
 		v.Wrap = true
 	}
 
-	// Окно для вывода записей выбранного журнала
-	if v, err := g.SetView("logs", leftPanelWidth+1, 3, maxX-1, maxY-1, 0); err != nil {
+	// Интерфейс скролла в окне вывода лога (maxX-3 ширина окна - отступ слева)
+	if v, err := g.SetView("scrollLogs", maxX-3, 3, maxX-1, maxY-1, 0); err != nil {
+		if !errors.Is(err, gocui.ErrUnknownView) {
+			return err
+		}
+		v.Wrap = true
+		v.Autoscroll = false
+		v.FgColor = gocui.ColorGreen // Цвет текста (зеленый)
+	}
+
+	// Окно для вывода записей выбранного журнала (maxX-2 для отступа скролла и 8 для продолжения углов)
+	if v, err := g.SetView("logs", leftPanelWidth+1, 3, maxX-1-2, maxY-1, 8); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
@@ -3055,9 +3065,10 @@ func (app *App) updateLogsView(lowerDown bool) {
 		}
 	}
 	// Вычисляем процент прокрутки и обновляем заголовок
+	var percentage int = 0
 	if len(app.filteredLogLines) > 0 {
 		// Стартовая позиция + размер текущего вывода логов и округляем в большую сторону (math)
-		percentage := int(math.Ceil(float64((startLine+viewHeight)*100) / float64(len(app.filteredLogLines))))
+		percentage = int(math.Ceil(float64((startLine+viewHeight)*100) / float64(len(app.filteredLogLines))))
 		if percentage > 100 {
 			v.Title = fmt.Sprintf("Logs: 100%% (%d) ["+app.debugLoadTime+"]", len(app.filteredLogLines)) // "Logs: 100%% (%d) [Max lines: "+app.logViewCount+"/Load time: "+app.debugLoadTime+"]"
 		} else {
@@ -3065,6 +3076,42 @@ func (app *App) updateLogsView(lowerDown bool) {
 		}
 	} else {
 		v.Title = "Logs: 0% (0) [" + app.debugLoadTime + "]"
+	}
+	app.viewScrollLogs(percentage)
+}
+
+// Функция для отображения окна скроллинга
+func (app *App) viewScrollLogs(percentage int) {
+	vScroll, _ := app.gui.View("scrollLogs")
+	vScroll.Clear()
+	// Определяем высоту окна
+	_, viewHeight := vScroll.Size()
+	// Заполняем скролл, если вывод пустой или не выходит за пределы окна
+	if percentage == 0 || percentage > 100 {
+		for i := 0; i < viewHeight; i++ {
+			fmt.Fprintln(vScroll, "█")
+		}
+	} else {
+		// Рассчитываем позицию курсора (корректируем процент на размер скролла)
+		scrollPosition := (viewHeight*percentage)/100 - 3
+		// Выводим строки с пробелами и символом █
+		for i := 0; i < viewHeight; i++ {
+			// Проверяем поизицию и другие условия
+			if i == scrollPosition || scrollPosition <= 0 || app.logScrollPos == 0 {
+				// Выводим скролл
+				fmt.Fprintln(vScroll, "███")
+				// Если вышли за пределы окна, устанавливаем курсор в начало
+				if scrollPosition <= 0 {
+					break
+				}
+				// Если текст находится в самом начале, устанавливаем курсор в начало
+				if app.logScrollPos == 0 {
+					break
+				}
+			} else {
+				fmt.Fprintln(vScroll, " ") // Пробелы на остальных строках
+			}
+		}
 	}
 }
 
@@ -3735,6 +3782,10 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		log.Panicln(err)
 	}
+	selectedScrollLogs, err := g.View("scrollLogs")
+	if err != nil {
+		log.Panicln(err)
+	}
 	currentView := g.CurrentView()
 	var nextView string
 	// Начальное окно
@@ -3756,6 +3807,7 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "services":
 			nextView = "varLogs"
 			selectedFilterList.FrameColor = gocui.ColorDefault
@@ -3770,6 +3822,7 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "varLogs":
 			nextView = "docker"
 			selectedFilterList.FrameColor = gocui.ColorDefault
@@ -3784,6 +3837,7 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "docker":
 			nextView = "filter"
 			selectedFilterList.FrameColor = gocui.ColorDefault
@@ -3798,6 +3852,7 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorGreen
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "filter":
 			nextView = "logs"
 			selectedFilterList.FrameColor = gocui.ColorDefault
@@ -3812,6 +3867,7 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorGreen
 			selectedLogs.TitleColor = gocui.ColorGreen
+			selectedScrollLogs.FrameColor = gocui.ColorGreen
 		case "logs":
 			nextView = "filterList"
 			selectedFilterList.FrameColor = gocui.ColorGreen
@@ -3826,6 +3882,7 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		}
 	}
 	// Устанавливаем новое активное окно
@@ -3861,6 +3918,10 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		log.Panicln(err)
 	}
+	selectedScrollLogs, err := g.View("scrollLogs")
+	if err != nil {
+		log.Panicln(err)
+	}
 	currentView := g.CurrentView()
 	var nextView string
 	if currentView == nil {
@@ -3881,6 +3942,7 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorGreen
 			selectedLogs.TitleColor = gocui.ColorGreen
+			selectedScrollLogs.FrameColor = gocui.ColorGreen
 		case "services":
 			nextView = "filterList"
 			selectedFilterList.FrameColor = gocui.ColorGreen
@@ -3895,6 +3957,7 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "logs":
 			nextView = "filter"
 			selectedFilterList.FrameColor = gocui.ColorDefault
@@ -3909,6 +3972,7 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorGreen
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "filter":
 			nextView = "docker"
 			selectedFilterList.FrameColor = gocui.ColorDefault
@@ -3923,6 +3987,7 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "docker":
 			nextView = "varLogs"
 			selectedFilterList.FrameColor = gocui.ColorDefault
@@ -3937,6 +4002,7 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "varLogs":
 			nextView = "services"
 			selectedFilterList.FrameColor = gocui.ColorDefault
@@ -3951,6 +4017,7 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
+			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		}
 	}
 	if _, err := g.SetCurrentView(nextView); err != nil {
