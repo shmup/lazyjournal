@@ -433,7 +433,15 @@ func (app *App) layout(g *gocui.Gui) error {
 		}
 		v.Wrap = true
 		v.Autoscroll = false
-		v.FgColor = gocui.ColorGreen // Цвет текста (зеленый)
+		// Цвет текста (зеленый)
+		v.FgColor = gocui.ColorGreen
+		// Заполняем окно стрелками
+		_, viewHeight := v.Size()
+		fmt.Fprintln(v, "▲")
+		for i := 1; i < viewHeight-1; i++ {
+			fmt.Fprintln(v, " ")
+		}
+		fmt.Fprintln(v, "▼")
 	}
 
 	// Окно для вывода записей выбранного журнала (maxX-2 для отступа скролла и 8 для продолжения углов)
@@ -3080,38 +3088,43 @@ func (app *App) updateLogsView(lowerDown bool) {
 	app.viewScrollLogs(percentage)
 }
 
-// Функция для отображения окна скроллинга
+// Функция для обновления интерфейса скроллинга
 func (app *App) viewScrollLogs(percentage int) {
 	vScroll, _ := app.gui.View("scrollLogs")
 	vScroll.Clear()
 	// Определяем высоту окна
 	_, viewHeight := vScroll.Size()
-	// Заполняем скролл, если вывод пустой или не выходит за пределы окна
+	// Заполняем скролл пробелами, если вывод пустой или не выходит за пределы окна
 	if percentage == 0 || percentage > 100 {
-		for i := 0; i < viewHeight; i++ {
-			fmt.Fprintln(vScroll, "█")
+		fmt.Fprintln(vScroll, "▲")
+		for i := 1; i < viewHeight-1; i++ {
+			fmt.Fprintln(vScroll, " ")
 		}
+		fmt.Fprintln(vScroll, "▼")
 	} else {
-		// Рассчитываем позицию курсора (корректируем процент на размер скролла)
-		scrollPosition := (viewHeight*percentage)/100 - 3
+		// Рассчитываем позицию курсора (корректируем процент на размер скролла и верхней стрелки)
+		scrollPosition := (viewHeight*percentage)/100 - 3 - 1
+		fmt.Fprintln(vScroll, "▲")
 		// Выводим строки с пробелами и символом █
-		for i := 0; i < viewHeight; i++ {
-			// Проверяем поизицию и другие условия
-			if i == scrollPosition || scrollPosition <= 0 || app.logScrollPos == 0 {
+		for i := 1; i < viewHeight-3; i++ {
+			// Проверяем текущую поизицию
+			if i == scrollPosition {
 				// Выводим скролл
 				fmt.Fprintln(vScroll, "███")
-				// Если вышли за пределы окна, устанавливаем курсор в начало
-				if scrollPosition <= 0 {
-					break
+			} else if scrollPosition <= 0 || app.logScrollPos == 0 {
+				// Если вышли за пределы окна или текст находится в самом начале, устанавливаем курсор в начало
+				fmt.Fprintln(vScroll, "███")
+				// Остальное заполняем пробелами с учетом стрелки и курсора (-4) до последней стрелки (-1)
+				for i := 4; i < viewHeight-1; i++ {
+					fmt.Fprintln(vScroll, " ")
 				}
-				// Если текст находится в самом начале, устанавливаем курсор в начало
-				if app.logScrollPos == 0 {
-					break
-				}
+				break
 			} else {
-				fmt.Fprintln(vScroll, " ") // Пробелы на остальных строках
+				// Пробелы на остальных строках
+				fmt.Fprintln(vScroll, " ")
 			}
 		}
+		fmt.Fprintln(vScroll, "▼")
 	}
 }
 
