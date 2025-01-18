@@ -192,8 +192,8 @@ func main() {
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
 		autoScroll:                   true,
-		trimHttpRegex:                regexp.MustCompile(`^.*http://|([^a-zA-Z0-9:/._?&=-].*)$`),                                                                                             // исключаем все до http:// (включительно) в начале строки
-		trimHttpsRegex:               regexp.MustCompile(`^.*https://|([^a-zA-Z0-9:/._?&=-].*)$`),                                                                                            // и после любого символа, который не может содержать в себе url
+		trimHttpRegex:                regexp.MustCompile(`^.*http://|([^a-zA-Z0-9:/._?&=+-].*)$`),                                                                                            // исключаем все до http:// (включительно) в начале строки
+		trimHttpsRegex:               regexp.MustCompile(`^.*https://|([^a-zA-Z0-9:/._?&=+-].*)$`),                                                                                           // и после любого символа, который не может содержать в себе url
 		trimPrefixPathRegex:          regexp.MustCompile(`^[^/]+`),                                                                                                                           // иключаем все до первого символа слэша (не включительно)
 		trimPostfixPathRegex:         regexp.MustCompile(`[=:'"(){}\[\]]+.*$`),                                                                                                               // исключаем все после первого символа, который не должен (но может) содержаться в пути
 		hexByteRegex:                 regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`),                                                                                                               // Байты или числа в шестнадцатеричном формате: 0x2 || 0xc0000001
@@ -2356,6 +2356,17 @@ func (app *App) wordColor(inputWord string) string {
 	// Значение по умолчанию
 	var coloredWord string = inputWord
 	switch {
+	// Пурпурный (url и директории) [35m]
+	case strings.Contains(inputWord, "http://"):
+		cleanedWord := app.trimHttpRegex.ReplaceAllString(inputWord, "")
+		coloredWord = strings.ReplaceAll(inputWord, "http://"+cleanedWord, "\033[35m"+"http://"+cleanedWord+"\033[0m")
+	case strings.Contains(inputWord, "https://"):
+		cleanedWord := app.trimHttpsRegex.ReplaceAllString(inputWord, "")
+		coloredWord = strings.ReplaceAll(inputWord, "https://"+cleanedWord, "\033[35m"+"https://"+cleanedWord+"\033[0m")
+	case app.containsPath(inputWord):
+		cleanedWord := app.trimPrefixPathRegex.ReplaceAllString(inputWord, "")
+		cleanedWord = app.trimPostfixPathRegex.ReplaceAllString(cleanedWord, "")
+		coloredWord = strings.ReplaceAll(inputWord, cleanedWord, "\033[35m"+cleanedWord+"\033[0m")
 	// Желтый (известные имена: hostname и username) [33m]
 	case strings.Contains(inputWord, app.hostName):
 		coloredWord = strings.ReplaceAll(inputWord, app.hostName, "\033[33m"+app.hostName+"\033[0m")
@@ -2710,17 +2721,6 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "done", "\033[32m")
 	case strings.Contains(inputWordLower, "true"):
 		coloredWord = app.replaceWordLower(inputWord, "true", "\033[32m")
-	// Пурпурный (url и директории) [35m]
-	case strings.Contains(inputWord, "http://"):
-		cleanedWord := app.trimHttpRegex.ReplaceAllString(inputWord, "")
-		coloredWord = strings.ReplaceAll(inputWord, "http://"+cleanedWord, "\033[35m"+"http://"+cleanedWord+"\033[0m")
-	case strings.Contains(inputWord, "https://"):
-		cleanedWord := app.trimHttpsRegex.ReplaceAllString(inputWord, "")
-		coloredWord = strings.ReplaceAll(inputWord, "https://"+cleanedWord, "\033[35m"+"https://"+cleanedWord+"\033[0m")
-	case app.containsPath(inputWord):
-		cleanedWord := app.trimPrefixPathRegex.ReplaceAllString(inputWord, "")
-		cleanedWord = app.trimPostfixPathRegex.ReplaceAllString(cleanedWord, "")
-		coloredWord = strings.ReplaceAll(inputWord, cleanedWord, "\033[35m"+cleanedWord+"\033[0m")
 	// Синий (статусы) [36m]
 	case strings.Contains(inputWordLower, "out"):
 		words := []string{"stdout", "timeout", "output"}
@@ -3282,22 +3282,6 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// Pgdn 1
-	if err := app.gui.SetKeybinding("services", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextService(v, 1)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextFileName(v, 1)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextDockerContainer(v, 1)
-	}); err != nil {
-		return err
-	}
 	// Быстрое пролистывание вниз через 10 записей (<Shift/Alt>+Down)
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 10)
@@ -3330,7 +3314,23 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// Pgdn 10
+	// Pgdn 1
+	if err := app.gui.SetKeybinding("services", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextService(v, 1)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextFileName(v, 1)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextDockerContainer(v, 1)
+	}); err != nil {
+		return err
+	}
+	// Shift+Pgdn 10
 	if err := app.gui.SetKeybinding("services", gocui.KeyPgdn, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 10)
 	}); err != nil {
@@ -3346,6 +3346,7 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
+	// Alt+Pgdn 100
 	if err := app.gui.SetKeybinding("services", gocui.KeyPgdn, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 100)
 	}); err != nil {
@@ -3361,7 +3362,7 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// Пролистывание вверх (<Shift/Alt>+Up)
+	// Пролистывание вверх
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 1)
 	}); err != nil {
@@ -3374,6 +3375,38 @@ func (app *App) setupKeybindings() error {
 	}
 	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevDockerContainer(v, 1)
+	}); err != nil {
+		return err
+	}
+	// Shift+Up 10
+	if err := app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevService(v, 10)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevFileName(v, 10)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevDockerContainer(v, 10)
+	}); err != nil {
+		return err
+	}
+	// Alt+Up 100
+	if err := app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevService(v, 100)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevFileName(v, 100)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevDockerContainer(v, 100)
 	}); err != nil {
 		return err
 	}
@@ -3393,23 +3426,7 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// up 10
-	if err := app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevService(v, 10)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevFileName(v, 10)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 10)
-	}); err != nil {
-		return err
-	}
-	// Pgup 10
+	// Shift+Pgup 10
 	if err := app.gui.SetKeybinding("services", gocui.KeyPgup, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 10)
 	}); err != nil {
@@ -3425,23 +3442,7 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// up 100
-	if err := app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevService(v, 100)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevFileName(v, 100)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 100)
-	}); err != nil {
-		return err
-	}
-	// Pgup 100
+	// Alt+Pgup 100
 	if err := app.gui.SetKeybinding("services", gocui.KeyPgup, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 100)
 	}); err != nil {
@@ -3496,6 +3497,13 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("filter", gocui.KeyArrowDown, gocui.ModNone, app.setFilterModeLeft); err != nil {
 		return err
 	}
+	// PgUp/PgDn Filter
+	if err := app.gui.SetKeybinding("filter", gocui.KeyPgup, gocui.ModNone, app.setFilterModeRight); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("filter", gocui.KeyPgdn, gocui.ModNone, app.setFilterModeLeft); err != nil {
+		return err
+	}
 	// Переключение для количества выводимых строк через Left/Right для выбранного окна (logs)
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowLeft, gocui.ModNone, app.setCountLogViewDown); err != nil {
 		return err
@@ -3503,7 +3511,7 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowRight, gocui.ModNone, app.setCountLogViewUp); err != nil {
 		return err
 	}
-	// Пролистывание вывода журнала через 1/10/500 записей
+	// Пролистывание вывода журнала через 1/10/500 записей вниз
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollDownLogs(1)
 	}); err != nil {
@@ -3519,6 +3527,7 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
+	// Up Logs
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollUpLogs(1)
 	}); err != nil {
@@ -3534,7 +3543,7 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// KeyPgdn/KeyPgup
+	// KeyPgdn Logs
 	if err := app.gui.SetKeybinding("logs", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollDownLogs(1)
 	}); err != nil {
@@ -3550,6 +3559,7 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
+	// KeyPgup Logs
 	if err := app.gui.SetKeybinding("logs", gocui.KeyPgup, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollUpLogs(1)
 	}); err != nil {
@@ -3565,7 +3575,7 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// Ручное обновление вывода журнала и перемещение к концу журнала (Ctrl+D/End)
+	// Перемещение к концу журнала (Ctrl+D/End)
 	if err := app.gui.SetKeybinding("", gocui.KeyCtrlD, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		app.updateLogsView(true)
 		return nil
