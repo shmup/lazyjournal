@@ -3164,6 +3164,13 @@ func (app *App) scrollUpLogs(step int) error {
 	return nil
 }
 
+// Функция для переход к началу журнала
+func (app *App) pageUpLogs() {
+	app.logScrollPos = 0
+	app.autoScroll = false
+	app.updateLogsView(false)
+}
+
 // Функция для очистки поля ввода фильтра
 func (app *App) clearFilterEditor(g *gocui.Gui) {
 	v, _ := g.View("filter")
@@ -3275,7 +3282,23 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// Быстрое пролистывание вниз через 10 и 100 записей (<Shift/Alt>+Down)
+	// Pgdn 1
+	if err := app.gui.SetKeybinding("services", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextService(v, 1)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextFileName(v, 1)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextDockerContainer(v, 1)
+	}); err != nil {
+		return err
+	}
+	// Быстрое пролистывание вниз через 10 записей (<Shift/Alt>+Down)
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 10)
 	}); err != nil {
@@ -3291,6 +3314,7 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
+	// Down 100
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 100)
 	}); err != nil {
@@ -3302,6 +3326,37 @@ func (app *App) setupKeybindings() error {
 		return err
 	}
 	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextDockerContainer(v, 100)
+	}); err != nil {
+		return err
+	}
+	// Pgdn 10
+	if err := app.gui.SetKeybinding("services", gocui.KeyPgdn, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextService(v, 10)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgdn, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextFileName(v, 10)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyPgdn, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextDockerContainer(v, 10)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("services", gocui.KeyPgdn, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextService(v, 100)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgdn, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.nextFileName(v, 100)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyPgdn, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextDockerContainer(v, 100)
 	}); err != nil {
 		return err
@@ -3322,6 +3377,23 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
+	// Pgup 1
+	if err := app.gui.SetKeybinding("services", gocui.KeyPgup, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevService(v, 1)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgup, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevFileName(v, 1)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyPgup, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevDockerContainer(v, 1)
+	}); err != nil {
+		return err
+	}
+	// up 10
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 10)
 	}); err != nil {
@@ -3337,6 +3409,23 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
+	// Pgup 10
+	if err := app.gui.SetKeybinding("services", gocui.KeyPgup, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevService(v, 10)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgup, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevFileName(v, 10)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyPgup, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevDockerContainer(v, 10)
+	}); err != nil {
+		return err
+	}
+	// up 100
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 100)
 	}); err != nil {
@@ -3348,6 +3437,22 @@ func (app *App) setupKeybindings() error {
 		return err
 	}
 	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevDockerContainer(v, 100)
+	}); err != nil {
+		return err
+	}
+	// Pgup 100
+	if err := app.gui.SetKeybinding("services", gocui.KeyPgup, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevService(v, 100)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgup, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.prevFileName(v, 100)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("docker", gocui.KeyPgup, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevDockerContainer(v, 100)
 	}); err != nil {
 		return err
@@ -3398,7 +3503,7 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowRight, gocui.ModNone, app.setCountLogViewUp); err != nil {
 		return err
 	}
-	// Пролистывание вывода журнала
+	// Пролистывание вывода журнала через 1/10/500 записей
 	if err := app.gui.SetKeybinding("logs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.scrollDownLogs(1)
 	}); err != nil {
@@ -3429,15 +3534,59 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// Ручное обновление вывода журнала (Ctrl+R)
-	if err := app.gui.SetKeybinding("", gocui.KeyCtrlR, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.updateLogOutput(0)
+	// KeyPgdn/KeyPgup
+	if err := app.gui.SetKeybinding("logs", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollDownLogs(1)
 	}); err != nil {
 		return err
 	}
-	// Очистка поля ввода для фильтра (Ctrl+D)
+	if err := app.gui.SetKeybinding("logs", gocui.KeyPgdn, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollDownLogs(10)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("logs", gocui.KeyPgdn, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollDownLogs(500)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("logs", gocui.KeyPgup, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollUpLogs(1)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("logs", gocui.KeyPgup, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollUpLogs(10)
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("logs", gocui.KeyPgup, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
+		return app.scrollUpLogs(500)
+	}); err != nil {
+		return err
+	}
+	// Ручное обновление вывода журнала и перемещение к концу журнала (Ctrl+D/End)
 	if err := app.gui.SetKeybinding("", gocui.KeyCtrlD, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		app.clearFilterEditor(g)
+		app.updateLogsView(true)
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("", gocui.KeyEnd, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		app.updateLogsView(true)
+		return nil
+	}); err != nil {
+		return err
+	}
+	// Перемещение к началу журнала (Ctrl+E/Home)
+	if err := app.gui.SetKeybinding("", gocui.KeyCtrlE, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		app.pageUpLogs()
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding("", gocui.KeyHome, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		app.pageUpLogs()
 		return nil
 	}); err != nil {
 		return err
