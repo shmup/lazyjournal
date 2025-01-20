@@ -338,11 +338,8 @@ func main() {
 	}
 
 	// Горутина для автоматического обновления вывода журнала каждын 3 секунды
-	errCh := make(chan error)
 	go func() {
-		if err := app.updateLogOutput(3); err != nil {
-			errCh <- err
-		}
+		app.updateLogOutput(3)
 	}()
 
 	// Запус GUI
@@ -3106,20 +3103,22 @@ func (app *App) viewScrollLogs(percentage int) {
 		scrollPosition := (viewHeight*percentage)/100 - 3 - 1
 		fmt.Fprintln(vScroll, "▲")
 		// Выводим строки с пробелами и символом █
+	for_scroll:
 		for i := 1; i < viewHeight-3; i++ {
 			// Проверяем текущую поизицию
-			if i == scrollPosition {
+			switch {
+			case i == scrollPosition:
 				// Выводим скролл
 				fmt.Fprintln(vScroll, "███")
-			} else if scrollPosition <= 0 || app.logScrollPos == 0 {
+			case scrollPosition <= 0 || app.logScrollPos == 0:
 				// Если вышли за пределы окна или текст находится в самом начале, устанавливаем курсор в начало
 				fmt.Fprintln(vScroll, "███")
 				// Остальное заполняем пробелами с учетом стрелки и курсора (-4) до последней стрелки (-1)
 				for i := 4; i < viewHeight-1; i++ {
 					fmt.Fprintln(vScroll, " ")
 				}
-				break
-			} else {
+				break for_scroll
+			default:
 				// Пробелы на остальных строках
 				fmt.Fprintln(vScroll, " ")
 			}
@@ -3186,7 +3185,7 @@ func (app *App) clearFilterEditor(g *gocui.Gui) {
 }
 
 // Функция для обновления последнего выбранного вывода лога
-func (app *App) updateLogOutput(seconds int) error {
+func (app *App) updateLogOutput(seconds int) {
 	for {
 		// Выполняем обновление интерфейса через метод Update для иницилизации перерисовки интерфейса
 		app.gui.Update(func(g *gocui.Gui) error {
@@ -3209,7 +3208,6 @@ func (app *App) updateLogOutput(seconds int) error {
 		}
 		time.Sleep(time.Duration(seconds) * time.Second)
 	}
-	return nil
 }
 
 // Функция для фиксации места загрузки журнала с помощью делиметра
@@ -3629,9 +3627,7 @@ func (app *App) setCountLogViewUp(g *gocui.Gui, v *gocui.View) error {
 		app.logViewCount = "300000"
 	}
 	app.applyFilter(false)
-	if err := app.updateLogOutput(0); err != nil {
-		return nil
-	}
+	app.updateLogOutput(0)
 	return nil
 }
 
@@ -3651,9 +3647,7 @@ func (app *App) setCountLogViewDown(g *gocui.Gui, v *gocui.View) error {
 		app.logViewCount = "5000"
 	}
 	app.applyFilter(false)
-	if err := app.updateLogOutput(0); err != nil {
-		return nil
-	}
+	app.updateLogOutput(0)
 	return nil
 }
 
