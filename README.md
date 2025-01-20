@@ -16,31 +16,17 @@ This tool is inspired by and with love for [LazyDocker](https://github.com/jesse
 
 ![interface](/img/fuzzy.jpg)
 
-- [Functional](#functional)
-- [Roadmap](#roadmap)
-- [Install](#install)
-  - [Unix-based](#unix-based)
-  - [Arch Linux](#arch-linux)
-  - [Windows](#windows)
-  - [Go Package](#go-package)
-  - [Others](#others)
-- [Usage](#usage)
-- [Build](#build)
-- [Hotkeys](#hotkeys)
-- [Contributing](#contributing)
-- [Alternatives](#alternatives)
-- [License](#license)
-
 ## Functional
 
-- Simple installation, to run it, just download a single executable file without dependencies.
+- Simple installation, to run just download one executable file without any dependencies.
 - List of all units (services, sockets, etc.) via `systemctl` with current running status.
 - View all system and user journals via `journalctl` (tool for reading logs from [systemd-journald](https://github.com/systemd/systemd/tree/main/src/journal)).
 - List of all system boots for kernel log output.
-- File system logs (example, for Apache or Nginx), as well as `syslog` or `messages`, `dmesg` (kernel), etc.
+- File system logs (example, for `Apache` or `Nginx`), as well as `syslog` or `messages`, `dmesg` (kernel), etc.
 - List of all log files of descriptors used by processes, as well as all log files in the home directories of users.
-- Reading archived logs (`gz`, `xz` or `bz2` format) and packet capture files (`pcap` format).
-- Docker containers, Podman pods and Swarm services logs.
+- Reading archived logs (`gz`, `xz` or `bz2` format), packet capture (`pcap` format) and Apple System Log (`asl` format).
+- Docker containers, Podman pods and Swarm services logs (including offline).
+- Filtering lists to find the desired journal.
 - Displays the currently selected log and filters output in real-time.
 
 Supports 3 filtering modes:
@@ -59,28 +45,22 @@ Supported coloring groups for output:
 - **Purple** - url and full paths in the file system.
 - **Custom** - unix processes.
 
-## Roadmap
-
-This is a backlog in addition to the functions described above.
-
-- [X] Syntax coloring for logging output (like `tailspin`).
-- [X] File system support for **MacOS** (darwin system) and the **RHEL** based systems.
-- [X] File system support for **BSD** based systems.
-- [X] File system support for **Windows**.
-- [ ] Code coverage by tests and passing all linters.
-- [ ] Interface for scrolling and the mouse support.
-- [ ] Windows events via PowerShell.
-- [ ] Support remote machines via `ssh` protocol.
-
 ## Install
 
-Binaries for all operating systems are available on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
+Binaries are available for download on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
-Development is carried out on the Ubuntu Server 24.04.1 system and Windows 10. Also tested on the Raspberry Pi (`aarch64` platform), MacOS Sequoia 15.2 (`x64` platform), Ubuntu Server 20.04.6, OpenBSD 7.6, FreeBSD 14.2 and the WSL environment on the Oracle Linux 9.1.
+List of supported systems and architectures in which I was able to check the functionality:
+
+| OS        | amd64 | arm64 | Systems                                                                          |
+| -         | -     | -     | -                                                                                |
+| Linux     | ✔     |  ✔   | Raspberry Pi, Oracle Linux (RHEL-based in WSL), Ubuntu Server 20.04.6 and above  |
+| Darwin    | ✔     |       | macOS Sequoia 15.2                                                               |
+| BSD-based | ✔     |       | OpenBSD 7.6 and FreeBSD 14.2                                                     |
+| Windows   | ✔     |       | Windows 10 and 11                                                                |
 
 ### Unix-based
 
-Run the command in the console to quickly install or update the stable version for Linux, MacOS or the BSD-based system:
+Run the command in the console to quickly install or update the stable version for Linux, macOS or the BSD-based system:
 
 ```shell
 curl -sS https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | bash
@@ -164,12 +144,13 @@ bash build.sh
 
 - `Tab` - switch between windows.
 - `Shift+Tab` - return to previous window.
-- `Left/Right` - switch between log lists in the selected window.
-- `Enter` - selection a journal from the list to display log.
-- `Up/Down` - move up or down through all journal lists and log output, as well as changing the filtering mode in the filter window.
-- `<Shift/Alt>+<Up/Down>` - quickly move up or down (every `10` or `500` lines) through all journal lists and log output.
-- `Ctrl+R` - refresh the current log manually and go to the bottom of the output.
-- `Ctrl+<D/W>` - clear text input field for filter to quickly update current log output without filtering.
+- `Left/Right` - switch between journal lists in the selected window.
+- `Enter` - selection a journal from the list to display log output.
+- `<Up/PgUp>/<Down/PgDown>` - move up or down through all journal lists and log output, as well as changing the filtering mode in the filter window.
+- `<Shift/Alt>+<Up/Down>` - quickly move up or down through all journal lists and log output every `10` or `100/500` lines.
+- `Ctrl+E/Home` - go to top of log.
+- `Ctrl+D/End` - go to the end of the log.
+- `Ctrl+W` - clear text input field for filter to quickly update current log output without filtering.
 - `Ctrl+C` - exit.
 
 ## Contributing
