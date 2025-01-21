@@ -610,7 +610,7 @@ func (app *App) loadServices(journalName string) {
 					bootDateTime := bootDate + " " + wordsArray[4]
 					stopDateTime := stopDate + " " + wordsArray[7]
 					app.journals = append(app.journals, Journal{
-						name:    fmt.Sprintf("%s - %s", bootDateTime, stopDateTime),
+						name:    fmt.Sprintf("\033[34m%s\033[0m - \033[34m%s\033[0m", bootDateTime, stopDateTime),
 						boot_id: bootId,
 					})
 				}
@@ -623,7 +623,7 @@ func (app *App) loadServices(journalName string) {
 				lastEntryTime := time.Unix(bootRecord.LastEntry/1000000, bootRecord.LastEntry%1000000)
 				// Форматируем строку в формате "DD.MM.YYYY HH:MM:SS"
 				const dateFormat = "02.01.2006 15:04:05"
-				name := fmt.Sprintf("%s - %s", firstEntryTime.Format(dateFormat), lastEntryTime.Format(dateFormat))
+				name := fmt.Sprintf("\033[34m%s\033[0m - \033[34m%s\033[0m", firstEntryTime.Format(dateFormat), lastEntryTime.Format(dateFormat))
 				// Добавляем в массив
 				app.journals = append(app.journals, Journal{
 					name:    name,
@@ -633,13 +633,10 @@ func (app *App) loadServices(journalName string) {
 		}
 		// Сортируем по второй дате
 		sort.Slice(app.journals, func(i, j int) bool {
-			// Разделяем строки на части (до и после дефиса)
-			dateFormat := "02.01.2006 15:04:05"
-			// Получаем вторую дату (после дефиса) и парсим её
-			endDate1, _ := time.Parse(dateFormat, app.journals[i].name[22:])
-			endDate2, _ := time.Parse(dateFormat, app.journals[j].name[22:])
-			// Сравниваем по второй дате в обратном порядке
-			return endDate1.After(endDate2) // Используем After для сортировки по убыванию
+			date1 := parseDateFromName(app.journals[i].name)
+			date2 := parseDateFromName(app.journals[j].name)
+			// Сравниваем по второй дате в обратном порядке (After для сортировки по убыванию)
+			return date1.After(date2)
 		})
 	default:
 		cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
@@ -682,6 +679,21 @@ func (app *App) loadServices(journalName string) {
 	app.journalsNotFilter = app.journals
 	// Применяем фильтр при загрузки и обновляем список служб в интерфейсе через updateServicesList() внутри функции
 	app.applyFilterList()
+}
+
+// Функция для удаления ANSI-символов покраски
+func removeANSICodes(input string) string {
+	ansiEscapeRegex := regexp.MustCompile(`\033\[[0-9;]*m`)
+	return ansiEscapeRegex.ReplaceAllString(input, "")
+}
+
+// Функция для извлечения даты из строки для списка загрузок ядра
+func parseDateFromName(name string) time.Time {
+	cleanName := removeANSICodes(name)
+	dateFormat := "02.01.2006 15:04:05"
+	// Извлекаем дату, начиная с 22-го символа (после дефиса)
+	parsedDate, _ := time.Parse(dateFormat, cleanName[22:])
+	return parsedDate
 }
 
 // Функция для обновления окна со списком служб
@@ -828,7 +840,8 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	if selectUnits == "kernel" {
 		var boot_id string
 		for _, journal := range app.journals {
-			if journal.name == serviceName {
+			journalBootName := removeANSICodes(journal.name)
+			if journalBootName == serviceName {
 				boot_id = journal.boot_id
 				break
 			}
