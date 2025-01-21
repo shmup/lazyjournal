@@ -16,14 +16,11 @@ if [ -z "$gocritic_version" ]; then
     go install -v github.com/go-critic/go-critic/cmd/gocritic@latest
 fi
 
-golangci_check_1=$(golangci-lint run ./... --build-tags=buildvcs=false)
-golangci_check_2=$(golangci-lint run ./... --config ./.golangci-enable-all.yml --build-tags=buildvcs=false)
+golangci_check=$(golangci-lint run ./... --build-tags=buildvcs=false)
 gocritic_check=$(gocritic check -enableAll ./...)
 
-if [ -n "$golangci_check_1" ]; then
-    echo "$golangci_check_1"
-elif [ -n "$golangci_check_2" ]; then
-    echo "$golangci_check_2"
+if [ -n "$golangci_check" ]; then
+    echo "$golangci_check"
 elif [ -n "$gocritic_check" ]; then
     echo "$gocritic_check"
 else

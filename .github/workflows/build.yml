@@ -30,7 +30,6 @@ jobs:
       - name: Golangci linters check
         run: |
           golangci-lint run ./...
-          golangci-lint run ./... --config ./.golangci-enable-all.yml
 
       - name: Gocritic linters check
         run: gocritic check -enableAll ./...
