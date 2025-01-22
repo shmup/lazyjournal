@@ -83,6 +83,10 @@ type App struct {
 	logfilesNotFilter         []Logfile
 	dockerContainersNotFilter []DockerContainers
 
+	// Переменные для отслеживания изменений размера окна
+	windowWidth  int
+	windowHeight int
+
 	filterText       string   // текст для фильтрации записей журнала
 	currentLogLines  []string // набор строк (срез) для хранения журнала без фильтрации
 	filteredLogLines []string // набор строк (срез) для хранения журнала после фильтра
@@ -348,6 +352,11 @@ func main() {
 	// Горутина для автоматического обновления вывода журнала каждын 3 секунды
 	go func() {
 		app.updateLogOutput(3)
+	}()
+
+	// Горутина для отслеживания изменений размера окна
+	go func() {
+		app.updateWindowSize(1)
 	}()
 
 	// Запус GUI
@@ -3229,6 +3238,38 @@ func (app *App) updateLogOutput(seconds int) {
 		if seconds == 0 {
 			break
 		}
+		time.Sleep(time.Duration(seconds) * time.Second)
+	}
+}
+
+// Функция для обновления вывода при изменение размера окна
+func (app *App) updateWindowSize(seconds int) {
+	for {
+		app.gui.Update(func(g *gocui.Gui) error {
+			v, err := g.View("logs")
+			if err != nil {
+				log.Panicln(err)
+			}
+			windowWidth, windowHeight := v.Size()
+			if windowWidth != app.windowWidth || windowHeight != app.windowHeight {
+				app.windowWidth, app.windowHeight = windowWidth, windowHeight
+				app.updateLogsView(true)
+				if v, err := g.View("services"); err == nil {
+					_, viewHeight := v.Size()
+					app.maxVisibleServices = viewHeight
+				}
+				if v, err := g.View("varLogs"); err == nil {
+					_, viewHeight := v.Size()
+					app.maxVisibleFiles = viewHeight
+				}
+				if v, err := g.View("docker"); err == nil {
+					_, viewHeight := v.Size()
+					app.maxVisibleDockerContainers = viewHeight
+				}
+				app.applyFilterList()
+			}
+			return nil
+		})
 		time.Sleep(time.Duration(seconds) * time.Second)
 	}
 }
