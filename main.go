@@ -51,6 +51,7 @@ type App struct {
 	getArch       string   // архитектура процессора
 	hostName      string   // текущее имя хоста для покраски в логах
 	userName      string   // текущее имя пользователя
+	systemDisk    string   // порядковая буква системного диска для Windows
 	userNameArray []string // список всех пользователей
 	rootDirArray  []string // список всех корневых каталогов
 
@@ -271,6 +272,13 @@ func main() {
 	// Удаляем доменную часть, если она есть
 	if strings.Contains(app.userName, "\\") {
 		app.userName = strings.Split(app.userName, "\\")[1]
+	}
+	// Определяем букву системного диска с установленной ОС Windows
+	app.systemDisk = os.Getenv("SystemDrive")
+	if len(app.systemDisk) >= 1 {
+		app.systemDisk = string(app.systemDisk[0])
+	} else {
+		app.systemDisk = "C"
 	}
 	// Имена пользователей
 	passwd, _ := os.Open("/etc/passwd")
@@ -682,14 +690,14 @@ func (app *App) loadServices(journalName string) {
 }
 
 // Функция для удаления ANSI-символов покраски
-func removeANSICodes(input string) string {
+func removeANSI(input string) string {
 	ansiEscapeRegex := regexp.MustCompile(`\033\[[0-9;]*m`)
 	return ansiEscapeRegex.ReplaceAllString(input, "")
 }
 
 // Функция для извлечения даты из строки для списка загрузок ядра
 func parseDateFromName(name string) time.Time {
-	cleanName := removeANSICodes(name)
+	cleanName := removeANSI(name)
 	dateFormat := "02.01.2006 15:04:05"
 	// Извлекаем дату, начиная с 22-го символа (после дефиса)
 	parsedDate, _ := time.Parse(dateFormat, cleanName[22:])
@@ -840,7 +848,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	if selectUnits == "kernel" {
 		var boot_id string
 		for _, journal := range app.journals {
-			journalBootName := removeANSICodes(journal.name)
+			journalBootName := removeANSI(journal.name)
 			if journalBootName == serviceName {
 				boot_id = journal.boot_id
 				break
@@ -1154,16 +1162,18 @@ func (app *App) loadFiles(logPath string) {
 }
 
 func (app *App) loadWinFiles(logPath string) {
-	// Узнать имя пользователя (app.userName) и диск с виндой
+	// Определяем путь по параметру
 	switch {
 	case logPath == "ProgramFiles":
-		logPath = "C:\\Program Files"
+		logPath = app.systemDisk + ":\\Program Files"
 	case logPath == "ProgramFiles86":
-		logPath = "C:\\Program Files (x86)"
+		logPath = app.systemDisk + ":\\Program Files (x86)"
+	case logPath == "ProgramData":
+		logPath = app.systemDisk + ":\\ProgramData"
 	case logPath == "AppDataLocal":
-		logPath = "C:\\Users\\" + app.userName + "\\AppData\\Local"
+		logPath = app.systemDisk + ":\\Users\\" + app.userName + "\\AppData\\Local"
 	case logPath == "AppDataRoaming":
-		logPath = "C:\\Users\\" + app.userName + "\\AppData\\Roaming"
+		logPath = app.systemDisk + ":\\Users\\" + app.userName + "\\AppData\\Roaming"
 	}
 	// Ищем файлы с помощью WalkDir
 	var files []string
@@ -2194,7 +2204,7 @@ func (app *App) applyFilter(color bool) {
 							break
 						}
 					}
-					// Если строка подходит под фильтр, возвращаем её с покраской
+					// Если строка подходит под фильтр, возвращаем ее с покраской
 					if match {
 						// Временные символы для обозначения начала и конца покраски найденных символов
 						startColor := "►"
@@ -2204,7 +2214,7 @@ func (app *App) applyFilter(color bool) {
 						for _, word := range filterWords {
 							wordLower := strings.ToLower(word)
 							start := 0
-							// Ищем все вхождения слова в строке с учётом регистра
+							// Ищем все вхождения слова в строке с учетом регистра
 							for {
 								// Находим индекс вхождения с учетом регистра
 								idx := strings.Index(strings.ToLower(originalLine[start:]), wordLower)
@@ -3800,6 +3810,10 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 				selectedVarLog.Title = " < Program Files x86 (0) > "
 				app.loadWinFiles(app.selectPath)
 			case "ProgramFiles86":
+				app.selectPath = "ProgramData"
+				selectedVarLog.Title = " < ProgramData (0) > "
+				app.loadWinFiles(app.selectPath)
+			case "ProgramData":
 				app.selectPath = "AppDataLocal"
 				selectedVarLog.Title = " < AppData Local (0) > "
 				app.loadWinFiles(app.selectPath)
@@ -3875,6 +3889,10 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 				selectedVarLog.Title = " < AppData Local (0) > "
 				app.loadWinFiles(app.selectPath)
 			case "AppDataLocal":
+				app.selectPath = "ProgramData"
+				selectedVarLog.Title = " < ProgramData (0) > "
+				app.loadWinFiles(app.selectPath)
+			case "ProgramData":
 				app.selectPath = "ProgramFiles86"
 				selectedVarLog.Title = " < Program Files x86 (0) > "
 				app.loadWinFiles(app.selectPath)
