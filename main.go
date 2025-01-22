@@ -307,8 +307,17 @@ func main() {
 		_, viewHeight := v.Size()
 		app.maxVisibleServices = viewHeight
 	}
-	// Загрузка списков журналов
-	app.loadServices(app.selectUnits)
+	// Загрузка списка служб
+	if app.getOS == "windows" {
+		v, err := g.View("services")
+		if err != nil {
+			log.Panicln(err)
+		}
+		v.Title = " Windows Events "
+		app.loadWinEvents()
+	} else {
+		app.loadServices(app.selectUnits)
+	}
 
 	// Filesystem
 	if v, err := g.View("varLogs"); err == nil {
@@ -480,6 +489,21 @@ func (app *App) layout(g *gocui.Gui) error {
 }
 
 // ---------------------------------------- journalctl ----------------------------------------
+
+// Функция для удаления ANSI-символов покраски
+func removeANSI(input string) string {
+	ansiEscapeRegex := regexp.MustCompile(`\033\[[0-9;]*m`)
+	return ansiEscapeRegex.ReplaceAllString(input, "")
+}
+
+// Функция для извлечения даты из строки для списка загрузок ядра
+func parseDateFromName(name string) time.Time {
+	cleanName := removeANSI(name)
+	dateFormat := "02.01.2006 15:04:05"
+	// Извлекаем дату, начиная с 22-го символа (после дефиса)
+	parsedDate, _ := time.Parse(dateFormat, cleanName[22:])
+	return parsedDate
+}
 
 // Функция для загрузки списка журналов служб или загрузок системы из journalctl
 func (app *App) loadServices(journalName string) {
@@ -698,19 +722,36 @@ func (app *App) loadServices(journalName string) {
 	app.applyFilterList()
 }
 
-// Функция для удаления ANSI-символов покраски
-func removeANSI(input string) string {
-	ansiEscapeRegex := regexp.MustCompile(`\033\[[0-9;]*m`)
-	return ansiEscapeRegex.ReplaceAllString(input, "")
-}
-
-// Функция для извлечения даты из строки для списка загрузок ядра
-func parseDateFromName(name string) time.Time {
-	cleanName := removeANSI(name)
-	dateFormat := "02.01.2006 15:04:05"
-	// Извлекаем дату, начиная с 22-го символа (после дефиса)
-	parsedDate, _ := time.Parse(dateFormat, cleanName[22:])
-	return parsedDate
+// Функция для загрузки списка всех журналов событий Windows
+func (app *App) loadWinEvents() {
+	// Получаем список, игнорируем ошибки, отсеиваем пустые журналы, забираем нужные параметры и выводим в формате JSON
+	cmd := exec.Command("powershell", "-Command", "Get-WinEvent -ListLog * -ErrorAction Ignore | Where-Object RecordCount -ne 0 | Where-Object RecordCount -ne $null | Select-Object LogName,RecordCount | ConvertTo-Json")
+	eventsJson, _ := cmd.Output()
+	var events []map[string]interface{}
+	_ = json.Unmarshal(eventsJson, &events)
+	for _, event := range events {
+		// Извлечение названия журнала и количество записей
+		LogName, _ := event["LogName"].(string)
+		RecordCount, _ := event["RecordCount"].(float64)
+		RecordCountInt := int(RecordCount)
+		RecordCountString := strconv.Itoa(RecordCountInt)
+		// Удаляем приставку
+		LogView := strings.ReplaceAll(LogName, "Microsoft-Windows-", "")
+		// Разбивает строку на 2 части для покраски
+		LogViewSplit := strings.SplitN(LogView, "/", 2)
+		if len(LogViewSplit) == 2 {
+			LogView = "\033[33m" + LogViewSplit[0] + "\033[0m" + ": " + "\033[36m" + LogViewSplit[1] + "\033[0m"
+		} else {
+			LogView = "\033[36m" + LogView + "\033[0m"
+		}
+		LogView = LogView + " (" + RecordCountString + ")"
+		app.journals = append(app.journals, Journal{
+			name:    LogView,
+			boot_id: LogName,
+		})
+	}
+	app.journalsNotFilter = app.journals
+	app.applyFilterList()
 }
 
 // Функция для обновления окна со списком служб
@@ -3520,12 +3561,14 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// Переключение выбора журналов для journalctl (systemd)
-	if err := app.gui.SetKeybinding("services", gocui.KeyArrowRight, gocui.ModNone, app.setUnitListRight); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("services", gocui.KeyArrowLeft, gocui.ModNone, app.setUnitListLeft); err != nil {
-		return err
+	// Переключение выбора журналов для systemd/journald и отключаем для Windows
+	if app.getOS != "windows" {
+		if err := app.gui.SetKeybinding("services", gocui.KeyArrowRight, gocui.ModNone, app.setUnitListRight); err != nil {
+			return err
+		}
+		if err := app.gui.SetKeybinding("services", gocui.KeyArrowLeft, gocui.ModNone, app.setUnitListLeft); err != nil {
+			return err
+		}
 	}
 	// Переключение выбора журналов для File System
 	if app.keybindingsEnabled {
