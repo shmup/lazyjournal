@@ -99,7 +99,7 @@ type App struct {
 
 	lastDateUpdateFile time.Time // последняя дата изменения файла
 	lastSizeFile       int64     // размер файла
-	updateFile         bool
+	updateFile         bool      // проверка для обновления вывода в горутине (отключение только если нет изменений в файле и для Windows Events)
 
 	lastWindow   string // фиксируем последний используемый источник для вывода логов
 	lastSelected string // фиксируем название последнего выбранного журнала или контейнера
@@ -150,7 +150,7 @@ func showHelp() {
 }
 
 func (app *App) showVersion() {
-	fmt.Println("Version:", "0.7.0") // Текущая версия
+	fmt.Println("Version:", "0.7.2") // Текущая версия
 	data, err := os.ReadFile("/etc/os-release")
 	// Если ошибка при чтении файла, то возвращаем только название ОС
 	if err != nil {
@@ -307,14 +307,17 @@ func main() {
 		_, viewHeight := v.Size()
 		app.maxVisibleServices = viewHeight
 	}
-	// Загрузка списка служб
+	// Загрузка списка служб или событий Windows
 	if app.getOS == "windows" {
 		v, err := g.View("services")
 		if err != nil {
 			log.Panicln(err)
 		}
-		v.Title = " Windows Events "
-		app.loadWinEvents()
+		v.Title = " < Windows Events (0) > "
+		// Загружаем список событий Windows в горутине
+		go func() {
+			app.loadWinEvents()
+		}()
 	} else {
 		app.loadServices(app.selectUnits)
 	}
@@ -339,6 +342,7 @@ func main() {
 		})
 		selectedVarLog.Title = " < Program Files (0) > "
 		app.selectPath = "ProgramFiles"
+		// Загружаем список файлов Windows в горутине
 		go func() {
 			app.loadWinFiles(app.selectPath)
 		}()
@@ -488,7 +492,7 @@ func (app *App) layout(g *gocui.Gui) error {
 	return nil
 }
 
-// ---------------------------------------- journalctl ----------------------------------------
+// ---------------------------------------- journalctl/Windows Events ----------------------------------------
 
 // Функция для удаления ANSI-символов покраски
 func removeANSI(input string) string {
@@ -722,10 +726,16 @@ func (app *App) loadServices(journalName string) {
 	app.applyFilterList()
 }
 
-// Функция для загрузки списка всех журналов событий Windows
+// Функция для загрузки списка всех журналов событий Windows через PowerShell
 func (app *App) loadWinEvents() {
-	// Получаем список, игнорируем ошибки, отсеиваем пустые журналы, забираем нужные параметры и выводим в формате JSON
-	cmd := exec.Command("powershell", "-Command", "Get-WinEvent -ListLog * -ErrorAction Ignore | Where-Object RecordCount -ne 0 | Where-Object RecordCount -ne $null | Select-Object LogName,RecordCount | ConvertTo-Json")
+	// Получаем список, игнорируем ошибки, фильтруем пустые журналы, забираем нужные параметры, сортируем и выводим в формате JSON
+	cmd := exec.Command("powershell", "-Command",
+		"Get-WinEvent -ListLog * -ErrorAction Ignore | "+
+			"Where-Object RecordCount -ne 0 | "+
+			"Where-Object RecordCount -ne $null | "+
+			"Select-Object LogName,RecordCount | "+
+			"Sort-Object -Descending RecordCount | "+
+			"ConvertTo-Json")
 	eventsJson, _ := cmd.Output()
 	var events []map[string]interface{}
 	_ = json.Unmarshal(eventsJson, &events)
@@ -877,6 +887,8 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 	}
 	// Загружаем журналы выбранной службы, обрезая пробелы в названии
 	app.loadJournalLogs(strings.TrimSpace(line), true, g)
+	// Включаем загрузку журнала только при ручном выборе для Windows
+	app.updateFile = true
 	// Фиксируем для ручного или автоматического обновления вывода журнала
 	app.lastWindow = "services"
 	app.lastSelected = strings.TrimSpace(line)
@@ -894,8 +906,31 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	} else {
 		selectUnits = app.lastSelectUnits
 	}
-	// Загрузки системы для логов ядра
-	if selectUnits == "kernel" {
+	switch {
+	// Читаем журналы Windows
+	case app.getOS == "windows":
+		// Отключаем чтение в горутине
+		if !app.updateFile {
+			return
+		}
+		app.updateFile = false
+		// Извлекаем полное имя события
+		var eventName string
+		for _, journal := range app.journals {
+			journalBootName := removeANSI(journal.name)
+			if journalBootName == serviceName {
+				eventName = journal.boot_id
+				break
+			}
+		}
+		output = app.loadWinEventLog(eventName)
+		if len(string(output)) == 0 || string(output) == "" {
+			v, _ := app.gui.View("logs")
+			v.Clear()
+			return
+		}
+	// Читаем лог ядра загрузки системы
+	case selectUnits == "kernel":
 		var boot_id string
 		for _, journal := range app.journals {
 			journalBootName := removeANSI(journal.name)
@@ -919,7 +954,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 			return
 		}
 		// Для юнитов systemd
-	} else {
+	default:
 		if selectUnits == "services" {
 			// Удаляем статусы с покраской из навзания
 			var ansiEscape = regexp.MustCompile(`\s\(.+\)`)
@@ -941,6 +976,46 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	// app.filterText = ""
 	// Применяем текущий фильтр к записям для обновления вывода
 	app.applyFilter(false)
+}
+
+// Функция для чтения и парсинга содержимого события Windows через PowerShell (возвращяет текст в формате байт и текст ошибки)
+func (app *App) loadWinEventLog(eventName string) (output []byte) {
+	// Запуск во внешнем процессе PowerShell 5
+	cmd := exec.Command("powershell", "-Command",
+		"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;"+
+			"Get-WinEvent -LogName "+eventName+" -MaxEvents 5000 | "+
+			"Select-Object TimeCreated,Id,LevelDisplayName,Message | "+
+			"Sort-Object TimeCreated | "+
+			"ConvertTo-Json")
+	eventsJson, _ := cmd.Output()
+	var eventMessage []string
+	var eventStrings []map[string]interface{}
+	_ = json.Unmarshal(eventsJson, &eventStrings)
+	for _, eventString := range eventStrings {
+		// Извлекаем метку времени из json
+		TimeCreated, _ := eventString["TimeCreated"].(string)
+		// Извлекаем метку времени из строки
+		parts := strings.Split(TimeCreated, "(")
+		timestampString := strings.Split(parts[1], ")")[0]
+		// Преобразуем строку в целое число (timestamp)
+		timestamp, _ := strconv.Atoi(timestampString)
+		// Преобразуем в Unix-формат (секунды и наносекунды)
+		dateTime := time.Unix(int64(timestamp/1000), int64((timestamp%1000)*1000000)) // Миллисекунды -> наносекунды
+		// Извлекаем остальные данные из json
+		LogId, _ := eventString["Id"].(float64)
+		LogIdInt := int(LogId)
+		LogIdString := strconv.Itoa(LogIdInt)
+		LevelDisplayName, _ := eventString["LevelDisplayName"].(string)
+		Message, _ := eventString["Message"].(string)
+		// Удаляем встроенные переносы строки
+		messageReplace := strings.ReplaceAll(Message, "\r\n", "")
+		// Формируем строку и заполняем временный массив
+		mess := dateTime.Format("02.01.2006 15:04:05") + " " + LevelDisplayName + " (" + LogIdString + "): " + messageReplace
+		eventMessage = append(eventMessage, mess)
+	}
+	// Собираем все строки в одну и возвращяем байты
+	fullMessage := strings.Join(eventMessage, "\n")
+	return []byte(fullMessage)
 }
 
 // ---------------------------------------- Filesystem ----------------------------------------
@@ -1437,89 +1512,7 @@ func (app *App) selectFile(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-// Функция для чтения файла с опредиление кодировки в Windows
-func (app *App) loadWinFileLog(filePath string) (output []byte, stringErrors string) {
-	// Открываем файл
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Sprintf("open file: %v", err)
-	}
-	defer file.Close()
-	// Получаем информацию о файле
-	stat, err := file.Stat()
-	if err != nil {
-		return nil, fmt.Sprintf("get file stat: %v", err)
-	}
-	// Получаем размер файла
-	fileSize := stat.Size()
-	// Буфер для хранения последних строк
-	var buffer []byte
-	lineCount := 0
-	// Размер буфера чтения (читаем по 1КБ за раз)
-	readSize := int64(1024)
-	// Преобразуем строку с максимальным количеством строк в int
-	logViewCountInt, _ := strconv.Atoi(app.logViewCount)
-	// Читаем файл с конца
-	for fileSize > 0 && lineCount < logViewCountInt {
-		if fileSize < readSize {
-			readSize = fileSize
-		}
-		_, err := file.Seek(fileSize-readSize, 0)
-		if err != nil {
-			return nil, fmt.Sprintf("detect the end of a file via seek: %v", err)
-		}
-		tempBuffer := make([]byte, readSize)
-		_, err = file.Read(tempBuffer)
-		if err != nil {
-			return nil, fmt.Sprintf("read file: %v", err)
-		}
-		buffer = append(tempBuffer, buffer...)
-		lineCount = strings.Count(string(buffer), "\n")
-		fileSize -= int64(readSize)
-	}
-	// Проверка на UTF-16 с BOM
-	utf16withBOM := func(data []byte) bool {
-		return len(data) >= 2 && ((data[0] == 0xFF && data[1] == 0xFE) || (data[0] == 0xFE && data[1] == 0xFF))
-	}
-	// Проверка на UTF-16 LE без BOM
-	utf16withoutBOM := func(data []byte) bool {
-		if len(data)%2 != 0 {
-			return false
-		}
-		for i := 1; i < len(data); i += 2 {
-			if data[i] != 0x00 {
-				return false
-			}
-		}
-		return true
-	}
-	var decodedOutput []byte
-	switch {
-	case utf16withBOM(buffer):
-		// Декодируем UTF-16 с BOM
-		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder().Bytes(buffer)
-		if err != nil {
-			return nil, fmt.Sprintf("decoding from UTF-16 with BOM: %v", err)
-		}
-	case utf16withoutBOM(buffer):
-		// Декодируем UTF-16 LE без BOM
-		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM).NewDecoder().Bytes(buffer)
-		if err != nil {
-			return nil, fmt.Sprintf("decoding from UTF-16 LE without BOM: %v", err)
-		}
-	case utf8.Valid(buffer):
-		// Декодируем UTF-8
-		decodedOutput = buffer
-	default:
-		// Декодируем Windows-1251
-		decodedOutput, err = charmap.Windows1251.NewDecoder().Bytes(buffer)
-		if err != nil {
-			return nil, fmt.Sprintf("decoding from Windows-1251: %v", err)
-		}
-	}
-	return decodedOutput, "nil"
-}
-
+// Функция для чтения файла
 func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 	// В параметре logName имя файла при выборе возвращяется без символов покраски
 	// Получаем путь из массива по имени
@@ -1816,6 +1809,89 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		app.updateDelimiter(newUpdate, g)
 		app.applyFilter(false)
 	}
+}
+
+// Функция для чтения файла с опредилением кодировки в Windows
+func (app *App) loadWinFileLog(filePath string) (output []byte, stringErrors string) {
+	// Открываем файл
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Sprintf("open file: %v", err)
+	}
+	defer file.Close()
+	// Получаем информацию о файле
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Sprintf("get file stat: %v", err)
+	}
+	// Получаем размер файла
+	fileSize := stat.Size()
+	// Буфер для хранения последних строк
+	var buffer []byte
+	lineCount := 0
+	// Размер буфера чтения (читаем по 1КБ за раз)
+	readSize := int64(1024)
+	// Преобразуем строку с максимальным количеством строк в int
+	logViewCountInt, _ := strconv.Atoi(app.logViewCount)
+	// Читаем файл с конца
+	for fileSize > 0 && lineCount < logViewCountInt {
+		if fileSize < readSize {
+			readSize = fileSize
+		}
+		_, err := file.Seek(fileSize-readSize, 0)
+		if err != nil {
+			return nil, fmt.Sprintf("detect the end of a file via seek: %v", err)
+		}
+		tempBuffer := make([]byte, readSize)
+		_, err = file.Read(tempBuffer)
+		if err != nil {
+			return nil, fmt.Sprintf("read file: %v", err)
+		}
+		buffer = append(tempBuffer, buffer...)
+		lineCount = strings.Count(string(buffer), "\n")
+		fileSize -= int64(readSize)
+	}
+	// Проверка на UTF-16 с BOM
+	utf16withBOM := func(data []byte) bool {
+		return len(data) >= 2 && ((data[0] == 0xFF && data[1] == 0xFE) || (data[0] == 0xFE && data[1] == 0xFF))
+	}
+	// Проверка на UTF-16 LE без BOM
+	utf16withoutBOM := func(data []byte) bool {
+		if len(data)%2 != 0 {
+			return false
+		}
+		for i := 1; i < len(data); i += 2 {
+			if data[i] != 0x00 {
+				return false
+			}
+		}
+		return true
+	}
+	var decodedOutput []byte
+	switch {
+	case utf16withBOM(buffer):
+		// Декодируем UTF-16 с BOM
+		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder().Bytes(buffer)
+		if err != nil {
+			return nil, fmt.Sprintf("decoding from UTF-16 with BOM: %v", err)
+		}
+	case utf16withoutBOM(buffer):
+		// Декодируем UTF-16 LE без BOM
+		decodedOutput, err = unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM).NewDecoder().Bytes(buffer)
+		if err != nil {
+			return nil, fmt.Sprintf("decoding from UTF-16 LE without BOM: %v", err)
+		}
+	case utf8.Valid(buffer):
+		// Декодируем UTF-8
+		decodedOutput = buffer
+	default:
+		// Декодируем Windows-1251
+		decodedOutput, err = charmap.Windows1251.NewDecoder().Bytes(buffer)
+		if err != nil {
+			return nil, fmt.Sprintf("decoding from Windows-1251: %v", err)
+		}
+	}
+	return decodedOutput, "nil"
 }
 
 // ---------------------------------------- Docker/Podman ----------------------------------------
