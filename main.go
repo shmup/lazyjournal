@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
@@ -888,7 +887,7 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 	}
 	// Загружаем журналы выбранной службы, обрезая пробелы в названии
 	app.loadJournalLogs(strings.TrimSpace(line), true, g)
-	// Включаем загрузку журнала только при ручном выборе для Windows
+	// Включаем загрузку журнала (только при ручном выборе для Windows)
 	app.updateFile = true
 	// Фиксируем для ручного или автоматического обновления вывода журнала
 	app.lastWindow = "services"
@@ -910,10 +909,10 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	switch {
 	// Читаем журналы Windows
 	case app.getOS == "windows":
-		// Отключаем чтение в горутине
 		if !app.updateFile {
 			return
 		}
+		// Отключаем чтение в горутине
 		app.updateFile = false
 		// Извлекаем полное имя события
 		var eventName string
@@ -1019,82 +1018,57 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 // 	return []byte(fullMessage)
 // }
 
+// Функция для чтения и парсинга содержимого события Windows через wevtutil
 func (app *App) loadWinEventLog(eventName string) (output []byte) {
-	cmd := exec.Command("powershell", "-Command",
-		"chcp 65001 > $null;"+
-			"wevtutil qe "+eventName+" /f:RenderedXml /c:5000 -l:en")
-	xmlData, _ := cmd.Output()
-	decoder := xml.NewDecoder(strings.NewReader(string(xmlData)))
-	var eventMessages []string
-	var inEvent, inRenderingInfo, inMessage, inLevel, inEventID bool
-	var systemTime, level, eventID, message string
-	for {
-		token, _ := decoder.Token()
-		switch elem := token.(type) {
-		case xml.StartElement:
-			switch elem.Name.Local {
-			case "Event":
-				inEvent = true
-				systemTime, level, eventID, message = "", "", "", ""
-			case "TimeCreated":
-				if inEvent {
-					for _, attr := range elem.Attr {
-						if attr.Name.Local == "SystemTime" {
-							systemTime = attr.Value
-						}
-					}
+	cmd := exec.Command("cmd", "/C",
+		"chcp 65001 &&"+
+			"wevtutil qe "+eventName+" /f:text -l:en")
+	eventData, _ := cmd.Output()
+	// Декодирование вывода из Windows-1251 в UTF-8
+	decoder := charmap.Windows1251.NewDecoder()
+	decodeEventData, decodeErr := decoder.Bytes(eventData)
+	if decodeErr == nil {
+		eventData = decodeEventData
+	}
+	// Разбиваем вывод на массив
+	eventStrings := strings.Split(string(eventData), "Event[")
+	var eventMessage []string
+	for _, eventString := range eventStrings {
+		var dateTime, eventID, level, description string
+		// Разбиваем элемент массива на строки
+		lines := strings.Split(eventString, "\n")
+		// Флаг для обработки последней строки Description с содержимым Message
+		isDescription := false
+		for _, line := range lines {
+			// Удаляем проблемы во всех строках
+			trimmedLine := strings.TrimSpace(line)
+			switch {
+			// Обновляем формат даты
+			case strings.HasPrefix(trimmedLine, "Date:"):
+				dateTime = strings.ReplaceAll(trimmedLine, "Date: ", "")
+				dateTimeParse := strings.Split(dateTime, "T")
+				dateParse := strings.Split(dateTimeParse[0], "-")
+				timeParse := strings.Split(dateTimeParse[1], ".")
+				dateTime = fmt.Sprintf("%s.%s.%s %s", dateParse[2], dateParse[1], dateParse[0], timeParse[0])
+			case strings.HasPrefix(trimmedLine, "Event ID:"):
+				eventID = strings.ReplaceAll(trimmedLine, "Event ID: ", "")
+			case strings.HasPrefix(trimmedLine, "Level:"):
+				level = strings.ReplaceAll(trimmedLine, "Level: ", "")
+			case strings.HasPrefix(trimmedLine, "Description:"):
+				// Фиксируем и пропускаем Description
+				isDescription = true
+			case isDescription:
+				// Добавляем до конца текущего массива все не пустые строки
+				if trimmedLine != "" {
+					description += "\n" + trimmedLine
 				}
-			case "EventID":
-				if inEvent {
-					inEventID = true
-				}
-			case "Level":
-				if inEvent {
-					inLevel = true
-				}
-			case "RenderingInfo":
-				if inEvent {
-					inRenderingInfo = true
-				}
-			case "Message":
-				if inRenderingInfo {
-					inMessage = true
-				}
-			}
-		case xml.CharData:
-			text := string(elem)
-			if inEventID {
-				eventID = text
-			}
-			if inLevel {
-				level = text
-			}
-			if inMessage {
-				message = text
-			}
-		case xml.EndElement:
-			switch elem.Name.Local {
-			case "Event":
-				inEvent = false
-				parsedTime, _ := time.Parse(time.RFC3339Nano, systemTime)
-				formattedTime := parsedTime.Format("02.01.2006 15:04:05")
-				formattedMessage := fmt.Sprintf(
-					"%s %s (%s): %s",
-					formattedTime, level, eventID, strings.TrimSpace(message),
-				)
-				eventMessages = append(eventMessages, formattedMessage)
-			case "RenderingInfo":
-				inRenderingInfo = false
-			case "Message":
-				inMessage = false
-			case "Level":
-				inLevel = false
-			case "EventID":
-				inEventID = false
 			}
 		}
+		if dateTime != "" && eventID != "" && level != "" && description != "" {
+			eventMessage = append(eventMessage, fmt.Sprintf("%s %s (%s): %s", dateTime, level, eventID, strings.TrimSpace(description)))
+		}
 	}
-	fullMessage := strings.Join(eventMessages, "\n")
+	fullMessage := strings.Join(eventMessage, "\n")
 	return []byte(fullMessage)
 }
 
