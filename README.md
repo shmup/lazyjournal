@@ -12,7 +12,7 @@
 
 Terminal user interface for `journalctl`, file system logs, as well **Docker** and **Podman** containers for quick viewing and filtering with fuzzy find, regex support (like `fzf` and `grep`) and coloring the output, written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
-This tool is inspired by and with love for [LazyDocker](https://github.com/jesseduffield/lazydocker) and [LazyGit](https://github.com/jesseduffield/lazygit), as well as is listed as [Awesome-TUIs](https://github.com/rothgar/awesome-tuis), check out the other useful projects in the repository page.
+This tool is inspired by and with love for [LazyDocker](https://github.com/jesseduffield/lazydocker) and [LazyGit](https://github.com/jesseduffield/lazygit), as well as is included in [Awesome-TUIs](https://github.com/rothgar/awesome-tuis) and [Awesome-Docker](https://github.com/veggiemonk/awesome-docker?tab=readme-ov-file#terminal-ui), check out other useful projects on the repository pages.
 
 ![interface](/img/fuzzy.jpg)
 
@@ -51,12 +51,12 @@ Binaries are available for download on the [releases](https://github.com/Lifailo
 
 List of supported systems and architectures in which I was able to check the functionality:
 
-| OS        | amd64 | arm64 | Systems                                                                          |
-| -         | -     | -     | -                                                                                |
-| Linux     | ✔     |  ✔   | Raspberry Pi, Oracle Linux (RHEL-based in WSL), Ubuntu Server 20.04.6 and above  |
-| Darwin    | ✔     |       | macOS Sequoia 15.2                                                               |
-| BSD-based | ✔     |       | OpenBSD 7.6 and FreeBSD 14.2                                                     |
-| Windows   | ✔     |       | Windows 10 and 11                                                                |
+| OS        | amd64 | arm64 | Systems                                                                                                   |
+| -         | -     | -     | -                                                                                                         |
+| Linux     | ✔     |  ✔   | Raspberry Pi, Arch Linux, Oracle Linux (RHEL-based in WSL environment), Ubuntu Server 20.04.6 and above   |
+| Darwin    | ✔     |       | macOS Sequoia 15.2                                                                                        |
+| BSD       | ✔     |       | OpenBSD 7.6 and FreeBSD 14.2                                                                              |
+| Windows   | ✔     |       | Windows 10 and Windows 11                                                                                 |
 
 ### Unix-based
 
@@ -80,18 +80,20 @@ Thank you [Matteo Giordano](https://github.com/malteo) for upload and update the
 
 ### Windows
 
+Windows Events, application logs from file system and containers are supported.
+
 Use the following command to quickly install in your PowerShell console:
 
 ```PowerShell
-Invoke-RestMethod https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.ps1 | Invoke-Expression
+irm https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.ps1 | iex
 ```
 
-Supports reading containers logs as well as searching for logs in the following directories:
+The following directories are used to search for logs in the file system:
 
 - `Program Files`
 - `Program Files (x86)`
-- `AppData\Local` for current user
-- `AppData\Roamin` for current user
+- `ProgramData`
+- `AppData\Local` and `AppData\Roamin` for current user
 
 To read logs, automatic detection of the following encodings is supported:
 
