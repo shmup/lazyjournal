@@ -140,7 +140,7 @@ type App struct {
 }
 
 func showHelp() {
-	fmt.Println("lazydocker - terminal user interface for journalctl, file system logs, as well Docker and Podman containers")
+	fmt.Println("lazyjournal - terminal user interface for journalctl, file system logs, as well Docker and Podman containers")
 	fmt.Println("Source code: https://github.com/Lifailon/lazyjournal")
 	fmt.Println("")
 	fmt.Println("  Flags:")
