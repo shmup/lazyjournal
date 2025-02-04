@@ -924,7 +924,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 			}
 		}
 		output = app.loadWinEventLog(eventName)
-		if len(string(output)) == 0 || string(output) == "" {
+		if len(output) == 0 {
 			v, _ := app.gui.View("logs")
 			v.Clear()
 			return
@@ -2582,7 +2582,7 @@ func (app *App) wordColor(inputWord string) string {
 			}
 		}
 	case strings.Contains(inputWordLower, "stop"):
-		words := []string{"stopping", "stopped", "stops", "stop"}
+		words := []string{"stopping", "stopped", "stoped", "stops", "stop"}
 		for _, word := range words {
 			if strings.Contains(inputWordLower, word) {
 				coloredWord = app.replaceWordLower(inputWord, word, "\033[31m")
@@ -2722,7 +2722,7 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "null", "\033[31m")
 	// Зеленый (успех) [32m]
 	case strings.Contains(inputWordLower, "succe"):
-		words := []string{"successfully", "successfull", "successful", "succeeded", "succeed", "success"}
+		words := []string{"successfully", "successful", "succeeded", "succeed", "success"}
 		for _, word := range words {
 			if strings.Contains(inputWordLower, word) {
 				coloredWord = app.replaceWordLower(inputWord, word, "\033[32m")
@@ -2730,7 +2730,7 @@ func (app *App) wordColor(inputWord string) string {
 			}
 		}
 	case strings.Contains(inputWordLower, "complet"):
-		words := []string{"completed", "completing", "completion", "complets", "complete"}
+		words := []string{"completed", "completing", "completion", "completes", "complete"}
 		for _, word := range words {
 			if strings.Contains(inputWordLower, word) {
 				coloredWord = app.replaceWordLower(inputWord, word, "\033[32m")
@@ -3102,6 +3102,8 @@ func (app *App) wordColor(inputWord string) string {
 		}
 	case strings.Contains(inputWordLower, "debug"):
 		coloredWord = app.replaceWordLower(inputWord, "debug", "\033[36m")
+	case strings.Contains(inputWordLower, "verbose"):
+		coloredWord = app.replaceWordLower(inputWord, "verbose", "\033[36m")
 	case strings.HasPrefix(inputWordLower, "trace"):
 		coloredWord = app.replaceWordLower(inputWord, "trace", "\033[36m")
 	case strings.HasPrefix(inputWordLower, "protocol"):
