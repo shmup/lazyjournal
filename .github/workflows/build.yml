@@ -1,12 +1,13 @@
 name: CI
 
 on:
-    workflow_dispatch:
-      inputs:
-        version:
-          description: "Version"
-          required: false
-          default: "0.7.2"
+  workflow_dispatch:
+    inputs:
+      Linters:
+        description: 'Linters check'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   build:
@@ -21,6 +22,9 @@ jobs:
         with:
           go-version: 1.23
 
+      - name: GLIBC version
+        run: ldd --version
+
       - name: Install dependencies
         run: |
           go mod tidy
@@ -28,16 +32,17 @@ jobs:
           go install -v github.com/go-critic/go-critic/cmd/gocritic@latest
 
       - name: Golangci linters check
-        run: |
-          golangci-lint run ./...
+        if: ${{ github.event.inputs.Linters }}
+        run: golangci-lint run ./...
 
       - name: Gocritic linters check
+        if: ${{ github.event.inputs.Linters }}
         run: gocritic check -enableAll ./...
 
       - name: Build binaries
         run: |
-          version="${{ github.event.inputs.version }}"
-          [ -z "$version" ] && version="latest"
+          version=$(cat main.go | grep Version: | awk -F '"' '{print $4}')
+          echo "Get version from main.go: $version"
           mkdir -p bin
           architectures=("amd64" "arm64")
           for arch in "${architectures[@]}"; do

@@ -1,23 +1,27 @@
 #!/bin/bash
 
-version=${1:-"0.7.0"}
+# version=${1:-"0.7.3"}
+version=$(cat main.go | grep Version: | awk -F '"' '{print $4}')
 mkdir -p bin
 rm -rf bin/*
 
 go mod tidy
 
-golangci_version=$(golangci-lint --version 2> /dev/null)
+golangci=$(echo $(go env GOPATH)/bin/golangci-lint)
+gocritic=$(echo $(go env GOPATH)/bin/gocritic)
+
+golangci_version=$($golangci --version 2> /dev/null)
 if [ -z "$golangci_version" ]; then
     go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 fi
 
-gocritic_version=$(gocritic --version 2> /dev/null)
+gocritic_version=$($gocritic --version 2> /dev/null)
 if [ -z "$gocritic_version" ]; then
     go install -v github.com/go-critic/go-critic/cmd/gocritic@latest
 fi
 
-golangci_check=$(golangci-lint run ./... --build-tags=buildvcs=false)
-gocritic_check=$(gocritic check -enableAll ./...)
+golangci_check=$($golangci run ./... --build-tags=buildvcs=false)
+gocritic_check=$($gocritic check -enableAll ./...)
 
 if [ -n "$golangci_check" ]; then
     echo "$golangci_check"
