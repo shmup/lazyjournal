@@ -150,7 +150,7 @@ func showHelp() {
 }
 
 func (app *App) showVersion() {
-	fmt.Println("Version:", "0.7.2") // Текущая версия
+	fmt.Println("Version:", "0.7.3")
 	data, err := os.ReadFile("/etc/os-release")
 	// Если ошибка при чтении файла, то возвращаем только название ОС
 	if err != nil {
@@ -1948,11 +1948,11 @@ func (app *App) loadWinFileLog(filePath string) (output []byte, stringErrors str
 	return decodedOutput, "nil"
 }
 
-// ---------------------------------------- Docker/Podman ----------------------------------------
+// ---------------------------------------- Docker/Podman/k8s ----------------------------------------
 
 func (app *App) loadDockerContainer(containerizationSystem string) {
 	// Получаем версию для проверки, что система контейнеризации установлена
-	cmd := exec.Command(containerizationSystem, "--version")
+	cmd := exec.Command(containerizationSystem, "version")
 	_, err := cmd.Output()
 	if err != nil {
 		vError, _ := app.gui.View("docker")
@@ -1963,7 +1963,14 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 		fmt.Fprintln(vError, "\033[31m"+containerizationSystem+" not installed (environment not found)\033[0m")
 		return
 	}
-	cmd = exec.Command(containerizationSystem, "ps", "-a", "--format", "{{.ID}} {{.Names}} {{.State}}")
+	if containerizationSystem == "kubectl" {
+		// Получаем список подов из k8s
+		cmd = exec.Command(containerizationSystem, "get", "pods", "-o",
+			"jsonpath={range .items[*]}{.metadata.uid} {.metadata.name} {.status.phase}{'\\n'}{end}")
+	} else {
+		// Получаем список контейнеров из Docker или Podman
+		cmd = exec.Command(containerizationSystem, "ps", "-a", "--format", "{{.ID}} {{.Names}} {{.State}}")
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		vError, _ := app.gui.View("docker")
@@ -1997,6 +2004,7 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 		}
 		vError.Highlight = true
 	}
+	// Проверяем статус для покраски и заполняем структуру dockerContainers
 	serviceMap := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
@@ -2005,7 +2013,7 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 		if idName != "" && !serviceMap[idName] {
 			serviceMap[idName] = true
 			containerStatus := parts[2]
-			if containerStatus == "running" {
+			if containerStatus == "running" || containerStatus == "Running" {
 				containerStatus = "\033[32m" + containerStatus + "\033[0m"
 			} else {
 				containerStatus = "\033[31m" + containerStatus + "\033[0m"
@@ -2204,8 +2212,13 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 			app.currentLogLines = formattedLines
 		}
 	}
-	// Читаем лог через Podman или Docker cli (если файл не найден)
-	if containerizationSystem == "podman" || !readFileContainer {
+	// Читаем лог через Docker cli (если файл не найден или к нему нет доступа) или Podman/k8s
+	if !readFileContainer || containerizationSystem == "podman" || containerizationSystem == "kubectl" {
+		// Извлекаем имя без статуса для k8s в containerId
+		if containerizationSystem == "kubectl" {
+			parts := strings.Split(containerName, " (")
+			containerId = parts[0]
+		}
 		cmd := exec.Command(containerizationSystem, "logs", "--tail", app.logViewCount, containerId)
 		output, err := cmd.Output()
 		if err != nil {
@@ -3786,10 +3799,10 @@ func (app *App) setupKeybindings() error {
 		}
 	}
 	// Переключение выбора журналов для Containerization System
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowRight, gocui.ModNone, app.setContainersList); err != nil {
+	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowRight, gocui.ModNone, app.setContainersListRight); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowLeft, gocui.ModNone, app.setContainersList); err != nil {
+	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowLeft, gocui.ModNone, app.setContainersListLeft); err != nil {
 		return err
 	}
 	// Переключение между режимами фильтрации через Up/Down для выбранного окна (filter)
@@ -4238,7 +4251,7 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 }
 
 // Функция для переключения выбора системы контейнеризации (Docker/Podman)
-func (app *App) setContainersList(g *gocui.Gui, v *gocui.View) error {
+func (app *App) setContainersListRight(g *gocui.Gui, v *gocui.View) error {
 	selectedDocker, err := g.View("docker")
 	if err != nil {
 		log.Panicln(err)
@@ -4248,6 +4261,35 @@ func (app *App) setContainersList(g *gocui.Gui, v *gocui.View) error {
 	app.selectedDockerContainer = 0
 	switch app.selectContainerizationSystem {
 	case "docker":
+		app.selectContainerizationSystem = "podman"
+		selectedDocker.Title = " < Podman containers (0) > "
+		app.loadDockerContainer(app.selectContainerizationSystem)
+	case "podman":
+		app.selectContainerizationSystem = "kubectl"
+		selectedDocker.Title = " < Kubernetes pods (0) > "
+		app.loadDockerContainer(app.selectContainerizationSystem)
+	case "kubectl":
+		app.selectContainerizationSystem = "docker"
+		selectedDocker.Title = " < Docker containers (0) > "
+		app.loadDockerContainer(app.selectContainerizationSystem)
+	}
+	return nil
+}
+
+func (app *App) setContainersListLeft(g *gocui.Gui, v *gocui.View) error {
+	selectedDocker, err := g.View("docker")
+	if err != nil {
+		log.Panicln(err)
+	}
+	app.dockerContainers = app.dockerContainers[:0]
+	app.startDockerContainers = 0
+	app.selectedDockerContainer = 0
+	switch app.selectContainerizationSystem {
+	case "docker":
+		app.selectContainerizationSystem = "kubectl"
+		selectedDocker.Title = " < Kubernetes pods (0) > "
+		app.loadDockerContainer(app.selectContainerizationSystem)
+	case "kubectl":
 		app.selectContainerizationSystem = "podman"
 		selectedDocker.Title = " < Podman containers (0) > "
 		app.loadDockerContainer(app.selectContainerizationSystem)
