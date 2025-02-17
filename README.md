@@ -3,14 +3,14 @@
 </p>
 
 <p align="center">
-    <a href="https://pkg.go.dev/github.com/Lifailon/lazyjournal"><img src="https://pkg.go.dev/badge/github.com/Lifailon/lazyjournal.svg" alt="Go Reference"></a>
+    <a href="https://github.com/Lifailon/lazyjournal/actions/workflows/build.yml"><img title="Actions Build"src="https://github.com/Lifailon/lazyjournal/actions/workflows/build.yml/badge.svg"></a>
     <a href="https://goreportcard.com/report/github.com/Lifailon/lazyjournal"><img src="https://goreportcard.com/badge/github.com/Lifailon/lazyjournal" alt="Go Report"></a>
-    <a href="https://github.com/Lifailon/lazyjournal/actions/workflows/build.yml"><img title="Actions Build"src="https://img.shields.io/github/actions/workflow/status/Lifailon/lazyjournal/build.yml?logo=GitHub-Actions"></a>
+    <a href="https://pkg.go.dev/github.com/Lifailon/lazyjournal"><img src="https://pkg.go.dev/badge/github.com/Lifailon/lazyjournal.svg" alt="Go Reference"></a>
     <a href="https://aur.archlinux.org/packages/lazyjournal"><img title="Arch Linux"src="https://img.shields.io/aur/version/lazyjournal?logo=arch-linux"></a>
     <a href="https://github.com/Lifailon/Kinozal-Bot/blob/rsa/LICENSE"><img title="License"src="https://img.shields.io/github/license/Lifailon/Kinozal-Bot?logo=readme&color=white"></a>
 </p>
 
-Terminal user interface for `journalctl`, file system logs, as well **Docker** and **Podman** containers for quick viewing and filtering with fuzzy find, regex support (like `fzf` and `grep`) and coloring the output, written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
+Terminal user interface for reading logs from `journalctl`, file system, Docker and Podman containers, as well Kubernetes pods for quick viewing and filtering with fuzzy find (like `fzf`), regex support (like `grep`) and coloring the output, written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
 This tool is inspired by and with love for [LazyDocker](https://github.com/jesseduffield/lazydocker) and [LazyGit](https://github.com/jesseduffield/lazygit), as well as is included in [Awesome-TUIs](https://github.com/rothgar/awesome-tuis) and [Awesome-Docker](https://github.com/veggiemonk/awesome-docker?tab=readme-ov-file#terminal-ui), check out other useful projects on the repository pages.
 
@@ -18,28 +18,30 @@ This tool is inspired by and with love for [LazyDocker](https://github.com/jesse
 
 ## Functional
 
-- Simple installation, to run just download one executable file without any dependencies.
-- List of all units (services, sockets, etc.) via `systemctl` with current running status.
+- Simple installation, download one executable file without dependencies for starting.
+- List of all units (`services`, `sockets`, etc.) via `systemctl` with current running status.
 - View all system and user journals via `journalctl` (tool for reading logs from [systemd-journald](https://github.com/systemd/systemd/tree/main/src/journal)).
 - List of all system boots for kernel log output.
-- File system logs (example, for `Apache` or `Nginx`), as well as `syslog` or `messages`, `dmesg` (kernel), etc.
+- File system logs (example, for `Apache` or `Nginx`), as well as `syslog` or `messages`, `dmesg` for kernel logs, etc.
 - List of all log files of descriptors used by processes, as well as all log files in the home directories of users.
 - Reading archived logs (`gz`, `xz` or `bz2` format), packet capture (`pcap` format) and Apple System Log (`asl` format).
-- Docker containers, Podman pods and Swarm services logs (including offline).
+- Docker containers (including `timestamp` and `stderr`), Podman pods and the Docker Swarm services.
+- Kubernetes pods via `kubectl`
+- Windows Event (in test mode via `wevtutil`) and application logs from Windows file system.
 - Filtering lists to find the desired journal.
-- Displays the currently selected log and filters output in real-time.
+- Displays the currently selected log output in real-time.
 
 Supports 3 filtering modes:
 
 - **Default** - case sensitive exact search.
 - **Fuzzy** - custom inexact case-insensitive search (searches for all phrases separated by a space anywhere on a line).
-- **Regex** - search with regular expression support (based on `regexp` library), case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
+- **Regex** - search with regular expression support (based on the built-in [regexp](https://pkg.go.dev/regexp) library), case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
 
 Supported coloring groups for output:
 
 - **Green** - keywords indicating success.
 - **Red** - keywords indicating an error.
-- **Blue** - statuses, (info, debug, etc), actions (install, update, etc) and HTTP methods (GET, POST, etc).
+- **Blue** - statuses (info, debug, etc), actions (install, update, etc) and HTTP methods (GET, POST, etc).
 - **Light Blue** - numbers (date, time, bytes, ip and mac-addresses).
 - **Yellow** - known names (host name and system users) and warnings.
 - **Purple** - url and full paths in the file system.
@@ -49,14 +51,14 @@ Supported coloring groups for output:
 
 Binaries are available for download on the [releases](https://github.com/Lifailon/lazyjournal/releases) page.
 
-List of supported systems and architectures in which I was able to check the functionality:
+List of supported systems and architectures in which functionality is checked: 
 
-| OS        | amd64 | arm64 | Systems                                                                                                   |
-| -         | -     | -     | -                                                                                                         |
-| Linux     | ✔     |  ✔   | Raspberry Pi, Arch Linux, Oracle Linux (RHEL-based in WSL environment), Ubuntu Server 20.04.6 and above   |
-| Darwin    | ✔     |       | macOS Sequoia 15.2                                                                                        |
-| BSD       | ✔     |       | OpenBSD 7.6 and FreeBSD 14.2                                                                              |
-| Windows   | ✔     |       | Windows 10 and Windows 11                                                                                 |
+| OS        | amd64 | arm64 | Systems                                                                                                                          |
+| -         | -     | -     | -                                                                                                                                |
+| Linux     | ✔     |  ✔   | Raspberry Pi (`aarch64`), Arch Linux, Oracle Linux (RHEL-based in WSL environment), Ubuntu Server 20.04.6 (GLIBC 2.31) and above |
+| Darwin    | ✔     |  ✔   | macOS Sequoia 15.2 `x64` on MacBook and the `arm` in GitHub Actions                                                              |
+| BSD       | ✔     |       | OpenBSD 7.6 and FreeBSD 14.2                                                                                                     |
+| Windows   | ✔     |       | Windows 10 and Windows 11                                                                                                        |
 
 ### Unix-based
 
@@ -79,8 +81,6 @@ paru -S lazyjournal
 Thank you [Matteo Giordano](https://github.com/malteo) for upload and update the package in AUR.
 
 ### Windows
-
-Windows Events, application logs from file system and containers are supported.
 
 Use the following command to quickly install in your PowerShell console:
 
@@ -136,7 +136,7 @@ cd lazyjournal
 go run main.go
 ```
 
-Check the source code on the linters using [golangci-lint](https://github.com/golangci/golangci-lint) and build binaries for different platforms and systems:
+Check the source code on the linter using [golangci-lint](https://github.com/golangci/golangci-lint) (including critic and security) and build binaries for different platforms and systems:
 
 ```shell
 bash build.sh
@@ -148,23 +148,24 @@ bash build.sh
 - `Shift+Tab` - return to previous window.
 - `Left/Right` - switch between journal lists in the selected window.
 - `Enter` - selection a journal from the list to display log output.
-- `<Up/PgUp>/<Down/PgDown>` - move up or down through all journal lists and log output, as well as changing the filtering mode in the filter window.
-- `<Shift/Alt>+<Up/Down>` - quickly move up or down through all journal lists and log output every `10` or `100/500` lines.
-- `Ctrl+E/Home` - go to top of log.
-- `Ctrl+D/End` - go to the end of the log.
+- `<Up/PgUp>` and `<Down/PgDown>` - move up and down through all journal lists and log output, as well as changing the filtering mode in the filter window.
+- `<Shift/Alt>+<Up/Down>` - quickly move up and down through all journal lists and log output every `10` or `100` lines (`500` for log output).
+- `<Shift/Ctrl>+<U/D>` - quickly move up and down (alternative for macOS).
+- `Ctrl+A` or `Home` - go to top of log.
+- `Ctrl+E` or `End` - go to the end of the log.
 - `Ctrl+W` - clear text input field for filter to quickly update current log output without filtering.
 - `Ctrl+C` - exit.
 
 ## Contributing
 
-Any contribution is welcome. If you want to implement a feature or fix something, please [open an issue](https://github.com/Lifailon/lazyjournal/issues) first.
+Since this is my first Go project, there may be some bad practices, BUT I want to make LazyJournal better. Any contribution will be appreciated! If you want to implement any new feature or fix something, please [open an issue](https://github.com/Lifailon/lazyjournal/issues) first.
 
 ## Alternatives
 
 - [lnav](https://github.com/tstack/lnav) - The Logfile Navigator is a **log file** viewer for the terminal.
 - [Dozzle](https://github.com/amir20/dozzle) - is a small lightweight application with a web based interface to monitor **Docker logs**.
 
-If you like using TUI tools, try [multranslate](https://github.com/Lifailon/multranslate) for translating text in multiple translators simultaneously, with support for translation history and automatic language detection.
+If you like using TUI tools, try [multranslate](https://github.com/Lifailon/multranslate) for translating text in multiple translators simultaneously and LLM, with support for translation history and automatic language detection.
 
 ## License
 
