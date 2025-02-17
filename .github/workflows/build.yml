@@ -68,6 +68,10 @@ jobs:
         if: ${{ github.event.inputs.Distro == 'macos-15' && github.event.inputs.TMUX == 'true' }}
         run: brew install tmux
 
+      - name: Start Docker container for test
+        if: ${{ github.event.inputs.TMUX == 'true' }}
+        run: docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
+
       - name: Interface testing
         if: ${{ github.event.inputs.TMUX }}
         run: |

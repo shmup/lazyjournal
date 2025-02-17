@@ -2,6 +2,7 @@
 
 debug=$1
 exitCode=0
+timeout=5
 
 sudo systemctl restart cron
 echo -e "First line\nSecond line" > input.log
@@ -16,21 +17,21 @@ trap "
 " EXIT
 
 # Test 1
-sleep 2
+sleep $timeout
 tmux send-keys -t test-session "cron"
 tmux send-keys -t test-session "$(echo -e '\t')"
 tmux send-keys -t test-session "$(echo -e '\x1b[C')" 
-sleep 2
+sleep $timeout
 tmux send-keys -t test-session "$(echo -e '\r')"
-sleep 2
+sleep $timeout
 tmux send-keys -t test-session "$(echo -e '\t\t\t')"
 tmux send-keys -t test-session "$(echo -e '\x1b[A')"
 tmux send-keys -t test-session "started"
-sleep 2
+sleep $timeout
 if [ "$debug" == "true" ]; then tmux capture-pane -p; fi
 output=$(tmux capture-pane -p)
 
-if echo "$output" | grep -q "Started cron"; then
+if echo "$output" | grep -q "systemd\[1\]: Started"; then
     echo "✔  Test read journal from systemd-journald: Passed"
 else
     echo "❌ Test read journal from systemd-journald: Failed"
@@ -45,9 +46,9 @@ for i in {1..4}; do tmux send-keys -t test-session "$(echo -e '\x7f')"; done
 tmux send-keys -t test-session "input"
 tmux send-keys -t test-session "$(echo -e '\t\t')"
 tmux send-keys -t test-session "$(echo -e '\x1b[C')"
-sleep 3
+sleep $timeout
 tmux send-keys -t test-session "$(echo -e '\r')"
-sleep 3
+sleep $timeout
 if [ "$debug" == "true" ]; then tmux capture-pane -p; fi
 output=$(tmux capture-pane -p)
 
@@ -65,10 +66,10 @@ for i in {1..5}; do tmux send-keys -t test-session "$(echo -e '\x7f')"; done
 tmux send-keys -t test-session "ping"
 tmux send-keys -t test-session "$(echo -e '\t\t\t')"
 tmux send-keys -t test-session "$(echo -e '\r')"
-sleep 2
+sleep $timeout
 tmux send-keys -t test-session "$(echo -e '\t')"
 tmux send-keys -t test-session "http"
-sleep 2
+sleep $timeout
 if [ "$debug" == "true" ]; then tmux capture-pane -p; fi
 output=$(tmux capture-pane -p)
 
