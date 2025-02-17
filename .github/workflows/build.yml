@@ -12,6 +12,11 @@ on:
           - 'ubuntu-20.04'
           - 'ubuntu-24.04'
           - 'macos-15'
+      Binary:
+        description: 'Build binary'
+        required: true
+        default: false
+        type: boolean
       Golangci:
         description: 'Golangci linter check'
         required: true
@@ -32,11 +37,11 @@ on:
         required: true
         default: true
         type: boolean
-      Build:
-        description: 'Build binary'
+      Timeout:
+        description: 'Timeout for interface testing'
         required: true
-        default: false
-        type: boolean
+        default: 5
+        type: number
 
 jobs:
   build:
@@ -95,10 +100,10 @@ jobs:
         run: |
           tmux -V
           chmod +x test.sh
-          bash test.sh true
+          bash test.sh ${{ github.event.inputs.Timeout }} true
 
       - name: Build binaries
-        if: ${{ github.event.inputs.Build }}
+        if: ${{ github.event.inputs.Binary }}
         run: |
           version=$(cat main.go | grep Version: | awk -F '"' '{print $4}')
           echo "Get version from main.go: $version"
@@ -115,7 +120,7 @@ jobs:
           echo "ARTIFACT_NAME=lazyjournal-$(date +'%d.%m.%Y')" >> $GITHUB_ENV
 
       - name: Upload binaries
-        if: ${{ github.event.inputs.Build }}
+        if: ${{ github.event.inputs.Binary }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}

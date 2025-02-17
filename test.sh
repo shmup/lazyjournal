@@ -1,8 +1,8 @@
 #!/bin/bash
 
-debug=$1
+timeout=${1:-5}
+debug=$2
 exitCode=0
-timeout=5
 
 sudo systemctl restart cron
 echo -e "First line\nSecond line" > input.log
