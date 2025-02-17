@@ -3,8 +3,18 @@ name: CI
 on:
   workflow_dispatch:
     inputs:
-      Linters:
-        description: 'Linters check'
+      Golangci:
+        description: 'Golangci linter check'
+        required: false
+        default: true
+        type: boolean
+      Gocritic:
+        description: 'Critic linter check'
+        required: false
+        default: true
+        type: boolean
+      Gosec:
+        description: 'Security linter check'
         required: false
         default: true
         type: boolean
@@ -27,17 +37,29 @@ jobs:
 
       - name: Install dependencies
         run: |
+          go fmt ./...
+          go vet ./...
           go mod tidy
+          go mod verify
+          go build -v ./...
+
+      - name: Golangci linter check
+        if: ${{ github.event.inputs.Golangci }}
+        run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          go install -v github.com/go-critic/go-critic/cmd/gocritic@latest
+          golangci-lint run ./...
 
-      - name: Golangci linters check
-        if: ${{ github.event.inputs.Linters }}
-        run: golangci-lint run ./...
+      - name: Critic linter check
+        if: ${{ github.event.inputs.Gocritic }}
+        run: |
+          go install github.com/go-critic/go-critic/cmd/gocritic@latest
+          gocritic check -enableAll ./...
 
-      - name: Gocritic linters check
-        if: ${{ github.event.inputs.Linters }}
-        run: gocritic check -enableAll ./...
+      - name: Security linter check
+        if: ${{ github.event.inputs.Gosec }}
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -severity=high ./...
 
       - name: Build binaries
         run: |
@@ -52,6 +74,7 @@ jobs:
               GOOS=freebsd GOARCH=$arch go build -o bin/lazyjournal-$version-freebsd-$arch
               GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
           done
+          ls -lh bin
           echo "ARTIFACT_NAME=lazyjournal-$(date +'%d.%m.%Y')" >> $GITHUB_ENV
 
       - name: Upload binaries
