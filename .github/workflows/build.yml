@@ -14,27 +14,22 @@ on:
           - 'macos-15'
       Binary:
         description: 'Build binary'
-        required: true
         default: false
         type: boolean
       Golangci:
         description: 'Golangci linter check'
-        required: true
         default: true
         type: boolean
       Gocritic:
         description: 'Critic linter check'
-        required: true
         default: true
         type: boolean
       Gosec:
         description: 'Security linter check'
-        required: true
         default: true
         type: boolean
       TMUX:
         description: 'Interface testing'
-        required: true
         default: true
         type: boolean
       Timeout:
@@ -70,19 +65,19 @@ jobs:
           go build -v ./...
 
       - name: Golangci linter check
-        if: ${{ github.event.inputs.Golangci }}
+        if: ${{ github.event.inputs.Golangci == 'true' }}
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
           golangci-lint run ./...
 
       - name: Critic linter check
-        if: ${{ github.event.inputs.Gocritic }}
+        if: ${{ github.event.inputs.Gocritic == 'true' }}
         run: |
           go install github.com/go-critic/go-critic/cmd/gocritic@latest
           gocritic check -enableAll ./...
 
       - name: Security linter check
-        if: ${{ github.event.inputs.Gosec }}
+        if: ${{ github.event.inputs.Gosec == 'true' }}
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           gosec -severity=high ./...
@@ -96,14 +91,14 @@ jobs:
         run: docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
 
       - name: Interface testing
-        if: ${{ github.event.inputs.TMUX }}
+        if: ${{ github.event.inputs.TMUX == 'true' }}
         run: |
           tmux -V
           chmod +x test.sh
           bash test.sh ${{ github.event.inputs.Timeout }} true
 
       - name: Build binaries
-        if: ${{ github.event.inputs.Binary }}
+        if: ${{ github.event.inputs.Binary == 'true' }}
         run: |
           version=$(cat main.go | grep Version: | awk -F '"' '{print $4}')
           echo "Get version from main.go: $version"
@@ -120,7 +115,7 @@ jobs:
           echo "ARTIFACT_NAME=lazyjournal-$(date +'%d.%m.%Y')" >> $GITHUB_ENV
 
       - name: Upload binaries
-        if: ${{ github.event.inputs.Binary }}
+        if: ${{ github.event.inputs.Binary == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
