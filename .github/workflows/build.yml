@@ -3,6 +3,16 @@ name: CI
 on:
   workflow_dispatch:
     inputs:
+      Build:
+        description: 'Build binary'
+        required: false
+        default: false
+        type: boolean
+      TMUX:
+        description: 'Interface testing using tmux'
+        required: false
+        default: true
+        type: boolean
       Golangci:
         description: 'Golangci linter check'
         required: false
@@ -32,8 +42,10 @@ jobs:
         with:
           go-version: 1.23
 
-      - name: GLIBC version
-        run: ldd --version
+      - name: Check versions
+        run: |
+          go version
+          echo "GLIBC version: $(ldd --version | head -n 1 | sed -r 's/.+\)\s//')"
 
       - name: Install dependencies
         run: |
@@ -42,6 +54,14 @@ jobs:
           go mod tidy
           go mod verify
           go build -v ./...
+
+      - name: Interface testing
+        if: ${{ github.event.inputs.TMUX }}
+        run: |
+          sudo apt install tmux -y
+          tmux -V
+          chmod +x test.sh
+          bash test.sh true
 
       - name: Golangci linter check
         if: ${{ github.event.inputs.Golangci }}
@@ -62,6 +82,7 @@ jobs:
           gosec -severity=high ./...
 
       - name: Build binaries
+        if: ${{ github.event.inputs.Build }}
         run: |
           version=$(cat main.go | grep Version: | awk -F '"' '{print $4}')
           echo "Get version from main.go: $version"
@@ -78,6 +99,7 @@ jobs:
           echo "ARTIFACT_NAME=lazyjournal-$(date +'%d.%m.%Y')" >> $GITHUB_ENV
 
       - name: Upload binaries
+        if: ${{ github.event.inputs.Build }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
