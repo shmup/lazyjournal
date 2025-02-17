@@ -64,6 +64,10 @@ jobs:
           go mod verify
           go build -v ./...
 
+      - name: Install tmux for macOS
+        if: ${{ github.event.inputs.Distro == 'macos-15' && github.event.inputs.TMUX == 'true' }}
+        run: brew install tmux
+
       - name: Interface testing
         if: ${{ github.event.inputs.TMUX }}
         run: |
