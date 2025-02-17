@@ -3,13 +3,22 @@ name: CI
 on:
   workflow_dispatch:
     inputs:
+      Distro:
+        description: 'Select a distribution'
+        required: true
+        default: 'ubuntu-20.04'
+        type: choice
+        options:
+          - 'ubuntu-20.04'
+          - 'ubuntu-24.04'
+          - 'macos-15'
       Build:
         description: 'Build binary'
         required: false
         default: false
         type: boolean
       TMUX:
-        description: 'Interface testing using tmux'
+        description: 'Interface testing'
         required: false
         default: true
         type: boolean
@@ -31,7 +40,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ${{ github.event.inputs.Distro }}
 
     steps:
       - name: Clone repository
@@ -58,7 +67,6 @@ jobs:
       - name: Interface testing
         if: ${{ github.event.inputs.TMUX }}
         run: |
-          sudo apt install tmux -y
           tmux -V
           chmod +x test.sh
           bash test.sh true
