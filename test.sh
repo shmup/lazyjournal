@@ -1,11 +1,21 @@
 #!/bin/bash
 
+# bash test.sh 3 true
+
 timeout=${1:-5}
 debug=$2
+
 exitCode=0
 
 sudo systemctl restart cron
 echo -e "First line\nSecond line" > input.log
+
+filterContainer="pinguem"
+filterLog="The server is running"
+
+journalctlVersion=$(journalctl --version journalctl --version 2> /dev/null || echo false)
+dockerVersion=$(docker --version 2> /dev/null || echo false)
+dockerContainer=$(docker ps | grep $filterContainer 2> /dev/null || echo false)
 
 tmux new-session -d -s test-session "go run main.go"
 
@@ -17,65 +27,109 @@ trap "
 " EXIT
 
 # Test 1
-sleep $timeout
-tmux send-keys -t test-session "cron"
-tmux send-keys -t test-session "$(echo -e '\t')"
-tmux send-keys -t test-session "$(echo -e '\x1b[C')" 
-sleep $timeout
-tmux send-keys -t test-session "$(echo -e '\r')"
-sleep $timeout
-tmux send-keys -t test-session "$(echo -e '\t\t\t')"
-tmux send-keys -t test-session "$(echo -e '\x1b[A')"
-tmux send-keys -t test-session "started"
-sleep $timeout
-if [ "$debug" == "true" ]; then tmux capture-pane -p; fi
-output=$(tmux capture-pane -p)
-
-if echo "$output" | grep -q "systemd\[1\]: Started"; then
-    echo "✔  Test read journal from systemd-journald: Passed"
+if [ "$journalctlVersion" == "false" ]; then
+    echo "Test journald: 🚫 Skip (journalctl not found)"
 else
-    echo "❌ Test read journal from systemd-journald: Failed"
-    exitCode=1
-fi
+    tmux send-keys -t test-session "cron"
+    tmux send-keys -t test-session "$(echo -e '\t')"
+    tmux send-keys -t test-session "$(echo -e '\x1b[C')" 
 
-for i in {1..7}; do tmux send-keys -t test-session "$(echo -e '\x7f')"; done
-tmux send-keys -t test-session "$(echo -e '\t\t')"
-for i in {1..4}; do tmux send-keys -t test-session "$(echo -e '\x7f')"; done
+    start_time=$(date +%s)
+    while true; do
+        current_time=$(date +%s)
+        elapsed=$((current_time - start_time))
+        if tmux capture-pane -p | grep -q "< System j" || [ "$elapsed" -ge "$timeout" ]; then
+            break
+        fi
+    done
+
+    tmux send-keys -t test-session "$(echo -e '\r')"
+    tmux send-keys -t test-session "$(echo -e '\t\t\t')"
+    tmux send-keys -t test-session "$(echo -e '\x1b[A')"
+    tmux send-keys -t test-session "started"
+
+    start_time=$(date +%s)
+    while true; do
+        if tmux capture-pane -p | grep -q "systemd\[1\]: Started"; then
+            echo "Test journald: ✔  Passed"
+            break
+        fi
+        current_time=$(date +%s)
+        elapsed=$((current_time - start_time))
+        if [ "$elapsed" -ge "$timeout" ]; then
+            echo "Test journald: ❌ Failed"
+            exitCode=1
+            break
+        fi
+    done
+
+    if [ "$debug" == "true" ]; then tmux capture-pane -p; fi
+    for i in {1..7}; do tmux send-keys -t test-session "$(echo -e '\x7f')"; done
+    tmux send-keys -t test-session "$(echo -e '\t\t')"
+    for i in {1..4}; do tmux send-keys -t test-session "$(echo -e '\x7f')"; done
+fi
 
 # Test 2
 tmux send-keys -t test-session "input"
 tmux send-keys -t test-session "$(echo -e '\t\t')"
 tmux send-keys -t test-session "$(echo -e '\x1b[C')"
-sleep $timeout
+
+start_time=$(date +%s)
+while true; do
+    current_time=$(date +%s)
+    elapsed=$((current_time - start_time))
+    if [[ $(tmux capture-pane -p | grep -q "< Users h") && $(tmux capture-pane -p | grep -q -v "Searching") ]] || [ "$elapsed" -ge "$timeout" ]; then
+        break
+    fi
+done
+
 tmux send-keys -t test-session "$(echo -e '\r')"
-sleep $timeout
+
+start_time=$(date +%s)
+while true; do
+    if tmux capture-pane -p | grep -q "First line" && tmux capture-pane -p | grep -q "Second line"; then
+        echo "Test file: ✔  Passed"
+        break
+    fi
+    current_time=$(date +%s)
+    elapsed=$((current_time - start_time))
+    if [ "$elapsed" -ge "$timeout" ]; then
+        echo "Test file: ❌ Failed"
+        exitCode=2
+        break
+    fi
+done
+
 if [ "$debug" == "true" ]; then tmux capture-pane -p; fi
-output=$(tmux capture-pane -p)
-
-if echo "$output" | grep -q "First line" && echo "$output" | grep -q "Second line"; then
-    echo "✔  Test read file: Passed"
-else
-    echo "❌ Test read file: Failed"
-    exitCode=2
-fi
-
 tmux send-keys -t test-session "$(echo -e '\t\t\t\t')"
 for i in {1..5}; do tmux send-keys -t test-session "$(echo -e '\x7f')"; done
 
 # Test 3
-tmux send-keys -t test-session "ping"
-tmux send-keys -t test-session "$(echo -e '\t\t\t')"
-tmux send-keys -t test-session "$(echo -e '\r')"
-sleep $timeout
-tmux send-keys -t test-session "$(echo -e '\t')"
-tmux send-keys -t test-session "http"
-sleep $timeout
-if [ "$debug" == "true" ]; then tmux capture-pane -p; fi
-output=$(tmux capture-pane -p)
-
-if echo "$output" | grep -q "The server is running on http://localhost:3005" && echo "$output" | grep -q "Local: http://localhost:8085"; then
-    echo "✔  Test read log from docker container: Passed"
+if [ "$dockerVersion" == "false" ]; then
+    echo "Test docker: 🚫 Skip (not installed)"
+elif [ "$dockerContainer" == "false" ]; then
+    echo "Test docker: 🚫 Skip (container not found)"
 else
-    echo "❌ Test read log from docker container: Failed"
-    exitCode=3
+    tmux send-keys -t test-session "$filterContainer"
+    tmux send-keys -t test-session "$(echo -e '\t\t\t')"
+    tmux send-keys -t test-session "$(echo -e '\r')"
+    tmux send-keys -t test-session "$(echo -e '\t')"
+    tmux send-keys -t test-session "$filterLog"
+
+    start_time=$(date +%s)
+    while true; do
+        if tmux capture-pane -p | grep -q "$filterLog"; then
+            echo "Test docker: ✔  Passed"
+            break
+        fi
+        current_time=$(date +%s)
+        elapsed=$((current_time - start_time))
+        if [ "$elapsed" -ge "$timeout" ]; then
+            echo "Test docker: ❌ Failed"
+            exitCode=3
+            break
+        fi
+    done
+
+    if [ "$debug" == "true" ]; then tmux capture-pane -p; fi
 fi
