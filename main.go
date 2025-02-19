@@ -47,6 +47,8 @@ type DockerContainers struct {
 type App struct {
 	gui *gocui.Gui // графический интерфейс (gocui)
 
+	testMode bool // исключаем вызовы к gocui при тестирование функций
+
 	getOS         string   // название ОС
 	getArch       string   // архитектура процессора
 	hostName      string   // текущее имя хоста для покраски в логах
@@ -182,6 +184,7 @@ func (app *App) showVersion() {
 func main() {
 	// Инициализация значений по умолчанию + компиляция регулярных выражений для покраски
 	app := &App{
+		testMode:                     false,
 		startServices:                0, // начальная позиция списка юнитов
 		selectedJournal:              0, // начальный индекс выбранного журнала
 		startFiles:                   0,
@@ -971,7 +974,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui
 	}
 	// Сохраняем строки журнала в массив
 	app.currentLogLines = strings.Split(string(output), "\n")
-	app.updateDelimiter(newUpdate, g)
+	app.updateDelimiter(newUpdate)
 	// Очищаем поле ввода для фильтрации, что бы не применять фильтрацию к новому журналу
 	// app.filterText = ""
 	// Применяем текущий фильтр к записям для обновления вывода
@@ -1400,22 +1403,24 @@ func (app *App) loadWinFiles(logPath string) {
 	wg.Wait()
 	// Объединяем все пути в одну строку, разделенную символом новой строки
 	output := strings.Join(files, "\n")
-	// Если список файлов пустой, возвращаем ошибку
-	if len(files) == 0 || (len(files) == 1 && files[0] == "") {
-		vError, _ := app.gui.View("varLogs")
-		vError.Clear()
-		app.fileSystemFrameColor = gocui.ColorRed
-		vError.FrameColor = app.fileSystemFrameColor
-		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[31mPermission denied (files not found)\033[0m")
-		return
-	} else {
-		vError, _ := app.gui.View("varLogs")
-		app.fileSystemFrameColor = gocui.ColorDefault
-		if vError.FrameColor != gocui.ColorDefault {
-			vError.FrameColor = gocui.ColorGreen
+	if !app.testMode {
+		// Если список файлов пустой, возвращаем ошибку
+		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+			vError, _ := app.gui.View("varLogs")
+			vError.Clear()
+			app.fileSystemFrameColor = gocui.ColorRed
+			vError.FrameColor = app.fileSystemFrameColor
+			vError.Highlight = false
+			fmt.Fprintln(vError, "\033[31mPermission denied (files not found)\033[0m")
+			return
+		} else {
+			vError, _ := app.gui.View("varLogs")
+			app.fileSystemFrameColor = gocui.ColorDefault
+			if vError.FrameColor != gocui.ColorDefault {
+				vError.FrameColor = gocui.ColorGreen
+			}
+			vError.Highlight = true
 		}
-		vError.Highlight = true
 	}
 	serviceMap := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
@@ -1458,8 +1463,10 @@ func (app *App) loadWinFiles(logPath string) {
 		dateJ, _ := time.Parse(layout, extractDate(app.logfiles[j].name))
 		return dateI.After(dateJ)
 	})
-	app.logfilesNotFilter = app.logfiles
-	app.applyFilterList()
+	if !app.testMode {
+		app.logfilesNotFilter = app.logfiles
+		app.applyFilterList()
+	}
 }
 
 // Функция для извлечения первой втречающейся даты в формате DD.MM.YYYY
@@ -1560,23 +1567,25 @@ func (app *App) selectFile(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		return err
 	}
-	app.loadFileLogs(strings.TrimSpace(line), true, g)
+	app.loadFileLogs(strings.TrimSpace(line), true)
 	app.lastWindow = "varLogs"
 	app.lastSelected = strings.TrimSpace(line)
 	return nil
 }
 
 // Функция для чтения файла
-func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
+func (app *App) loadFileLogs(logName string, newUpdate bool) {
 	// В параметре logName имя файла при выборе возвращяется без символов покраски
 	// Получаем путь из массива по имени
 	var logFullPath string
 	var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	for _, logfile := range app.logfiles {
 		// Удаляем покраску из имени файла в сохраненном массиве
-		logfileName := ansiEscape.ReplaceAllString(logfile.name, "")
-		if logfileName == logName {
+		logFileName := ansiEscape.ReplaceAllString(logfile.name, "")
+		// Ищем переданное в функцию имя файла и извлекаем путь
+		if logFileName == logName {
 			logFullPath = logfile.path
+			break
 		}
 	}
 	if newUpdate {
@@ -1614,7 +1623,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 		// Читаем логи в системе Windows
 		if app.getOS == "windows" {
 			decodedOutput, stringErrors := app.loadWinFileLog(logFullPath)
-			if stringErrors != "nil" {
+			if stringErrors != "nil" && !app.testMode {
 				v, _ := app.gui.View("logs")
 				v.Clear()
 				fmt.Fprintln(v, "\033[31mError", stringErrors, "\033[0m")
@@ -1628,7 +1637,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			case strings.HasSuffix(logFullPath, "asl"):
 				cmd := exec.Command("syslog", "-f", logFullPath)
 				output, err := cmd.Output()
-				if err != nil {
+				if err != nil && !app.testMode {
 					v, _ := app.gui.View("logs")
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using syslog tool in ASL (Apple System Log) format.\n", err, "\033[0m")
@@ -1639,7 +1648,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			case strings.HasSuffix(logFullPath, "pcap") || strings.HasSuffix(logFullPath, "pcapng"):
 				cmd := exec.Command("tcpdump", "-n", "-r", logFullPath)
 				output, err := cmd.Output()
-				if err != nil {
+				if err != nil && !app.testMode {
 					v, _ := app.gui.View("logs")
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
@@ -1650,7 +1659,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			case strings.HasSuffix(logFullPath, "pflog"):
 				cmd := exec.Command("tcpdump", "-e", "-n", "-r", logFullPath)
 				output, err := cmd.Output()
-				if err != nil {
+				if err != nil && !app.testMode {
 					v, _ := app.gui.View("logs")
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
@@ -1660,10 +1669,10 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			// Читаем архивные логи в формате pcap/pcapng (MacOS)
 			case strings.HasSuffix(logFullPath, "pcap.gz") || strings.HasSuffix(logFullPath, "pcapng.gz"):
 				var unpacker string = "gzip"
-				vError, _ := app.gui.View("logs")
 				// Создаем временный файл
 				tmpFile, err := os.CreateTemp("", "temp-*.pcap")
-				if err != nil {
+				if err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError create temp file.\n", err, "\033[0m")
 					return
@@ -1672,18 +1681,21 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				defer os.Remove(tmpFile.Name())
 				cmdUnzip := exec.Command(unpacker, "-dc", logFullPath)
 				cmdUnzip.Stdout = tmpFile
-				if err := cmdUnzip.Start(); err != nil {
+				if err := cmdUnzip.Start(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError starting", unpacker, "tool.\n", err, "\033[0m")
 					return
 				}
-				if err := cmdUnzip.Wait(); err != nil {
+				if err := cmdUnzip.Wait(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError decompressing file with", unpacker, "tool.\n", err, "\033[0m")
 					return
 				}
 				// Закрываем временный файл, чтобы tcpdump мог его открыть
-				if err := tmpFile.Close(); err != nil {
+				if err := tmpFile.Close(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError closing temp file.\n", err, "\033[0m")
 					return
@@ -1691,13 +1703,15 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				// Создаем команду для tcpdump
 				cmdTcpdump := exec.Command("tcpdump", "-n", "-r", tmpFile.Name())
 				tcpdumpOut, err := cmdTcpdump.StdoutPipe()
-				if err != nil {
+				if err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError creating stdout pipe for tcpdump.\n", err, "\033[0m")
 					return
 				}
 				// Запускаем tcpdump
-				if err := cmdTcpdump.Start(); err != nil {
+				if err := cmdTcpdump.Start(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError starting tcpdump.\n", err, "\033[0m")
 					return
@@ -1708,13 +1722,15 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				for scanner.Scan() {
 					lines = append(lines, scanner.Text())
 				}
-				if err := scanner.Err(); err != nil {
+				if err := scanner.Err(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError reading output from tcpdump.\n", err, "\033[0m")
 					return
 				}
 				// Ожидаем завершения tcpdump
-				if err := cmdTcpdump.Wait(); err != nil {
+				if err := cmdTcpdump.Wait(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError finishing tcpdump.\n", err, "\033[0m")
 					return
@@ -1723,7 +1739,6 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			// Читаем архивные логи (unpack + stdout) в формате: gz/xz/bz2
 			case strings.HasSuffix(logFullPath, ".gz") || strings.HasSuffix(logFullPath, ".xz") || strings.HasSuffix(logFullPath, ".bz2"):
 				var unpacker string
-				vError, _ := app.gui.View("logs")
 				switch {
 				case strings.HasSuffix(logFullPath, ".gz"):
 					unpacker = "gzip"
@@ -1735,7 +1750,8 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				cmdUnzip := exec.Command(unpacker, "-dc", logFullPath)
 				cmdTail := exec.Command("tail", "-n", app.logViewCount)
 				pipe, err := cmdUnzip.StdoutPipe()
-				if err != nil {
+				if err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError creating pipe for", unpacker, "tool.\n", err, "\033[0m")
 					return
@@ -1743,36 +1759,42 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				// Стандартный вывод программы передаем в stdin tail
 				cmdTail.Stdin = pipe
 				out, err := cmdTail.StdoutPipe()
-				if err != nil {
+				if err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError creating stdout pipe for tail.\n", err, "\033[0m")
 					return
 				}
 				// Запуск команд
-				if err := cmdUnzip.Start(); err != nil {
+				if err := cmdUnzip.Start(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError starting", unpacker, "tool.\n", err, "\033[0m")
 					return
 				}
-				if err := cmdTail.Start(); err != nil {
+				if err := cmdTail.Start(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError starting tail from", unpacker, "stdout.\n", err, "\033[0m")
 					return
 				}
 				// Чтение вывода
 				output, err := io.ReadAll(out)
-				if err != nil {
+				if err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError reading output from tail.\n", err, "\033[0m")
 					return
 				}
 				// Ожидание завершения команд
-				if err := cmdUnzip.Wait(); err != nil {
+				if err := cmdUnzip.Wait(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError reading archive log using", unpacker, "tool.\n", err, "\033[0m")
 					return
 				}
-				if err := cmdTail.Wait(); err != nil {
+				if err := cmdTail.Wait(); err != nil && !app.testMode {
+					vError, _ := app.gui.View("logs")
 					vError.Clear()
 					fmt.Fprintln(vError, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
 					return
@@ -1783,7 +1805,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			case strings.Contains(logFullPath, "wtmp") || strings.Contains(logFullPath, "utmp") || strings.Contains(logFullPath, "utx.log"):
 				cmd := exec.Command("last", "-f", logFullPath)
 				output, err := cmd.Output()
-				if err != nil {
+				if err != nil && !app.testMode {
 					v, _ := app.gui.View("logs")
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using last tool.\n", err, "\033[0m")
@@ -1808,7 +1830,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			case strings.Contains(logFullPath, "btmp"):
 				cmd := exec.Command("lastb", "-f", logFullPath)
 				output, err := cmd.Output()
-				if err != nil {
+				if err != nil && !app.testMode {
 					v, _ := app.gui.View("logs")
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using lastb tool.\n", err, "\033[0m")
@@ -1830,7 +1852,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			case strings.HasSuffix(logFullPath, "lastlog"):
 				cmd := exec.Command("lastlog")
 				output, err := cmd.Output()
-				if err != nil {
+				if err != nil && !app.testMode {
 					v, _ := app.gui.View("logs")
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using lastlog tool.\n", err, "\033[0m")
@@ -1841,7 +1863,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			case strings.HasSuffix(logFullPath, "lastlogin"):
 				cmd := exec.Command("lastlogin")
 				output, err := cmd.Output()
-				if err != nil {
+				if err != nil && !app.testMode {
 					v, _ := app.gui.View("logs")
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using lastlogin tool.\n", err, "\033[0m")
@@ -1851,7 +1873,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 			default:
 				cmd := exec.Command("tail", "-n", app.logViewCount, logFullPath)
 				output, err := cmd.Output()
-				if err != nil {
+				if err != nil && !app.testMode {
 					v, _ := app.gui.View("logs")
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
@@ -1860,8 +1882,10 @@ func (app *App) loadFileLogs(logName string, newUpdate bool, g *gocui.Gui) {
 				app.currentLogLines = strings.Split(string(output), "\n")
 			}
 		}
-		app.updateDelimiter(newUpdate, g)
-		app.applyFilter(false)
+		if !app.testMode {
+			app.updateDelimiter(newUpdate)
+			app.applyFilter(false)
+		}
 	}
 }
 
@@ -2229,7 +2253,7 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
 	}
-	app.updateDelimiter(newUpdate, g)
+	app.updateDelimiter(newUpdate)
 	app.applyFilter(false)
 }
 
@@ -3415,7 +3439,7 @@ func (app *App) updateLogOutput(seconds int) {
 			case "services":
 				app.loadJournalLogs(app.lastSelected, false, g)
 			case "varLogs":
-				app.loadFileLogs(app.lastSelected, false, g)
+				app.loadFileLogs(app.lastSelected, false)
 			case "docker":
 				app.loadDockerLogs(app.lastSelected, false, g)
 			}
@@ -3461,7 +3485,7 @@ func (app *App) updateWindowSize(seconds int) {
 }
 
 // Функция для фиксации места загрузки журнала с помощью делиметра
-func (app *App) updateDelimiter(newUpdate bool, g *gocui.Gui) {
+func (app *App) updateDelimiter(newUpdate bool) {
 	// Фиксируем текущую длинну массива (индекс) для вставки строки обновления, если это ручной выбор из списка
 	if newUpdate {
 		app.newUpdateIndex = len(app.currentLogLines) - 1
@@ -3473,7 +3497,7 @@ func (app *App) updateDelimiter(newUpdate bool, g *gocui.Gui) {
 	// Проверяем, что массив не пустой и уже привысил длинну новых сообщений
 	if app.newUpdateIndex > 0 && len(app.currentLogLines)-1 > app.newUpdateIndex {
 		// Формируем длинну делимитра
-		v, _ := g.View("logs")
+		v, _ := app.gui.View("logs")
 		width, _ := v.Size()
 		lengthDelimiter := width/2 - 5
 		delimiter1 := strings.Repeat("⎯", lengthDelimiter)
