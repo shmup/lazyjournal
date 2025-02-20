@@ -889,7 +889,7 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 		return err
 	}
 	// Загружаем журналы выбранной службы, обрезая пробелы в названии
-	app.loadJournalLogs(strings.TrimSpace(line), true, g)
+	app.loadJournalLogs(strings.TrimSpace(line), true)
 	// Включаем загрузку журнала (только при ручном выборе для Windows)
 	app.updateFile = true
 	// Фиксируем для ручного или автоматического обновления вывода журнала
@@ -900,7 +900,7 @@ func (app *App) selectService(g *gocui.Gui, v *gocui.View) error {
 
 // Функция для загрузки записей журнала выбранной службы через journalctl
 // Второй параметр для обнолвения позиции делимитра нового вывода лога а также сброса автоскролл
-func (app *App) loadJournalLogs(serviceName string, newUpdate bool, g *gocui.Gui) {
+func (app *App) loadJournalLogs(serviceName string, newUpdate bool) {
 	var output []byte
 	var err error
 	selectUnits := app.selectUnits
@@ -1421,6 +1421,10 @@ func (app *App) loadWinFiles(logPath string) {
 			}
 			vError.Highlight = true
 		}
+	} else {
+		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+			log.Fatal("Permission denied (files not found)")
+		}
 	}
 	serviceMap := make(map[string]bool)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
@@ -1629,6 +1633,9 @@ func (app *App) loadFileLogs(logName string, newUpdate bool) {
 				fmt.Fprintln(v, "\033[31mError", stringErrors, "\033[0m")
 				return
 			}
+			if stringErrors != "nil" && app.testMode {
+				log.Fatal("Error: ", stringErrors)
+			}
 			app.currentLogLines = strings.Split(string(decodedOutput), "\n")
 		} else {
 			// Читаем логи в системах UNIX (Linux/Darwin/*BSD)
@@ -1643,6 +1650,9 @@ func (app *App) loadFileLogs(logName string, newUpdate bool) {
 					fmt.Fprintln(v, " \033[31mError reading log using syslog tool in ASL (Apple System Log) format.\n", err, "\033[0m")
 					return
 				}
+				if err != nil && app.testMode {
+					log.Fatal("Error reading log using syslog tool in ASL (Apple System Log) format. Error: ", err)
+				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 			// Читаем журналы Packet Capture в формате pcap/pcapng
 			case strings.HasSuffix(logFullPath, "pcap") || strings.HasSuffix(logFullPath, "pcapng"):
@@ -1653,6 +1663,9 @@ func (app *App) loadFileLogs(logName string, newUpdate bool) {
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using tcpdump tool.\n", err, "\033[0m")
 					return
+				}
+				if err != nil && app.testMode {
+					log.Fatal("Error reading log using tcpdump tool. Error: ", err)
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 			// Packet Filter (PF) Firewall OpenBSD
@@ -1879,6 +1892,9 @@ func (app *App) loadFileLogs(logName string, newUpdate bool) {
 					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
 					return
 				}
+				if err != nil && app.testMode {
+					log.Fatal("Error reading log using tail tool. Error: ", err)
+				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 			}
 		}
@@ -1978,7 +1994,7 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 	// Получаем версию для проверки, что система контейнеризации установлена
 	cmd := exec.Command(containerizationSystem, "version")
 	_, err := cmd.Output()
-	if err != nil {
+	if err != nil && !app.testMode {
 		vError, _ := app.gui.View("docker")
 		vError.Clear()
 		app.dockerFrameColor = gocui.ColorRed
@@ -1986,6 +2002,9 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 		vError.Highlight = false
 		fmt.Fprintln(vError, "\033[31m"+containerizationSystem+" not installed (environment not found)\033[0m")
 		return
+	}
+	if err != nil && app.testMode {
+		log.Fatal(containerizationSystem + " not installed (environment not found)")
 	}
 	if containerizationSystem == "kubectl" {
 		// Получаем список подов из k8s
@@ -1996,37 +2015,44 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 		cmd = exec.Command(containerizationSystem, "ps", "-a", "--format", "{{.ID}} {{.Names}} {{.State}}")
 	}
 	output, err := cmd.Output()
-	if err != nil {
-		vError, _ := app.gui.View("docker")
-		vError.Clear()
-		app.dockerFrameColor = gocui.ColorRed
-		vError.FrameColor = app.dockerFrameColor
-		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[31mAccess denied or "+containerizationSystem+" not running\033[0m")
-		return
-	} else {
-		vError, _ := app.gui.View("docker")
-		app.dockerFrameColor = gocui.ColorDefault
-		vError.Highlight = true
-		if vError.FrameColor != gocui.ColorDefault {
-			vError.FrameColor = gocui.ColorGreen
+	if !app.testMode {
+		if err != nil {
+			vError, _ := app.gui.View("docker")
+			vError.Clear()
+			app.dockerFrameColor = gocui.ColorRed
+			vError.FrameColor = app.dockerFrameColor
+			vError.Highlight = false
+			fmt.Fprintln(vError, "\033[31mAccess denied or "+containerizationSystem+" not running\033[0m")
+			return
+		} else {
+			vError, _ := app.gui.View("docker")
+			app.dockerFrameColor = gocui.ColorDefault
+			vError.Highlight = true
+			if vError.FrameColor != gocui.ColorDefault {
+				vError.FrameColor = gocui.ColorGreen
+			}
 		}
+	}
+	if err != nil && app.testMode {
+		log.Fatal("Access denied or " + containerizationSystem + " not running")
 	}
 	containers := strings.Split(strings.TrimSpace(string(output)), "\n")
 	// Проверяем, что список контейнеров не пустой
-	if len(containers) == 0 || (len(containers) == 1 && containers[0] == "") {
-		vError, _ := app.gui.View("docker")
-		vError.Clear()
-		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[32mNo running containers\033[0m")
-		return
-	} else {
-		vError, _ := app.gui.View("docker")
-		app.fileSystemFrameColor = gocui.ColorDefault
-		if vError.FrameColor != gocui.ColorDefault {
-			vError.FrameColor = gocui.ColorGreen
+	if !app.testMode {
+		if len(containers) == 0 || (len(containers) == 1 && containers[0] == "") {
+			vError, _ := app.gui.View("docker")
+			vError.Clear()
+			vError.Highlight = false
+			fmt.Fprintln(vError, "\033[32mNo running containers\033[0m")
+			return
+		} else {
+			vError, _ := app.gui.View("docker")
+			app.fileSystemFrameColor = gocui.ColorDefault
+			if vError.FrameColor != gocui.ColorDefault {
+				vError.FrameColor = gocui.ColorGreen
+			}
+			vError.Highlight = true
 		}
-		vError.Highlight = true
 	}
 	// Проверяем статус для покраски и заполняем структуру dockerContainers
 	serviceMap := make(map[string]bool)
@@ -2052,8 +2078,10 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 	sort.Slice(app.dockerContainers, func(i, j int) bool {
 		return app.dockerContainers[i].name < app.dockerContainers[j].name
 	})
-	app.dockerContainersNotFilter = app.dockerContainers
-	app.applyFilterList()
+	if !app.testMode {
+		app.dockerContainersNotFilter = app.dockerContainers
+		app.applyFilterList()
+	}
 }
 
 func (app *App) updateDockerContainerList() {
@@ -2148,13 +2176,13 @@ func (app *App) selectDocker(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		return err
 	}
-	app.loadDockerLogs(strings.TrimSpace(line), true, g)
+	app.loadDockerLogs(strings.TrimSpace(line), true)
 	app.lastWindow = "docker"
 	app.lastSelected = strings.TrimSpace(line)
 	return nil
 }
 
-func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gui) {
+func (app *App) loadDockerLogs(containerName string, newUpdate bool) {
 	containerizationSystem := app.selectContainerizationSystem
 	// Сохраняем систему контейнеризации для автообновления при смене окна
 	if newUpdate {
@@ -2196,11 +2224,14 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 		if readFileContainer {
 			cmd := exec.Command("tail", "-n", app.logViewCount, logFilePath)
 			output, err := cmd.Output()
-			if err != nil {
+			if err != nil && !app.testMode {
 				v, _ := app.gui.View("logs")
 				v.Clear()
 				fmt.Fprintln(v, "\033[31mError reading log:", err, "\033[0m")
 				return
+			}
+			if err != nil && app.testMode {
+				log.Fatal("Error reading log: ", err)
 			}
 			// Разбиваем строки на массив
 			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -2245,16 +2276,21 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool, g *gocui.Gu
 		}
 		cmd := exec.Command(containerizationSystem, "logs", "--tail", app.logViewCount, containerId)
 		output, err := cmd.Output()
-		if err != nil {
+		if err != nil && !app.testMode {
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting logs from", containerName, "(id:", containerId, ")", "container.", err, "\033[0m")
+			fmt.Fprintln(v, "\033[31mError getting logs from", containerName, "(id:", containerId, ")", "container. Error:", err, "\033[0m")
 			return
+		}
+		if err != nil && app.testMode {
+			log.Fatal("Error getting logs from ", containerName, " (id:", containerId, ")", " container. Error: ", err)
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
 	}
-	app.updateDelimiter(newUpdate)
-	app.applyFilter(false)
+	if !app.testMode {
+		app.updateDelimiter(newUpdate)
+		app.applyFilter(false)
+	}
 }
 
 // ---------------------------------------- Filter ----------------------------------------
@@ -3437,11 +3473,11 @@ func (app *App) updateLogOutput(seconds int) {
 			}
 			switch app.lastWindow {
 			case "services":
-				app.loadJournalLogs(app.lastSelected, false, g)
+				app.loadJournalLogs(app.lastSelected, false)
 			case "varLogs":
 				app.loadFileLogs(app.lastSelected, false)
 			case "docker":
-				app.loadDockerLogs(app.lastSelected, false, g)
+				app.loadDockerLogs(app.lastSelected, false)
 			}
 			return nil
 		})

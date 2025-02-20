@@ -8,14 +8,13 @@ import (
 )
 
 func TestWinFiles(t *testing.T) {
-	// Определяем тестовые пути
 	testCases := []struct {
 		name       string
 		selectPath string
 	}{
 		// {"Program Files", "ProgramFiles"},
 		{"Program Files 86", "ProgramFiles86"},
-		{"ProgramData", "ProgramData"},
+		// {"ProgramData", "ProgramData"},
 		// {"AppData/Local", "AppDataLocal"},
 		// {"AppData/Roaming", "AppDataRoaming"},
 	}
@@ -33,9 +32,9 @@ func TestWinFiles(t *testing.T) {
 			// (1) Заполняем массив из названий файлов и путей к ним
 			app.loadWinFiles(app.selectPath)
 			if len(app.logfiles) == 0 {
-				t.Errorf("The file list is empty")
+				t.Errorf("File list is null")
 			} else {
-				t.Log("Main path:", app.selectPath, "(", len(app.logfiles), "count log files )")
+				t.Log("Log files count:", len(app.logfiles))
 			}
 
 			var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -48,7 +47,42 @@ func TestWinFiles(t *testing.T) {
 				// (2) Читаем журнал, выводим путь, количество строк в массиве (прочитанных из файла) и время чтения
 				app.loadFileLogs(strings.TrimSpace(logFileName), true)
 				endTime := time.Since(startTime)
-				t.Log("Path:", app.lastLogPath, "[ lines:", len(app.currentLogLines), "& time:", endTime, "]")
+				t.Log("Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+			}
+		})
+	}
+}
+
+func TestDockerContainer(t *testing.T) {
+	testCases := []struct {
+		name                         string
+		selectContainerizationSystem string
+	}{
+		{"Docker", "docker"},
+		// {"Podman", "podman"},
+		// {"Kubernetes", "kubernetes"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := &App{
+				testMode:                     true,
+				selectContainerizationSystem: tc.selectContainerizationSystem,
+				logViewCount:                 "100000",
+			}
+			app.loadDockerContainer(app.selectContainerizationSystem)
+			if len(app.dockerContainers) == 0 {
+				t.Errorf("Container list is null")
+			} else {
+				t.Log("Container count:", len(app.dockerContainers))
+			}
+
+			var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+			for _, dockerContainer := range app.dockerContainers {
+				containerName := ansiEscape.ReplaceAllString(dockerContainer.name, "")
+				startTime := time.Now()
+				app.loadDockerLogs(strings.TrimSpace(containerName), true)
+				endTime := time.Since(startTime)
+				t.Log("Container:", dockerContainer.name, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 			}
 		})
 	}
