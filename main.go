@@ -59,7 +59,7 @@ type App struct {
 
 	selectUnits                  string // название журнала (UNIT/USER_UNIT)
 	selectPath                   string // путь к логам (/var/log/)
-	selectContainerizationSystem string // название системы контейнеризации (docker/podman)
+	selectContainerizationSystem string // название системы контейнеризации (docker/podman/kubernetes)
 	selectFilterMode             string // режим фильтрации (default/fuzzy/regex)
 	logViewCount                 string // количество логов для просмотра (5000)
 
@@ -152,7 +152,7 @@ func showHelp() {
 }
 
 func (app *App) showVersion() {
-	fmt.Println("Version:", "0.7.3")
+	fmt.Println("Version:", "0.7.4")
 	data, err := os.ReadFile("/etc/os-release")
 	// Если ошибка при чтении файла, то возвращаем только название ОС
 	if err != nil {
@@ -193,7 +193,7 @@ func main() {
 		selectedDockerContainer:      0,
 		selectUnits:                  "services",  // "UNIT" || "USER_UNIT" || "kernel"
 		selectPath:                   "/var/log/", // "/home/" ("/Users/" - для MacOS)
-		selectContainerizationSystem: "docker",    // "podman"
+		selectContainerizationSystem: "docker",    // "podman" || kubernetes
 		selectFilterMode:             "default",   // "fuzzy" || "regex"
 		logViewCount:                 "200000",    // 5000-300000
 		journalListFrameColor:        gocui.ColorDefault,
@@ -518,7 +518,7 @@ func (app *App) loadServices(journalName string) {
 	checkJournald := exec.Command("journalctl", "--version")
 	// Проверяем на ошибки (очищаем список служб, отключаем курсор и выводим ошибку)
 	_, err := checkJournald.Output()
-	if err != nil {
+	if err != nil && !app.testMode {
 		vError, _ := app.gui.View("services")
 		vError.Clear()
 		app.journalListFrameColor = gocui.ColorRed
@@ -527,26 +527,34 @@ func (app *App) loadServices(journalName string) {
 		fmt.Fprintln(vError, "\033[31msystemd-journald not supported\033[0m")
 		return
 	}
+	if err != nil && app.testMode {
+		log.Fatal("systemd-journald not supported")
+	}
 	switch {
 	case journalName == "services":
 		// Получаем список всех юнитов в системе через systemctl в формате JSON
 		unitsList := exec.Command("systemctl", "list-units", "--all", "--plain", "--no-legend", "--no-pager", "--output=json") // "--type=service"
 		output, err := unitsList.Output()
-		if err != nil {
-			vError, _ := app.gui.View("services")
-			vError.Clear()
-			app.journalListFrameColor = gocui.ColorRed
-			vError.FrameColor = app.journalListFrameColor
-			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mAccess denied in systemd\033[0m")
-			return
+		if !app.testMode {
+			if err != nil {
+				vError, _ := app.gui.View("services")
+				vError.Clear()
+				app.journalListFrameColor = gocui.ColorRed
+				vError.FrameColor = app.journalListFrameColor
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[31mAccess denied in systemd (systemctl)\033[0m")
+				return
+			}
+			v, _ := app.gui.View("services")
+			app.journalListFrameColor = gocui.ColorDefault
+			if v.FrameColor != gocui.ColorDefault {
+				v.FrameColor = gocui.ColorGreen
+			}
+			v.Highlight = true
 		}
-		v, _ := app.gui.View("services")
-		app.journalListFrameColor = gocui.ColorDefault
-		if v.FrameColor != gocui.ColorDefault {
-			v.FrameColor = gocui.ColorGreen
+		if err != nil && app.testMode {
+			log.Fatal("Access denied in systemd (systemctl)")
 		}
-		v.Highlight = true
 		// Чтение данных в формате JSON
 		var units []map[string]interface{}
 		err = json.Unmarshal(output, &units)
@@ -604,21 +612,26 @@ func (app *App) loadServices(journalName string) {
 		// Получаем список загрузок системы
 		bootCmd := exec.Command("journalctl", "--list-boots", "-o", "json")
 		bootOutput, err := bootCmd.Output()
-		if err != nil {
-			vError, _ := app.gui.View("services")
-			vError.Clear()
-			app.journalListFrameColor = gocui.ColorRed
-			vError.FrameColor = app.journalListFrameColor
-			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mError getting boot information from journald\033[0m")
-			return
-		} else {
-			vError, _ := app.gui.View("services")
-			app.journalListFrameColor = gocui.ColorDefault
-			if vError.FrameColor != gocui.ColorDefault {
-				vError.FrameColor = gocui.ColorGreen
+		if !app.testMode {
+			if err != nil {
+				vError, _ := app.gui.View("services")
+				vError.Clear()
+				app.journalListFrameColor = gocui.ColorRed
+				vError.FrameColor = app.journalListFrameColor
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[31mError getting boot information from journald\033[0m")
+				return
+			} else {
+				vError, _ := app.gui.View("services")
+				app.journalListFrameColor = gocui.ColorDefault
+				if vError.FrameColor != gocui.ColorDefault {
+					vError.FrameColor = gocui.ColorGreen
+				}
+				vError.Highlight = true
 			}
-			vError.Highlight = true
+		}
+		if err != nil && app.testMode {
+			log.Fatal("Error getting boot information from journald")
 		}
 		// Структура для парсинга JSON
 		type BootInfo struct {
@@ -689,21 +702,26 @@ func (app *App) loadServices(journalName string) {
 	default:
 		cmd := exec.Command("journalctl", "--no-pager", "-F", journalName)
 		output, err := cmd.Output()
-		if err != nil {
-			vError, _ := app.gui.View("services")
-			vError.Clear()
-			app.journalListFrameColor = gocui.ColorRed
-			vError.FrameColor = app.journalListFrameColor
-			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mError getting services from journald\033[0m")
-			return
-		} else {
-			vError, _ := app.gui.View("services")
-			app.journalListFrameColor = gocui.ColorDefault
-			if vError.FrameColor != gocui.ColorDefault {
-				vError.FrameColor = gocui.ColorGreen
+		if !app.testMode {
+			if err != nil {
+				vError, _ := app.gui.View("services")
+				vError.Clear()
+				app.journalListFrameColor = gocui.ColorRed
+				vError.FrameColor = app.journalListFrameColor
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[31mError getting services from journald (journalctl)\033[0m")
+				return
+			} else {
+				vError, _ := app.gui.View("services")
+				app.journalListFrameColor = gocui.ColorDefault
+				if vError.FrameColor != gocui.ColorDefault {
+					vError.FrameColor = gocui.ColorGreen
+				}
+				vError.Highlight = true
 			}
-			vError.Highlight = true
+		}
+		if err != nil && app.testMode {
+			log.Fatal("Error getting services from journald (journalctl)")
 		}
 		// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
 		serviceMap := make(map[string]bool)
@@ -723,10 +741,12 @@ func (app *App) loadServices(journalName string) {
 			return app.journals[i].name < app.journals[j].name
 		})
 	}
-	// Сохраняем неотфильтрованный список
-	app.journalsNotFilter = app.journals
-	// Применяем фильтр при загрузки и обновляем список служб в интерфейсе через updateServicesList() внутри функции
-	app.applyFilterList()
+	if !app.testMode {
+		// Сохраняем неотфильтрованный список
+		app.journalsNotFilter = app.journals
+		// Применяем фильтр при загрузки и обновляем список служб в интерфейсе через updateServicesList() внутри функции
+		app.applyFilterList()
+	}
 }
 
 // Функция для загрузки списка всех журналов событий Windows через PowerShell
@@ -950,11 +970,14 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool) {
 		}
 		cmd := exec.Command("journalctl", "-k", "-b", boot_id, "--no-pager", "-n", app.logViewCount)
 		output, err = cmd.Output()
-		if err != nil {
+		if err != nil && !app.testMode {
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
+			fmt.Fprintln(v, "\033[31mError getting kernal logs:", err, "\033[0m")
 			return
+		}
+		if err != nil && app.testMode {
+			log.Fatal("Error getting kernal logs: ", err)
 		}
 		// Для юнитов systemd
 	default:
@@ -965,20 +988,25 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool) {
 		}
 		cmd := exec.Command("journalctl", "-u", serviceName, "--no-pager", "-n", app.logViewCount)
 		output, err = cmd.Output()
-		if err != nil {
+		if err != nil && !app.testMode {
 			v, _ := app.gui.View("logs")
 			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting logs:", err, "\033[0m")
+			fmt.Fprintln(v, "\033[31mError getting journald logs:", err, "\033[0m")
 			return
+		}
+		if err != nil && app.testMode {
+			log.Fatal("Error getting journald logs: ", err)
 		}
 	}
 	// Сохраняем строки журнала в массив
 	app.currentLogLines = strings.Split(string(output), "\n")
-	app.updateDelimiter(newUpdate)
-	// Очищаем поле ввода для фильтрации, что бы не применять фильтрацию к новому журналу
-	// app.filterText = ""
-	// Применяем текущий фильтр к записям для обновления вывода
-	app.applyFilter(false)
+	if !app.testMode {
+		app.updateDelimiter(newUpdate)
+		// Очищаем поле ввода для фильтрации, что бы не применять фильтрацию к новому журналу
+		// app.filterText = ""
+		// Применяем текущий фильтр к записям для обновления вывода
+		app.applyFilter(false)
+	}
 }
 
 // Функция для чтения и парсинга содержимого события Windows через PowerShell (возвращяет текст в формате байт и текст ошибки)
@@ -1090,23 +1118,29 @@ func (app *App) loadFiles(logPath string) {
 		// Разбиваем вывод на строки
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
 		// Если список файлов пустой, возвращаем ошибку Permission denied
-		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
-			vError, _ := app.gui.View("varLogs")
-			vError.Clear()
-			// Меняем цвет окна на красный
-			app.fileSystemFrameColor = gocui.ColorRed
-			vError.FrameColor = app.fileSystemFrameColor
-			// Отключаем курсор и выводим сообщение об ошибке
-			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mPermission denied (files not found)\033[0m")
-			return
-		} else {
-			vError, _ := app.gui.View("varLogs")
-			app.fileSystemFrameColor = gocui.ColorDefault
-			if vError.FrameColor != gocui.ColorDefault {
-				vError.FrameColor = gocui.ColorGreen
+		if !app.testMode {
+			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+				vError, _ := app.gui.View("varLogs")
+				vError.Clear()
+				// Меняем цвет окна на красный
+				app.fileSystemFrameColor = gocui.ColorRed
+				vError.FrameColor = app.fileSystemFrameColor
+				// Отключаем курсор и выводим сообщение об ошибке
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[31mPermission denied (files not found)\033[0m")
+				return
+			} else {
+				vError, _ := app.gui.View("varLogs")
+				app.fileSystemFrameColor = gocui.ColorDefault
+				if vError.FrameColor != gocui.ColorDefault {
+					vError.FrameColor = gocui.ColorGreen
+				}
+				vError.Highlight = true
 			}
-			vError.Highlight = true
+		} else {
+			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+				log.Fatal("Permission denied (files not found)")
+			}
 		}
 		// Очищаем массив перед добавлением отфильтрованных файлов
 		output = []byte{}
@@ -1149,23 +1183,29 @@ func (app *App) loadFiles(logPath string) {
 		// Преобразуем вывод команды в строку и делим на массив строк
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
 		// Если список файлов пустой, возвращаем ошибку Permission denied
-		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
-			vError, _ := app.gui.View("varLogs")
-			vError.Clear()
-			// Меняем цвет окна на красный
-			app.fileSystemFrameColor = gocui.ColorRed
-			vError.FrameColor = app.fileSystemFrameColor
-			// Отключаем курсор и выводим сообщение об ошибке
-			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mPermission denied\033[0m")
-			return
-		} else {
-			vError, _ := app.gui.View("varLogs")
-			app.fileSystemFrameColor = gocui.ColorDefault
-			if vError.FrameColor != gocui.ColorDefault {
-				vError.FrameColor = gocui.ColorGreen
+		if !app.testMode {
+			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+				vError, _ := app.gui.View("varLogs")
+				vError.Clear()
+				// Меняем цвет окна на красный
+				app.fileSystemFrameColor = gocui.ColorRed
+				vError.FrameColor = app.fileSystemFrameColor
+				// Отключаем курсор и выводим сообщение об ошибке
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[31mPermission denied\033[0m")
+				return
+			} else {
+				vError, _ := app.gui.View("varLogs")
+				app.fileSystemFrameColor = gocui.ColorDefault
+				if vError.FrameColor != gocui.ColorDefault {
+					vError.FrameColor = gocui.ColorGreen
+				}
+				vError.Highlight = true
 			}
-			vError.Highlight = true
+		} else {
+			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+				log.Fatal("Permission denied (files not found)")
+			}
 		}
 		// Добавляем пути по умолчанию для /var/log
 		logPaths := []string{
@@ -1224,19 +1264,25 @@ func (app *App) loadFiles(logPath string) {
 		)
 		output, _ = cmd.Output()
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
-		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
-			vError, _ := app.gui.View("varLogs")
-			vError.Clear()
-			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[32mNo logs available\033[0m")
-			return
-		} else {
-			vError, _ := app.gui.View("varLogs")
-			app.fileSystemFrameColor = gocui.ColorDefault
-			if vError.FrameColor != gocui.ColorDefault {
-				vError.FrameColor = gocui.ColorGreen
+		if !app.testMode {
+			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+				vError, _ := app.gui.View("varLogs")
+				vError.Clear()
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[32mNo logs available\033[0m")
+				return
+			} else {
+				vError, _ := app.gui.View("varLogs")
+				app.fileSystemFrameColor = gocui.ColorDefault
+				if vError.FrameColor != gocui.ColorDefault {
+					vError.FrameColor = gocui.ColorGreen
+				}
+				vError.Highlight = true
 			}
-			vError.Highlight = true
+		} else {
+			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+				log.Fatal("No logs available")
+			}
 		}
 		// Получаем содержимое файлов из домашнего каталога пользователя root
 		cmdRootDir := exec.Command(
@@ -1251,7 +1297,7 @@ func (app *App) loadFiles(logPath string) {
 		if err == nil {
 			output = append(output, outputRootDir...)
 		}
-		if app.fileSystemFrameColor == gocui.ColorRed {
+		if app.fileSystemFrameColor == gocui.ColorRed && !app.testMode {
 			vError, _ := app.gui.View("varLogs")
 			app.fileSystemFrameColor = gocui.ColorDefault
 			if vError.FrameColor != gocui.ColorDefault {
@@ -1339,8 +1385,10 @@ func (app *App) loadFiles(logPath string) {
 		// Сортировка в обратном порядке
 		return dateI.After(dateJ)
 	})
-	app.logfilesNotFilter = app.logfiles
-	app.applyFilterList()
+	if !app.testMode {
+		app.logfilesNotFilter = app.logfiles
+		app.applyFilterList()
+	}
 }
 
 func (app *App) loadWinFiles(logPath string) {
