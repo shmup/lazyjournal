@@ -1,0 +1,59 @@
+name: 🔨 Bug report
+description: Report a bug or issue.
+title: '[Bug]: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening an issue, please check the log source content manually, this will help understand the problem more accurately and resolve it faster.
+        If you have an error running the executable, check running from source code (if you have the ability to install Go) and specify it in the installation method.
+  
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Briefly describe the problem and transmit the contents of the error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os-version
+    attributes:
+      label: Your system
+      default: 0
+      options:
+        - linux
+        - macOS
+        - openbsd
+        - freebsd
+        - windows
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Architecture
+      default: 0
+      options:
+        - amd64
+        - arm64
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: Ubuntu 20.04, macOS 15.2, FreeBSD 14.2
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: install-method
+    attributes:
+      label: Installation method
+      options:
+        - label: Binary
+        - label: Source code
