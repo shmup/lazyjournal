@@ -1,13 +1,20 @@
 package main
 
 import (
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestWinFiles(t *testing.T) {
+	// Пропускаем тест целиком для Linux/macOS
+	if runtime.GOOS != "windows" {
+		t.Skip("Skip Windows test")
+	}
+	// Тестируемые параметры для функции
 	testCases := []struct {
 		name       string
 		selectPath string
@@ -20,6 +27,7 @@ func TestWinFiles(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Заполняем базовые параметры структуры
 			app := &App{
 				testMode:     true,
 				logViewCount: "100000",
@@ -31,6 +39,7 @@ func TestWinFiles(t *testing.T) {
 
 			// (1) Заполняем массив из названий файлов и путей к ним
 			app.loadWinFiles(app.selectPath)
+			// Если список файлов пустой, тест будет провален
 			if len(app.logfiles) == 0 {
 				t.Errorf("File list is null")
 			} else {
@@ -54,6 +63,9 @@ func TestWinFiles(t *testing.T) {
 }
 
 func TestUnixFiles(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Skip Linux test")
+	}
 	testCases := []struct {
 		name       string
 		selectPath string
@@ -92,6 +104,9 @@ func TestUnixFiles(t *testing.T) {
 }
 
 func TestJournal(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Skip Linux test")
+	}
 	testCases := []struct {
 		name        string
 		journalName string
@@ -135,11 +150,17 @@ func TestDockerContainer(t *testing.T) {
 		selectContainerizationSystem string
 	}{
 		{"Docker", "docker"},
-		// {"Podman", "podman"},
-		// {"Kubernetes", "kubernetes"},
+		{"Podman", "podman"},
+		{"Kubernetes", "kubectl"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Пропускаем не установленые системы
+			_, err := exec.LookPath(tc.selectContainerizationSystem)
+			if err != nil {
+				t.Skip("Skip: ", tc.selectContainerizationSystem, " not installed (environment not found)")
+			}
+
 			app := &App{
 				testMode:                     true,
 				logViewCount:                 "100000",
