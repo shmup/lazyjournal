@@ -18,7 +18,7 @@ body:
       required: true
 
   - type: dropdown
-    id: os-version
+    id: system
     attributes:
       label: Your system
       default: 0
