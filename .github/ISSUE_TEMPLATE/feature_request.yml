@@ -1,0 +1,27 @@
+name: 🚀 Feature request
+description: Request a new feature or source for log.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Where improvement is needed?
+      default: 0
+      options:
+        - Interface
+        - System journals
+        - File system
+        - Containerization system
+        - filtering
+        - Coloring
+        - Output
+        - New
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Describe what you would like to implement and how you see it
+    validations:
+      required: true
