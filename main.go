@@ -181,6 +181,24 @@ func (app *App) showVersion() {
 	fmt.Println("If you have problems with the application, please open issue: https://github.com/Lifailon/lazyjournal/issues")
 }
 
+// Предварительная компиляция регулярных выражений для покраски вывода и их доступности в тестах
+var (
+	trimHttpRegex        = regexp.MustCompile(`^.*http://|([^a-zA-Z0-9:/._?&=+-].*)$`)                                                                                            // исключаем все до http:// (включительно) в начале строки
+	trimHttpsRegex       = regexp.MustCompile(`^.*https://|([^a-zA-Z0-9:/._?&=+-].*)$`)                                                                                           // и после любого символа, который не может содержать в себе url
+	trimPrefixPathRegex  = regexp.MustCompile(`^[^/]+`)                                                                                                                           // иключаем все до первого символа слэша (не включительно)
+	trimPostfixPathRegex = regexp.MustCompile(`[=:'"(){}\[\]]+.*$`)                                                                                                               // исключаем все после первого символа, который не должен (но может) содержаться в пути
+	hexByteRegex         = regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`)                                                                                                               // Байты или числа в шестнадцатеричном формате: 0x2 || 0xc0000001
+	dateTimeRegex        = regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`)                                                              // YYYY-MM-DDTHH:MM:SS.MS+HH:MM
+	timeMacAddressRegex  = regexp.MustCompile(`\b(?:\d{1,2}:\d{2}(:\d{2}([.,+]\d{2,6})?)?|\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b)\b`)                                        // Time + MAC address
+	timeRegex            = regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2}([.,+]\d{1,6})?)?([+-]\d{2}(:\d{2})?)?\b`)                                                                   // Time: H:MM || HH:MM || HH:MM:SS || XX:XX:XX:XX || HH:MM:SS,XXX || HH:MM:SS.XXX || HH:MM:SS+03
+	macAddressRegex      = regexp.MustCompile(`\b([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b`)                                                                                        // MAC: XX:XX:XX:XX:XX:XX || XX-XX-XX-XX-XX-XX
+	dateIpAddressRegex   = regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?|\d+\.\d+\.\d+|\d+\.\d+)\b`) // Date + IP address + version
+	dateRegex            = regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d+\.\d+\.\d+|\d+\.\d+)\b`)                                             // Date: DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD || 5.7.5 (version) || 5.709076
+	ipAddressRegex       = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?\b`)                                                                                  // IP: 255.255.255.255 || 255.255.255.255:443 || 255.255.255.255.443 || 255.255.255.255/24
+	procRegex            = regexp.MustCompile(`(\d+)%`)                                                                                                                           // int%
+	syslogUnitRegex      = regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]:$`)
+)
+
 func main() {
 	// Инициализация значений по умолчанию + компиляция регулярных выражений для покраски
 	app := &App{
@@ -200,20 +218,20 @@ func main() {
 		fileSystemFrameColor:         gocui.ColorDefault,
 		dockerFrameColor:             gocui.ColorDefault,
 		autoScroll:                   true,
-		trimHttpRegex:                regexp.MustCompile(`^.*http://|([^a-zA-Z0-9:/._?&=+-].*)$`),                                                                                            // исключаем все до http:// (включительно) в начале строки
-		trimHttpsRegex:               regexp.MustCompile(`^.*https://|([^a-zA-Z0-9:/._?&=+-].*)$`),                                                                                           // и после любого символа, который не может содержать в себе url
-		trimPrefixPathRegex:          regexp.MustCompile(`^[^/]+`),                                                                                                                           // иключаем все до первого символа слэша (не включительно)
-		trimPostfixPathRegex:         regexp.MustCompile(`[=:'"(){}\[\]]+.*$`),                                                                                                               // исключаем все после первого символа, который не должен (но может) содержаться в пути
-		hexByteRegex:                 regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`),                                                                                                               // Байты или числа в шестнадцатеричном формате: 0x2 || 0xc0000001
-		dateTimeRegex:                regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`),                                                              // YYYY-MM-DDTHH:MM:SS.MS+HH:MM
-		timeMacAddressRegex:          regexp.MustCompile(`\b(?:\d{1,2}:\d{2}(:\d{2}([.,+]\d{2,6})?)?|\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b)\b`),                                        // Time + MAC address
-		timeRegex:                    regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2}([.,+]\d{1,6})?)?([+-]\d{2}(:\d{2})?)?\b`),                                                                   // Time: H:MM || HH:MM || HH:MM:SS || XX:XX:XX:XX || HH:MM:SS,XXX || HH:MM:SS.XXX || HH:MM:SS+03
-		macAddressRegex:              regexp.MustCompile(`\b([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b`),                                                                                        // MAC: XX:XX:XX:XX:XX:XX || XX-XX-XX-XX-XX-XX
-		dateIpAddressRegex:           regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?|\d+\.\d+\.\d+|\d+\.\d+)\b`), // Date + IP address + version
-		dateRegex:                    regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d+\.\d+\.\d+|\d+\.\d+)\b`),                                             // Date: DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD || 5.7.5 (version) || 5.709076
-		ipAddressRegex:               regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?\b`),                                                                                  // IP: 255.255.255.255 || 255.255.255.255:443 || 255.255.255.255.443 || 255.255.255.255/24
-		procRegex:                    regexp.MustCompile(`(\d+)%`),                                                                                                                           // int%
-		syslogUnitRegex:              regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]:$`),                                                                                                           // unit_daemon-name.service[1341]:
+		trimHttpRegex:                trimHttpRegex,
+		trimHttpsRegex:               trimHttpsRegex,
+		trimPrefixPathRegex:          trimPrefixPathRegex,
+		trimPostfixPathRegex:         trimPostfixPathRegex,
+		hexByteRegex:                 hexByteRegex,
+		dateTimeRegex:                dateTimeRegex,
+		timeMacAddressRegex:          timeMacAddressRegex,
+		timeRegex:                    timeRegex,
+		macAddressRegex:              macAddressRegex,
+		dateIpAddressRegex:           dateIpAddressRegex,
+		dateRegex:                    dateRegex,
+		ipAddressRegex:               ipAddressRegex,
+		procRegex:                    procRegex,
+		syslogUnitRegex:              syslogUnitRegex,
 		keybindingsEnabled:           true,
 	}
 
@@ -2446,30 +2464,35 @@ func (app *App) applyFilterList() {
 
 // Функция для фильтрации записей текущего журнала
 func (app *App) applyFilter(color bool) {
-	v, err := app.gui.View("filter")
-	if err != nil {
-		return
-	}
-	if color {
-		v.FrameColor = gocui.ColorGreen
-	}
 	filter := app.filterText
-	// Debug: если текст фильтра не менялся и позиция курсора не в самом конце журнала, то пропускаем фильтрацию и покраску при пролистывании
 	var skip bool = false
-	vLogs, _ := app.gui.View("logs")
-	_, viewHeight := vLogs.Size()
-	size := app.logScrollPos + viewHeight + 1
-	if app.lastFilterText == filter && size < len(app.filteredLogLines) {
-		skip = true
+	var size int
+	var viewHeight int
+	var err error
+	if !app.testMode {
+		v, err := app.gui.View("filter")
+		if err != nil {
+			return
+		}
+		if color {
+			v.FrameColor = gocui.ColorGreen
+		}
+		// Debug: если текст фильтра не менялся и позиция курсора не в самом конце журнала, то пропускаем фильтрацию и покраску при пролистывании
+		vLogs, _ := app.gui.View("logs")
+		_, viewHeight := vLogs.Size()
+		size = app.logScrollPos + viewHeight + 1
+		if app.lastFilterText == filter && size < len(app.filteredLogLines) {
+			skip = true
+		}
+		// Фиксируем текущий текст из фильтра
+		app.lastFilterText = filter
 	}
-	// Фиксируем текущий текст из фильтра
-	app.lastFilterText = filter
 	// Фильтруем и красим, только если это не строллинг
 	if !skip {
 		// Debug start time
 		startTime := time.Now()
-		// Debug: если текст фильтра пустой или равен любому символу, возвращяем вывод без фильтрации
-		if filter == "" || filter == "." {
+		// Debug: если текст фильтра пустой или равен любому символу для regex, возвращяем вывод без фильтрации
+		if filter == "" || (filter == "." && app.selectFilterMode == "regex") {
 			app.filteredLogLines = app.currentLogLines
 		} else {
 			app.filteredLogLines = make([]string, 0)
@@ -2482,9 +2505,14 @@ func (app *App) applyFilter(color bool) {
 				filter = "(?i)" + filter
 				// Компилируем регулярное выражение
 				regex, err = regexp.Compile(filter)
-				if err != nil {
-					// В случае синтаксической ошибки регулярного выражения, красим окно красным цветом и завершаем цикл
+				// В случае синтаксической ошибки регулярного выражения, красим окно красным цветом и завершаем цикл
+				if err != nil && !app.testMode {
+					v, _ := app.gui.View("filter")
 					v.FrameColor = gocui.ColorRed
+					return
+				}
+				if err != nil && !app.testMode {
+					log.Fatal("Error regex syntax")
 					return
 				}
 			}
@@ -2608,11 +2636,13 @@ func (app *App) applyFilter(color bool) {
 		}
 	}
 	// Обновляем окно для отображения отфильтрованных записей
-	if app.autoScroll {
-		app.logScrollPos = 0
-		app.updateLogsView(true)
-	} else {
-		app.updateLogsView(false)
+	if !app.testMode {
+		if app.autoScroll {
+			app.logScrollPos = 0
+			app.updateLogsView(true)
+		} else {
+			app.updateLogsView(false)
+		}
 	}
 }
 

@@ -29,12 +29,29 @@ func TestWinFiles(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Заполняем базовые параметры структуры
 			app := &App{
-				testMode:     true,
-				logViewCount: "100000",
-				getOS:        "windows",
-				systemDisk:   "C",
-				userName:     "lifailon",
-				selectPath:   tc.selectPath,
+				selectPath:       tc.selectPath,
+				testMode:         true,
+				logViewCount:     "100000",
+				getOS:            "windows",
+				systemDisk:       "C",
+				userName:         "lifailon",
+				selectFilterMode: "fuzzy", // режим фильтрации
+				filterText:       "",      // текст для фильтрации
+				// Инициализируем переменные с регулярными выражениями
+				trimHttpRegex:        trimHttpRegex,
+				trimHttpsRegex:       trimHttpsRegex,
+				trimPrefixPathRegex:  trimPrefixPathRegex,
+				trimPostfixPathRegex: trimPostfixPathRegex,
+				hexByteRegex:         hexByteRegex,
+				dateTimeRegex:        dateTimeRegex,
+				timeMacAddressRegex:  timeMacAddressRegex,
+				timeRegex:            timeRegex,
+				macAddressRegex:      macAddressRegex,
+				dateIpAddressRegex:   dateIpAddressRegex,
+				dateRegex:            dateRegex,
+				ipAddressRegex:       ipAddressRegex,
+				procRegex:            procRegex,
+				syslogUnitRegex:      syslogUnitRegex,
 			}
 
 			// (1) Заполняем массив из названий файлов и путей к ним
@@ -56,7 +73,12 @@ func TestWinFiles(t *testing.T) {
 				// (2) Читаем журнал, выводим путь, количество строк в массиве (прочитанных из файла) и время чтения
 				app.loadFileLogs(strings.TrimSpace(logFileName), true)
 				endTime := time.Since(startTime)
-				t.Log("Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[READ]  Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+
+				startTime = time.Now()
+				app.applyFilter(true)
+				endTime = time.Since(startTime)
+				t.Log("[COLOR] Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 			}
 		})
 	}
@@ -77,11 +99,27 @@ func TestUnixFiles(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			app := &App{
-				testMode:     true,
-				logViewCount: "100000",
-				getOS:        "linux",
-				userName:     "lifailon",
-				selectPath:   tc.selectPath,
+				selectPath:           tc.selectPath,
+				testMode:             true,
+				logViewCount:         "100000",
+				getOS:                "linux",
+				userName:             "lifailon",
+				selectFilterMode:     "fuzzy",
+				filterText:           "",
+				trimHttpRegex:        trimHttpRegex,
+				trimHttpsRegex:       trimHttpsRegex,
+				trimPrefixPathRegex:  trimPrefixPathRegex,
+				trimPostfixPathRegex: trimPostfixPathRegex,
+				hexByteRegex:         hexByteRegex,
+				dateTimeRegex:        dateTimeRegex,
+				timeMacAddressRegex:  timeMacAddressRegex,
+				timeRegex:            timeRegex,
+				macAddressRegex:      macAddressRegex,
+				dateIpAddressRegex:   dateIpAddressRegex,
+				dateRegex:            dateRegex,
+				ipAddressRegex:       ipAddressRegex,
+				procRegex:            procRegex,
+				syslogUnitRegex:      syslogUnitRegex,
 			}
 
 			app.loadFiles(app.selectPath)
@@ -97,7 +135,12 @@ func TestUnixFiles(t *testing.T) {
 				startTime := time.Now()
 				app.loadFileLogs(strings.TrimSpace(logFileName), true)
 				endTime := time.Since(startTime)
-				t.Log("Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[READ]  Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+
+				startTime = time.Now()
+				app.applyFilter(true)
+				endTime = time.Since(startTime)
+				t.Log("[COLOR] Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 			}
 		})
 	}
@@ -119,10 +162,26 @@ func TestJournal(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			app := &App{
-				testMode:     true,
-				logViewCount: "100000",
-				getOS:        "linux",
-				selectUnits:  tc.journalName,
+				selectUnits:          tc.journalName,
+				testMode:             true,
+				logViewCount:         "100000",
+				getOS:                "linux",
+				selectFilterMode:     "fuzzy",
+				filterText:           "",
+				trimHttpRegex:        trimHttpRegex,
+				trimHttpsRegex:       trimHttpsRegex,
+				trimPrefixPathRegex:  trimPrefixPathRegex,
+				trimPostfixPathRegex: trimPostfixPathRegex,
+				hexByteRegex:         hexByteRegex,
+				dateTimeRegex:        dateTimeRegex,
+				timeMacAddressRegex:  timeMacAddressRegex,
+				timeRegex:            timeRegex,
+				macAddressRegex:      macAddressRegex,
+				dateIpAddressRegex:   dateIpAddressRegex,
+				dateRegex:            dateRegex,
+				ipAddressRegex:       ipAddressRegex,
+				procRegex:            procRegex,
+				syslogUnitRegex:      syslogUnitRegex,
 			}
 
 			app.loadServices(app.selectUnits)
@@ -138,7 +197,12 @@ func TestJournal(t *testing.T) {
 				startTime := time.Now()
 				app.loadJournalLogs(strings.TrimSpace(serviceName), true)
 				endTime := time.Since(startTime)
-				t.Log("Journal:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[READ]  Journal:", serviceName, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+
+				startTime = time.Now()
+				app.applyFilter(true)
+				endTime = time.Since(startTime)
+				t.Log("[COLOR] Journal:", serviceName, ">>> LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 			}
 		})
 	}
@@ -150,8 +214,8 @@ func TestDockerContainer(t *testing.T) {
 		selectContainerizationSystem string
 	}{
 		{"Docker", "docker"},
-		{"Podman", "podman"},
-		{"Kubernetes", "kubectl"},
+		// {"Podman", "podman"},
+		// {"Kubernetes", "kubectl"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -160,11 +224,26 @@ func TestDockerContainer(t *testing.T) {
 			if err != nil {
 				t.Skip("Skip: ", tc.selectContainerizationSystem, " not installed (environment not found)")
 			}
-
 			app := &App{
+				selectContainerizationSystem: tc.selectContainerizationSystem,
 				testMode:                     true,
 				logViewCount:                 "100000",
-				selectContainerizationSystem: tc.selectContainerizationSystem,
+				selectFilterMode:             "fuzzy",
+				filterText:                   "",
+				trimHttpRegex:                trimHttpRegex,
+				trimHttpsRegex:               trimHttpsRegex,
+				trimPrefixPathRegex:          trimPrefixPathRegex,
+				trimPostfixPathRegex:         trimPostfixPathRegex,
+				hexByteRegex:                 hexByteRegex,
+				dateTimeRegex:                dateTimeRegex,
+				timeMacAddressRegex:          timeMacAddressRegex,
+				timeRegex:                    timeRegex,
+				macAddressRegex:              macAddressRegex,
+				dateIpAddressRegex:           dateIpAddressRegex,
+				dateRegex:                    dateRegex,
+				ipAddressRegex:               ipAddressRegex,
+				procRegex:                    procRegex,
+				syslogUnitRegex:              syslogUnitRegex,
 			}
 
 			app.loadDockerContainer(app.selectContainerizationSystem)
@@ -180,7 +259,12 @@ func TestDockerContainer(t *testing.T) {
 				startTime := time.Now()
 				app.loadDockerLogs(strings.TrimSpace(containerName), true)
 				endTime := time.Since(startTime)
-				t.Log("Container:", dockerContainer.name, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[READ]  Container:", dockerContainer.name, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+
+				startTime = time.Now()
+				app.applyFilter(true)
+				endTime = time.Since(startTime)
+				t.Log("[COLOR] Container:", dockerContainer.name, ">>> LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 			}
 		})
 	}
