@@ -1,4 +1,4 @@
-name: 🔨 Bug report
+name: ⚠ Bug report
 description: Report a bug or issue.
 title: '[Bug]: '
 labels: ['bug']
@@ -46,7 +46,7 @@ body:
     id: os-version
     attributes:
       label: OS version
-      placeholder: Ubuntu 20.04, macOS 15.2, FreeBSD 14.2
+      placeholder: Ubuntu 20.04, Ubuntu 24.04, macOS 15.2 or other
     validations:
       required: true
 
