@@ -973,7 +973,6 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool) {
 			return
 		}
 		if len(output) == 0 && app.testMode {
-			// log.Fatal("Windows event is null")
 			app.currentLogLines = []string{}
 			return
 		}
