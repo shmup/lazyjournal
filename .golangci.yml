@@ -44,6 +44,5 @@ linters:
     - unconvert       # unnecessary conversion
     - copyloopvar     # Go 1.22 +
     - intrange        # Go 1.22 +
-    - exportloopref   # lintern is obsolete
     - tenv            # deprecated
-    - exportloopref   # deprecated
+    - paralleltest    # function missing the call to method parallel
