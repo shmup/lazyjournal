@@ -20,6 +20,7 @@ dockerVersion=$(docker --version 2> /dev/null || echo false)
 dockerContainer=$(docker ps | grep $filterContainer 2> /dev/null || echo false)
 
 tmux new-session -d -s test-session "go run main.go"
+sleep 1
 
 # Finally
 trap "

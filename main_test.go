@@ -70,15 +70,15 @@ func TestWinFiles(t *testing.T) {
 				logFileName := ansiEscape.ReplaceAllString(logfile.name, "")
 				// Фиксируем время запуска функции
 				startTime := time.Now()
-				// (2) Читаем журнал, выводим путь, количество строк в массиве (прочитанных из файла) и время чтения
+				// (2) Читаем журнал
 				app.loadFileLogs(strings.TrimSpace(logFileName), true)
 				endTime := time.Since(startTime)
-				t.Log("[READ]  Path:", app.lastLogPath, "--- LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
-
-				startTime = time.Now()
+				// (3) Фильтруем и красим
+				startTime2 := time.Now()
 				app.applyFilter(true)
-				endTime = time.Since(startTime)
-				t.Log("[COLOR] Path:", app.lastLogPath, "--- LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				endTime2 := time.Since(startTime2)
+				// Выводим путь, количество строк в массиве (прочитанных из файла), время чтения и фильтрации+покраски
+				t.Log("Path:", app.lastLogPath, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
 			}
 		})
 	}
@@ -135,12 +135,12 @@ func TestUnixFiles(t *testing.T) {
 				startTime := time.Now()
 				app.loadFileLogs(strings.TrimSpace(logFileName), true)
 				endTime := time.Since(startTime)
-				t.Log("[READ]  Path:", app.lastLogPath, "--- LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 
-				startTime = time.Now()
+				startTime2 := time.Now()
 				app.applyFilter(true)
-				endTime = time.Since(startTime)
-				t.Log("[COLOR] Path:", app.lastLogPath, "--- LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				endTime2 := time.Since(startTime2)
+
+				t.Log("Path:", app.lastLogPath, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
 			}
 		})
 	}
@@ -197,12 +197,12 @@ func TestJournal(t *testing.T) {
 				startTime := time.Now()
 				app.loadJournalLogs(strings.TrimSpace(serviceName), true)
 				endTime := time.Since(startTime)
-				t.Log("[READ]  Journal:", serviceName, "--- LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 
-				startTime = time.Now()
+				startTime2 := time.Now()
 				app.applyFilter(true)
-				endTime = time.Since(startTime)
-				t.Log("[COLOR] Journal:", serviceName, "--- LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				endTime2 := time.Since(startTime2)
+
+				t.Log("Journal:", serviceName, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
 			}
 		})
 	}
@@ -259,12 +259,12 @@ func TestDockerContainer(t *testing.T) {
 				startTime := time.Now()
 				app.loadDockerLogs(strings.TrimSpace(containerName), true)
 				endTime := time.Since(startTime)
-				t.Log("[READ]  Container:", dockerContainer.name, "--- LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 
-				startTime = time.Now()
+				startTime2 := time.Now()
 				app.applyFilter(true)
-				endTime = time.Since(startTime)
-				t.Log("[COLOR] Container:", dockerContainer.name, "--- LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				endTime2 := time.Since(startTime2)
+
+				t.Log("Container:", dockerContainer.name, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
 			}
 		})
 	}
