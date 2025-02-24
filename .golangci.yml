@@ -43,5 +43,7 @@ linters:
     - exhaustruct     # app is missing fields gui, getOS, getArch, hostName, userName...
     - unconvert       # unnecessary conversion
     - copyloopvar     # Go 1.22 +
-    - intrange        # Go 1.22+
-    - exportloopref   # Lintern is obsolete
+    - intrange        # Go 1.22 +
+    - exportloopref   # lintern is obsolete
+    - tenv            # deprecated
+    - exportloopref   # deprecated

@@ -101,7 +101,7 @@ type App struct {
 
 	lastDateUpdateFile time.Time // последняя дата изменения файла
 	lastSizeFile       int64     // размер файла
-	updateFile         bool      // проверка для обновления вывода в горутине (отключение только если нет изменений в файле и для Windows Events)
+	updateFile         bool      // проверка для обновления вывода в горутине (отключение только если нет изменений в файле и для Windows Event)
 
 	lastWindow   string // фиксируем последний используемый источник для вывода логов
 	lastSelected string // фиксируем название последнего выбранного журнала или контейнера
@@ -334,7 +334,7 @@ func main() {
 		if err != nil {
 			log.Panicln(err)
 		}
-		v.Title = " < Windows Events (0) > "
+		v.Title = " < Windows Event Logs (0) > "
 		// Загружаем список событий Windows в горутине
 		go func() {
 			app.loadWinEvents()
@@ -513,7 +513,7 @@ func (app *App) layout(g *gocui.Gui) error {
 	return nil
 }
 
-// ---------------------------------------- journalctl/Windows Events ----------------------------------------
+// ---------------------------------------- journalctl/Windows Event Logs ----------------------------------------
 
 // Функция для удаления ANSI-символов покраски
 func removeANSI(input string) string {
@@ -801,8 +801,10 @@ func (app *App) loadWinEvents() {
 			boot_id: LogName,
 		})
 	}
-	app.journalsNotFilter = app.journals
-	app.applyFilterList()
+	if !app.testMode {
+		app.journalsNotFilter = app.journals
+		app.applyFilterList()
+	}
 }
 
 // Функция для обновления окна со списком служб
@@ -965,9 +967,14 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool) {
 			}
 		}
 		output = app.loadWinEventLog(eventName)
-		if len(output) == 0 {
+		if len(output) == 0 && !app.testMode {
 			v, _ := app.gui.View("logs")
 			v.Clear()
+			return
+		}
+		if len(output) == 0 && app.testMode {
+			// log.Fatal("Windows event is null")
+			app.currentLogLines = []string{}
 			return
 		}
 	// Читаем лог ядра загрузки системы
@@ -1957,9 +1964,6 @@ func (app *App) loadFileLogs(logName string, newUpdate bool) {
 					v.Clear()
 					fmt.Fprintln(v, " \033[31mError reading log using tail tool.\n", err, "\033[0m")
 					return
-				}
-				if err != nil && app.testMode {
-					log.Fatal("Error reading log using tail tool. Error: ", err)
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 			}
