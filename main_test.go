@@ -10,7 +10,7 @@ import (
 )
 
 func TestWinFiles(t *testing.T) {
-	// Пропускаем тест целиком для Linux/macOS
+	// Пропускаем тест целиком для Linux/macOS/bsd
 	if runtime.GOOS != "windows" {
 		t.Skip("Skip Windows test")
 	}
@@ -73,19 +73,19 @@ func TestWinFiles(t *testing.T) {
 				// (2) Читаем журнал, выводим путь, количество строк в массиве (прочитанных из файла) и время чтения
 				app.loadFileLogs(strings.TrimSpace(logFileName), true)
 				endTime := time.Since(startTime)
-				t.Log("[READ]  Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[READ]  Path:", app.lastLogPath, "--- LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 
 				startTime = time.Now()
 				app.applyFilter(true)
 				endTime = time.Since(startTime)
-				t.Log("[COLOR] Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[COLOR] Path:", app.lastLogPath, "--- LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 			}
 		})
 	}
 }
 
 func TestUnixFiles(t *testing.T) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS == "windows" {
 		t.Skip("Skip Linux test")
 	}
 	testCases := []struct {
@@ -135,12 +135,12 @@ func TestUnixFiles(t *testing.T) {
 				startTime := time.Now()
 				app.loadFileLogs(strings.TrimSpace(logFileName), true)
 				endTime := time.Since(startTime)
-				t.Log("[READ]  Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[READ]  Path:", app.lastLogPath, "--- LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 
 				startTime = time.Now()
 				app.applyFilter(true)
 				endTime = time.Since(startTime)
-				t.Log("[COLOR] Path:", app.lastLogPath, ">>> LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[COLOR] Path:", app.lastLogPath, "--- LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 			}
 		})
 	}
@@ -197,12 +197,12 @@ func TestJournal(t *testing.T) {
 				startTime := time.Now()
 				app.loadJournalLogs(strings.TrimSpace(serviceName), true)
 				endTime := time.Since(startTime)
-				t.Log("[READ]  Journal:", serviceName, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[READ]  Journal:", serviceName, "--- LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 
 				startTime = time.Now()
 				app.applyFilter(true)
 				endTime = time.Since(startTime)
-				t.Log("[COLOR] Journal:", serviceName, ">>> LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[COLOR] Journal:", serviceName, "--- LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 			}
 		})
 	}
@@ -259,12 +259,68 @@ func TestDockerContainer(t *testing.T) {
 				startTime := time.Now()
 				app.loadDockerLogs(strings.TrimSpace(containerName), true)
 				endTime := time.Since(startTime)
-				t.Log("[READ]  Container:", dockerContainer.name, ">>> LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[READ]  Container:", dockerContainer.name, "--- LINE:\x1b[0;33m", len(app.currentLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
 
 				startTime = time.Now()
 				app.applyFilter(true)
 				endTime = time.Since(startTime)
-				t.Log("[COLOR] Container:", dockerContainer.name, ">>> LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m& TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+				t.Log("[COLOR] Container:", dockerContainer.name, "--- LINE:\x1b[0;33m", len(app.filteredLogLines), "\x1b[0;0m--- TIME:\x1b[0;33m", endTime, "\x1b[0;0m")
+			}
+		})
+	}
+}
+
+func TestFilterColor(t *testing.T) {
+	testCases := []struct {
+		name             string
+		selectFilterMode string
+	}{
+		{"Default", "default"},
+		{"Fuzzy", "fuzzy"},
+		{"Regex", "regex"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := &App{
+				testMode:             true,
+				logViewCount:         "100000",
+				selectFilterMode:     tc.selectFilterMode,
+				filterText:           "line",
+				trimHttpRegex:        trimHttpRegex,
+				trimHttpsRegex:       trimHttpsRegex,
+				trimPrefixPathRegex:  trimPrefixPathRegex,
+				trimPostfixPathRegex: trimPostfixPathRegex,
+				hexByteRegex:         hexByteRegex,
+				dateTimeRegex:        dateTimeRegex,
+				timeMacAddressRegex:  timeMacAddressRegex,
+				timeRegex:            timeRegex,
+				macAddressRegex:      macAddressRegex,
+				dateIpAddressRegex:   dateIpAddressRegex,
+				dateRegex:            dateRegex,
+				ipAddressRegex:       ipAddressRegex,
+				procRegex:            procRegex,
+				syslogUnitRegex:      syslogUnitRegex,
+			}
+
+			app.currentLogLines = []string{
+				"1  line: stdout true",
+				"2  line: stderr false",
+				"3  line: warning",
+				"4  line: POST request",
+				"5  line: http://localhost:8443",
+				"6  line: https://github.com/Lifailon/lazyjournal",
+				"7  line: 0x04",
+				"8  line: 11:11:11:11:11:11 11-11-11-11-11-11",
+				"9  line: TCP UDP 192.168.1.1:8443",
+				"10 line: stdout 25.02.2025 01:14:42: [INFO]: not data",
+				"11 line: cron[123]: running",
+				"12 line: root: /etc/ssh/sshd_config",
+			}
+
+			app.applyFilter(true)
+			t.Log("Lines: ", len(app.filteredLogLines))
+			for _, line := range app.filteredLogLines {
+				t.Log(line)
 			}
 		})
 	}
