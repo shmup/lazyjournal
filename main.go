@@ -210,7 +210,7 @@ func main() {
 		startDockerContainers:        0,
 		selectedDockerContainer:      0,
 		selectUnits:                  "services",  // "UNIT" || "USER_UNIT" || "kernel"
-		selectPath:                   "/var/log/", // "/home/" ("/Users/" - для MacOS)
+		selectPath:                   "/var/log/", // "/opt/", "/home/" или "/Users/" (для MacOS) + /root/
 		selectContainerizationSystem: "docker",    // "podman" || kubernetes
 		selectFilterMode:             "default",   // "fuzzy" || "regex"
 		logViewCount:                 "200000",    // 5000-300000
@@ -1180,26 +1180,26 @@ func (app *App) loadFiles(logPath string) {
 		// Загрузка системных журналов для MacOS
 		if app.getOS == "darwin" {
 			cmd = exec.Command(
-				"find", logPath, "/Library/Logs", "/opt/",
+				"find", logPath, "/Library/Logs",
 				"-type", "f",
 				"-name", "*.asl", "-o",
 				"-name", "*.log", "-o",
 				"-name", "*log*", "-o",
 				"-name", "*.[0-9]*", "-o",
 				"-name", "*.[0-9].*", "-o",
-				"-name", "*.pcap",
+				"-name", "*.pcap", "-o",
 				"-name", "*.pcapng",
 			)
 		} else {
 			// Загрузка системных журналов для Linux: все файлы, которые содержат log в расширение или названии (архивы включительно), а также расширение с цифрой (архивные) и pcap/pcapng
 			cmd = exec.Command(
-				"find", logPath, "/opt/",
+				"find", logPath,
 				"-type", "f",
 				"-name", "*.log", "-o",
 				"-name", "*log*", "-o",
 				"-name", "*.[0-9]*", "-o",
 				"-name", "*.[0-9].*", "-o",
-				"-name", "*.pcap",
+				"-name", "*.pcap", "-o",
 				"-name", "*.pcapng",
 			)
 		}
@@ -1216,7 +1216,7 @@ func (app *App) loadFiles(logPath string) {
 				vError.FrameColor = app.fileSystemFrameColor
 				// Отключаем курсор и выводим сообщение об ошибке
 				vError.Highlight = false
-				fmt.Fprintln(vError, "\033[31mPermission denied\033[0m")
+				fmt.Fprintln(vError, "\033[31mPermission denied (files not found)\033[0m")
 				return
 			} else {
 				vError, _ := app.gui.View("varLogs")
@@ -1258,6 +1258,40 @@ func (app *App) loadFiles(logPath string) {
 		}
 		for _, path := range logPaths {
 			output = append([]byte(path), output...)
+		}
+	case logPath == "/opt/":
+		var cmd *exec.Cmd
+		cmd = exec.Command(
+			"find", logPath,
+			"-type", "f",
+			"-name", "*.log", "-o",
+			"-name", "*.log.*", "-o",
+		)
+		output, _ = cmd.Output()
+		files := strings.Split(strings.TrimSpace(string(output)), "\n")
+		if !app.testMode {
+			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+				vError, _ := app.gui.View("varLogs")
+				vError.Clear()
+				// Меняем цвет окна на красный
+				app.fileSystemFrameColor = gocui.ColorRed
+				vError.FrameColor = app.fileSystemFrameColor
+				// Отключаем курсор и выводим сообщение об ошибке
+				vError.Highlight = false
+				fmt.Fprintln(vError, "\033[31mFiles not found\033[0m")
+				return
+			} else {
+				vError, _ := app.gui.View("varLogs")
+				app.fileSystemFrameColor = gocui.ColorDefault
+				if vError.FrameColor != gocui.ColorDefault {
+					vError.FrameColor = gocui.ColorGreen
+				}
+				vError.Highlight = true
+			}
+		} else {
+			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
+				log.Fatal("Files not found")
+			}
 		}
 	default:
 		// Домашние каталоги пользователей: /home/ для Linux и /Users/ для MacOS
@@ -4296,6 +4330,10 @@ func (app *App) setLogFilesListRight(g *gocui.Gui, v *gocui.View) error {
 		go func() {
 			switch app.selectPath {
 			case "/var/log/":
+				app.selectPath = "/opt/"
+				selectedVarLog.Title = " < Optional package logs (0) > "
+				app.loadFiles(app.selectPath)
+			case "/opt/":
 				app.selectPath = "/home/"
 				selectedVarLog.Title = " < Users home logs (0) > "
 				app.loadFiles(app.selectPath)
@@ -4378,6 +4416,10 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 				selectedVarLog.Title = " < Users home logs (0) > "
 				app.loadFiles(app.selectPath)
 			case "/home/":
+				app.selectPath = "/opt/"
+				selectedVarLog.Title = " < Optional package logs (0) > "
+				app.loadFiles(app.selectPath)
+			case "/opt/":
 				app.selectPath = "/var/log/"
 				selectedVarLog.Title = " < System var logs (0) > "
 				app.loadFiles(app.selectPath)
