@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# bash test.sh <timeout> <log>
 # bash test.sh 3 true
 
 timeout=${1:-5}
@@ -11,7 +12,8 @@ sudo systemctl restart cron
 echo -e "First line\nSecond line" > input.log
 
 filterContainer="pinguem"
-filterLog="The server is running"
+filterLog="running"
+searchText="The server is running"
 
 journalctlVersion=$(journalctl --version journalctl --version 2> /dev/null || echo false)
 dockerVersion=$(docker --version 2> /dev/null || echo false)
@@ -110,15 +112,16 @@ if [ "$dockerVersion" == "false" ]; then
 elif [ "$dockerContainer" == "false" ]; then
     echo "Test docker: 🚫 Skip (container not found)"
 else
+    tmux send-keys -t test-session "$(echo -e '\t\t\t\t')"
+    tmux send-keys -t test-session "$filterLog"
+    tmux send-keys -t test-session "$(echo -e '\t\t')"
     tmux send-keys -t test-session "$filterContainer"
     tmux send-keys -t test-session "$(echo -e '\t\t\t')"
     tmux send-keys -t test-session "$(echo -e '\r')"
-    tmux send-keys -t test-session "$(echo -e '\t')"
-    tmux send-keys -t test-session "$filterLog"
 
     start_time=$(date +%s)
     while true; do
-        if tmux capture-pane -p | grep -q "$filterLog"; then
+        if tmux capture-pane -p | grep -q "$searchText"; then
             echo "Test docker: ✔  Passed"
             break
         fi

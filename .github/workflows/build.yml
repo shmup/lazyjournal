@@ -28,8 +28,12 @@ on:
         description: 'Security linter check'
         default: true
         type: boolean
-      TMUX:
-        description: 'Interface testing'
+      testFunctions:
+        description: 'Testing functions and performance'
+        default: true
+        type: boolean
+      testInterface:
+        description: 'Testing interface'
         default: true
         type: boolean
       Timeout:
@@ -82,20 +86,39 @@ jobs:
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           gosec -severity=high ./...
 
-      - name: Install tmux for macOS
-        if: ${{ github.event.inputs.Distro == 'macos-15' && github.event.inputs.TMUX == 'true' }}
-        run: brew install tmux
-
       - name: Start Docker container for test in Ubuntu
-        if: ${{ github.event.inputs.Distro != 'macos-15' && github.event.inputs.TMUX == 'true' }}
+        if: ${{ 
+            (github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'macos-15') || 
+            (github.event.inputs.testInterface == 'true' && github.event.inputs.Distro != 'macos-15')
+          }}
         run: docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
 
+      - name: Install tmux for macOS
+        if: ${{ github.event.inputs.testInterface == 'true' && github.event.inputs.Distro == 'macos-15' }}
+        run: brew install tmux
+
       - name: Interface testing
-        if: ${{ github.event.inputs.TMUX == 'true' }}
+        if: ${{ github.event.inputs.testInterface == 'true' }}
         run: |
           tmux -V
           chmod +x test.sh
           bash test.sh ${{ github.event.inputs.Timeout }} true
+
+      - name: Go test functions
+        if: ${{ github.event.inputs.testFunctions == 'true' }}
+        run: |
+          sudo go test -v
+          sudo go test -cover
+        continue-on-error: true
+
+      - name: Update coverage report
+        if: ${{ github.event.inputs.testFunctions == 'true' }}
+        uses: ncruces/go-coverage-report@v0
+        with:
+          report: true
+          chart: true
+          amend: true
+        continue-on-error: true
 
       - name: Build binaries
         if: ${{ github.event.inputs.Binary == 'true' }}
