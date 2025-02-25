@@ -199,6 +199,8 @@ var (
 	syslogUnitRegex      = regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]:$`)
 )
 
+var g *gocui.Gui
+
 func main() {
 	// Инициализация значений по умолчанию + компиляция регулярных выражений для покраски
 	app := &App{
@@ -257,7 +259,8 @@ func main() {
 	}
 
 	// Создаем GUI
-	g, err := gocui.NewGui(gocui.OutputNormal, true) // 2-й параметр для форка
+	var err error
+	g, err = gocui.NewGui(gocui.OutputNormal, true) // 2-й параметр для форка
 	if err != nil {
 		log.Panicln(err)
 	}

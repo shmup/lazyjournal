@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/micmonay/keybd_event"
 )
 
 func TestWinFiles(t *testing.T) {
@@ -198,7 +200,7 @@ func TestUnixFiles(t *testing.T) {
 	}
 }
 
-func TestJournal(t *testing.T) {
+func TestLinuxJournal(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Skip Linux test")
 	}
@@ -376,4 +378,115 @@ func TestFilterColor(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInterface(t *testing.T) {
+	go main()
+
+	time.Sleep(2 * time.Second)
+
+	if g == nil {
+		t.Error("GoCUI not initialized")
+	}
+
+	app := &App{}
+	kb, err := keybd_event.NewKeyBonding()
+	if err != nil {
+		t.Error(err)
+	}
+
+	kb.SetKeys(keybd_event.VK_A)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_BACKSPACE)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+
+	app.nextView(g, nil)
+	kb.SetKeys(keybd_event.VK_RIGHT)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_LEFT)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_DOWN)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_UP)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+
+	app.nextView(g, nil)
+	kb.SetKeys(keybd_event.VK_RIGHT)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_LEFT)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_DOWN)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_UP)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+
+	app.nextView(g, nil)
+	kb.SetKeys(keybd_event.VK_RIGHT)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_LEFT)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_DOWN)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_UP)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_ENTER)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+
+	app.nextView(g, nil)
+	kb.SetKeys(keybd_event.VK_A)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_UP)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_UP)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_DOWN)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.HasCTRL(true)
+	kb.SetKeys(keybd_event.VK_W)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.HasCTRL(false)
+
+	app.nextView(g, nil)
+	kb.SetKeys(keybd_event.VK_UP)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_DOWN)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+
+	kb.HasCTRL(true)
+	kb.SetKeys(keybd_event.VK_A)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.SetKeys(keybd_event.VK_E)
+	kb.Launching()
+	time.Sleep(2 * time.Second)
+	kb.HasCTRL(false)
+
+	app.backView(g, nil)
+	time.Sleep(2 * time.Second)
+
+	app.nextView(g, nil)
+	app.nextView(g, nil)
+	time.Sleep(2 * time.Second)
 }
