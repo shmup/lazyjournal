@@ -84,6 +84,57 @@ func TestWinFiles(t *testing.T) {
 	}
 }
 
+func TestWinEvents(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Skip Windows test")
+	}
+	app := &App{
+		testMode:             true,
+		logViewCount:         "100000",
+		getOS:                "windows",
+		systemDisk:           "C",
+		userName:             "lifailon",
+		selectFilterMode:     "fuzzy",
+		filterText:           "",
+		trimHttpRegex:        trimHttpRegex,
+		trimHttpsRegex:       trimHttpsRegex,
+		trimPrefixPathRegex:  trimPrefixPathRegex,
+		trimPostfixPathRegex: trimPostfixPathRegex,
+		hexByteRegex:         hexByteRegex,
+		dateTimeRegex:        dateTimeRegex,
+		timeMacAddressRegex:  timeMacAddressRegex,
+		timeRegex:            timeRegex,
+		macAddressRegex:      macAddressRegex,
+		dateIpAddressRegex:   dateIpAddressRegex,
+		dateRegex:            dateRegex,
+		ipAddressRegex:       ipAddressRegex,
+		procRegex:            procRegex,
+		syslogUnitRegex:      syslogUnitRegex,
+	}
+
+	app.loadWinEvents()
+	if len(app.journals) == 0 {
+		t.Errorf("File list is null")
+	} else {
+		t.Log("Windows Event Logs count:", len(app.journals))
+	}
+
+	var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	for _, journal := range app.journals {
+		app.updateFile = true
+		serviceName := ansiEscape.ReplaceAllString(journal.name, "")
+		startTime := time.Now()
+		app.loadJournalLogs(strings.TrimSpace(serviceName), true)
+		endTime := time.Since(startTime)
+
+		startTime2 := time.Now()
+		app.applyFilter(true)
+		endTime2 := time.Since(startTime2)
+
+		t.Log("Event:", serviceName, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
+	}
+}
+
 func TestUnixFiles(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skip Linux test")
@@ -92,10 +143,10 @@ func TestUnixFiles(t *testing.T) {
 		name       string
 		selectPath string
 	}{
-		{"Var Log", "/var/log/"},
-		{"Opt Log", "/opt/"},
-		{"Home", "/home/"},
-		{"Descriptors", "descriptor"},
+		{"System var logs", "/var/log/"},
+		// {"Optional package logs", "/opt/"},
+		{"Users home logs", "/home/"},
+		{"Process descriptor logs", "descriptor"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -155,10 +206,10 @@ func TestJournal(t *testing.T) {
 		name        string
 		journalName string
 	}{
-		{"Services", "services"},
-		{"Units", "UNIT"},
-		{"User units", "USER_UNIT"},
-		{"Kernel", "kernel"},
+		{"Unit list", "services"},
+		{"System journals", "UNIT"},
+		{"User journals", "USER_UNIT"},
+		{"Kernel boot", "kernel"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -276,9 +327,9 @@ func TestFilterColor(t *testing.T) {
 		name             string
 		selectFilterMode string
 	}{
-		{"Default", "default"},
-		{"Fuzzy", "fuzzy"},
-		{"Regex", "regex"},
+		{"Default filter mode", "default"},
+		{"Fuzzy filter mode", "fuzzy"},
+		{"Regex filter mode", "regex"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
