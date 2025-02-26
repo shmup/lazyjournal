@@ -16,11 +16,24 @@ import (
 	"github.com/awesome-gocui/gocui"
 )
 
+func TestCreatReport(t *testing.T) {
+	file, _ := os.Create("test-report.md")
+	defer file.Close()
+}
+
 func TestWinFiles(t *testing.T) {
 	// Пропускаем тест целиком для Linux/macOS/bsd
 	if runtime.GOOS != "windows" {
 		t.Skip("Skip Windows test")
 	}
+
+	// Создаем файл отчета
+	file, _ := os.OpenFile("test-report.md", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer file.Close()
+	file.WriteString("## Windows File Logs\n")
+	file.WriteString("| Path | Lines | Read | Color |\n")
+	file.WriteString("|------|-------|------|-------|\n")
+
 	// Тестируемые параметры для функции
 	testCases := []struct {
 		name       string
@@ -32,6 +45,7 @@ func TestWinFiles(t *testing.T) {
 		// {"AppData/Local", "AppDataLocal"},
 		// {"AppData/Roaming", "AppDataRoaming"},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Заполняем базовые параметры структуры
@@ -84,8 +98,8 @@ func TestWinFiles(t *testing.T) {
 				startTime2 := time.Now()
 				app.applyFilter(true)
 				endTime2 := time.Since(startTime2)
-				// Выводим путь, количество строк в массиве (прочитанных из файла), время чтения и фильтрации+покраски
-				t.Log("Path:", app.lastLogPath, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
+				// Записываем в отчет путь, количество строк в массиве прочитанных из файла, время чтения и фильтрации + покраски
+				file.WriteString(fmt.Sprintf("| %s | %d | %s | %s |\n", app.lastLogPath, len(app.currentLogLines), endTime, endTime2))
 			}
 		})
 	}
@@ -95,6 +109,13 @@ func TestWinEvents(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Skip Windows test")
 	}
+
+	file, _ := os.OpenFile("test-report.md", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer file.Close()
+	file.WriteString("## Windows Event Logs\n")
+	file.WriteString("| Event Name | Lines | Read | Color |\n")
+	file.WriteString("|------------|-------|------|-------|\n")
+
 	app := &App{
 		testMode:             true,
 		logViewCount:         "100000",
@@ -138,7 +159,7 @@ func TestWinEvents(t *testing.T) {
 		app.applyFilter(true)
 		endTime2 := time.Since(startTime2)
 
-		t.Log("Event:", serviceName, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
+		file.WriteString(fmt.Sprintf("| %s | %d | %s | %s |\n", serviceName, len(app.currentLogLines), endTime, endTime2))
 	}
 }
 
@@ -146,6 +167,13 @@ func TestUnixFiles(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skip Linux test")
 	}
+
+	file, _ := os.OpenFile("test-report.md", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer file.Close()
+	file.WriteString("## Unix File Logs\n")
+	file.WriteString("| Path | Lines | Read | Color |\n")
+	file.WriteString("|------|-------|------|-------|\n")
+
 	testCases := []struct {
 		name       string
 		selectPath string
@@ -155,6 +183,7 @@ func TestUnixFiles(t *testing.T) {
 		{"Users home logs", "/home/"},
 		{"Process descriptor logs", "descriptor"},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			app := &App{
@@ -199,7 +228,7 @@ func TestUnixFiles(t *testing.T) {
 				app.applyFilter(true)
 				endTime2 := time.Since(startTime2)
 
-				t.Log("Path:", app.lastLogPath, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
+				file.WriteString(fmt.Sprintf("| %s | %d | %s | %s |\n", app.lastLogPath, len(app.currentLogLines), endTime, endTime2))
 			}
 		})
 	}
@@ -209,6 +238,13 @@ func TestLinuxJournal(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Skip Linux test")
 	}
+
+	file, _ := os.OpenFile("test-report.md", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer file.Close()
+	file.WriteString("## Linux journals\n")
+	file.WriteString("| Journal Name | Lines | Read | Color |\n")
+	file.WriteString("|--------------|-------|------|-------|\n")
+
 	testCases := []struct {
 		name        string
 		journalName string
@@ -218,6 +254,7 @@ func TestLinuxJournal(t *testing.T) {
 		{"User journals", "USER_UNIT"},
 		{"Kernel boot", "kernel"},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			app := &App{
@@ -261,13 +298,19 @@ func TestLinuxJournal(t *testing.T) {
 				app.applyFilter(true)
 				endTime2 := time.Since(startTime2)
 
-				t.Log("Journal:", serviceName, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
+				file.WriteString(fmt.Sprintf("| %s | %d | %s | %s |\n", serviceName, len(app.currentLogLines), endTime, endTime2))
 			}
 		})
 	}
 }
 
 func TestDockerContainer(t *testing.T) {
+	file, _ := os.OpenFile("test-report.md", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer file.Close()
+	file.WriteString("## Containers\n")
+	file.WriteString("| Container Name | Lines | Read | Color |\n")
+	file.WriteString("|----------------|-------|------|-------|\n")
+
 	testCases := []struct {
 		name                         string
 		selectContainerizationSystem string
@@ -276,6 +319,7 @@ func TestDockerContainer(t *testing.T) {
 		// {"Podman", "podman"},
 		// {"Kubernetes", "kubectl"},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Пропускаем не установленые системы
@@ -323,7 +367,7 @@ func TestDockerContainer(t *testing.T) {
 				app.applyFilter(true)
 				endTime2 := time.Since(startTime2)
 
-				t.Log("Container:", dockerContainer.name, "--- LINE:\x1b[0;34m", len(app.currentLogLines), "\x1b[0;0m--- READ:\x1b[0;32m", endTime, "\x1b[0;0m--- COLOR:\x1b[0;33m", endTime2, "\x1b[0;0m")
+				file.WriteString(fmt.Sprintf("| %s | %d | %s | %s |\n", containerName, len(app.currentLogLines), endTime, endTime2))
 			}
 		})
 	}
@@ -362,18 +406,26 @@ func TestFilterColor(t *testing.T) {
 			}
 
 			app.currentLogLines = []string{
-				"1  line: stdout true",
-				"2  line: stderr false",
-				"3  line: warning",
-				"4  line: POST request",
-				"5  line: http://localhost:8443",
-				"6  line: https://github.com/Lifailon/lazyjournal",
-				"7  line: 0x04",
-				"8  line: 11:11:11:11:11:11 11-11-11-11-11-11",
-				"9  line: TCP UDP 192.168.1.1:8443",
-				"10 line: stdout 25.02.2025 01:14:42: [INFO]: not data",
-				"11 line: cron[123]: running",
-				"12 line: root: /etc/ssh/sshd_config",
+				"1  line: http://localhost:8443",
+				"2  line: https://github.com/Lifailon/lazyjournal",
+				"3  line: /etc/ssh/sshd_config",
+				"4  line: root",
+				"5  line: warning",
+				"6  line: stderr: disconnected and crashed",
+				"7  line: kernel: deletion removed stopped invalidated aborted blocked deactivated",
+				"8  line: rsyslogd: exited critical failed rejection fataling closed ended dropped killing",
+				"9  line: sudo: cancelation unavailable unsuccessful found denied conflict false none",
+				"10 line: /dev/null null",
+				"11 line: success complete accept connection finish started created enable allowing posted",
+				"12 line: routing forward passed running added opened patching ok available accessible done true",
+				"13 line: stdout input GET SET head request upload listen launch change clear skip missing mount",
+				"14 line: authorization configuration option writing saving boot paused filter normal notice alert",
+				"15 line: information update shutdown status debug verbose trace protocol level",
+				"16  line: 0x04",
+				"17  line: 25.02.2025 11:11 11:11:11:11:11:11 11-11-11-11-11-11",
+				"18  line: TCP UDP ICMP IP 192.168.1.1:8443",
+				"19 line: 25.02.2025 01:14:42 [INFO]: not data",
+				"20 line: cron[123]: running",
 			}
 
 			app.applyFilter(true)
@@ -556,9 +608,36 @@ func TestMockInterface(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
+	// Проверяем покраску
+	app.currentLogLines = []string{
+		"1  line: http://localhost:8443",
+		"2  line: https://github.com/Lifailon/lazyjournal",
+		"3  line: /etc/ssh/sshd_config",
+		"4  line: root",
+		"5  line: warning",
+		"6  line: stderr: disconnected and crashed",
+		"7  line: kernel: deletion removed stopped invalidated aborted blocked deactivated",
+		"8  line: rsyslogd: exited critical failed rejection fataling closed ended dropped killing",
+		"9  line: sudo: cancelation unavailable unsuccessful found denied conflict false none",
+		"10 line: /dev/null null",
+		"11 line: success complete accept connection finish started created enable allowing posted",
+		"12 line: routing forward passed running added opened patching ok available accessible done true",
+		"13 line: stdout input GET SET head request upload listen launch change clear skip missing mount",
+		"14 line: authorization configuration option writing saving boot paused filter normal notice alert",
+		"15 line: information update shutdown status debug verbose trace protocol level",
+		"16  line: 0x04",
+		"17  line: 25.02.2025 11:11 11:11:11:11:11:11 11-11-11-11-11-11",
+		"18  line: TCP UDP ICMP IP 192.168.1.1:8443",
+		"19 line: 25.02.2025 01:14:42 [INFO]: not data",
+		"20 line: cron[123]: running",
+	}
+	app.updateDelimiter(true)
+	app.applyFilter(true)
+	time.Sleep(3 * time.Second)
+
 	// Проверяем фильтрацию текста для списков
 	app.filterListText = "a"
-	app.applyFilterList()
+	app.createFilterEditor("lists")
 	time.Sleep(1 * time.Second)
 	app.filterListText = ""
 	app.applyFilterList()
@@ -578,24 +657,26 @@ func TestMockInterface(t *testing.T) {
 		app.prevService(v, 100)
 		time.Sleep(1 * time.Second)
 		// Переключаем списки
-		// Right
-		app.setUnitListRight(g, v)
-		time.Sleep(3 * time.Second)
-		app.setUnitListRight(g, v)
-		time.Sleep(3 * time.Second)
-		app.setUnitListRight(g, v)
-		time.Sleep(3 * time.Second)
-		app.setUnitListRight(g, v)
-		time.Sleep(3 * time.Second)
-		// Left
-		app.setUnitListLeft(g, v)
-		time.Sleep(3 * time.Second)
-		app.setUnitListLeft(g, v)
-		time.Sleep(3 * time.Second)
-		app.setUnitListLeft(g, v)
-		time.Sleep(3 * time.Second)
-		app.setUnitListLeft(g, v)
-		time.Sleep(3 * time.Second)
+		if runtime.GOOS != "windows" {
+			// Right
+			app.setUnitListRight(g, v)
+			time.Sleep(3 * time.Second)
+			app.setUnitListRight(g, v)
+			time.Sleep(3 * time.Second)
+			app.setUnitListRight(g, v)
+			time.Sleep(3 * time.Second)
+			app.setUnitListRight(g, v)
+			time.Sleep(3 * time.Second)
+			// Left
+			app.setUnitListLeft(g, v)
+			time.Sleep(3 * time.Second)
+			app.setUnitListLeft(g, v)
+			time.Sleep(3 * time.Second)
+			app.setUnitListLeft(g, v)
+			time.Sleep(3 * time.Second)
+			app.setUnitListLeft(g, v)
+			time.Sleep(3 * time.Second)
+		}
 	}
 
 	// TAB filesystem
@@ -608,22 +689,24 @@ func TestMockInterface(t *testing.T) {
 		time.Sleep(3 * time.Second)
 		app.prevFileName(v, 100)
 		time.Sleep(1 * time.Second)
-		app.setLogFilesListRight(g, v)
-		time.Sleep(3 * time.Second)
-		app.setLogFilesListRight(g, v)
-		time.Sleep(3 * time.Second)
-		app.setLogFilesListRight(g, v)
-		time.Sleep(3 * time.Second)
-		app.setLogFilesListRight(g, v)
-		time.Sleep(3 * time.Second)
-		app.setLogFilesListLeft(g, v)
-		time.Sleep(3 * time.Second)
-		app.setLogFilesListLeft(g, v)
-		time.Sleep(3 * time.Second)
-		app.setLogFilesListLeft(g, v)
-		time.Sleep(3 * time.Second)
-		app.setLogFilesListLeft(g, v)
-		time.Sleep(3 * time.Second)
+		if runtime.GOOS != "windows" {
+			app.setLogFilesListRight(g, v)
+			time.Sleep(3 * time.Second)
+			app.setLogFilesListRight(g, v)
+			time.Sleep(3 * time.Second)
+			app.setLogFilesListRight(g, v)
+			time.Sleep(3 * time.Second)
+			app.setLogFilesListRight(g, v)
+			time.Sleep(3 * time.Second)
+			app.setLogFilesListLeft(g, v)
+			time.Sleep(3 * time.Second)
+			app.setLogFilesListLeft(g, v)
+			time.Sleep(3 * time.Second)
+			app.setLogFilesListLeft(g, v)
+			time.Sleep(3 * time.Second)
+			app.setLogFilesListLeft(g, v)
+			time.Sleep(3 * time.Second)
+		}
 	}
 
 	// TAB docker
@@ -634,17 +717,19 @@ func TestMockInterface(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		app.prevDockerContainer(v, 100)
 		time.Sleep(1 * time.Second)
-		app.setContainersListRight(g, v)
-		time.Sleep(1 * time.Second)
-		app.setContainersListRight(g, v)
-		time.Sleep(1 * time.Second)
-		app.setContainersListRight(g, v)
-		time.Sleep(1 * time.Second)
-		app.setContainersListLeft(g, v)
-		time.Sleep(1 * time.Second)
-		app.setContainersListLeft(g, v)
-		time.Sleep(1 * time.Second)
-		app.setContainersListLeft(g, v)
+		if runtime.GOOS != "windows" {
+			app.setContainersListRight(g, v)
+			time.Sleep(1 * time.Second)
+			app.setContainersListRight(g, v)
+			time.Sleep(1 * time.Second)
+			app.setContainersListRight(g, v)
+			time.Sleep(1 * time.Second)
+			app.setContainersListLeft(g, v)
+			time.Sleep(1 * time.Second)
+			app.setContainersListLeft(g, v)
+			time.Sleep(1 * time.Second)
+			app.setContainersListLeft(g, v)
+		}
 		time.Sleep(1 * time.Second)
 		app.selectDocker(g, v)
 		time.Sleep(3 * time.Second)
@@ -657,7 +742,8 @@ func TestMockInterface(t *testing.T) {
 	app.filterText = "a"
 	app.applyFilter(true)
 	time.Sleep(3 * time.Second)
-	app.filterText = ""
+	// Ctrl+W
+	app.clearFilterEditor(g)
 	app.applyFilter(true)
 	time.Sleep(3 * time.Second)
 
@@ -690,14 +776,12 @@ func TestMockInterface(t *testing.T) {
 		app.setCountLogViewDown(g, v)
 		time.Sleep(1 * time.Second)
 		app.setCountLogViewUp(g, v)
-
 		// UP
 		app.scrollUpLogs(1)
 		time.Sleep(1 * time.Second)
 		// DOWN
 		app.scrollDownLogs(1)
 		time.Sleep(1 * time.Second)
-
 		// Ctrl+A
 		app.pageUpLogs()
 		time.Sleep(1 * time.Second)

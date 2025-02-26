@@ -4,32 +4,26 @@ on:
   workflow_dispatch:
     inputs:
       Distro:
-        description: 'Select a distribution'
+        description: 'Select a distribution' # https://github.com/actions/runner-images
         required: true
         default: 'ubuntu-20.04'
         type: choice
         options:
           - 'ubuntu-20.04'
+          - 'ubuntu-22.04'
           - 'ubuntu-24.04'
           - 'macos-15'
+          - 'windows-2022'
       Binary:
         description: 'Build binary'
         default: false
         type: boolean
-      Golangci:
-        description: 'Golangci linter check'
-        default: true
-        type: boolean
-      Gocritic:
-        description: 'Critic linter check'
-        default: true
-        type: boolean
-      Gosec:
-        description: 'Security linter check'
+      Linter:
+        description: 'Linter checks'
         default: true
         type: boolean
       testFunctions:
-        description: 'Go test function'
+        description: 'Function and interface testing'
         default: true
         type: boolean
       testInterface:
@@ -64,19 +58,19 @@ jobs:
           go build -v ./...
 
       - name: Golangci linter check
-        if: ${{ github.event.inputs.Golangci == 'true' }}
+        if: ${{ github.event.inputs.Linter == 'true' }}
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
           golangci-lint run ./...
 
       - name: Critic linter check
-        if: ${{ github.event.inputs.Gocritic == 'true' }}
+        if: ${{ github.event.inputs.Linter == 'true' }}
         run: |
           go install github.com/go-critic/go-critic/cmd/gocritic@latest
           gocritic check -enableAll ./...
 
       - name: Security linter check
-        if: ${{ github.event.inputs.Gosec == 'true' }}
+        if: ${{ github.event.inputs.Linter == 'true' }}
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           gosec -severity=high ./...
@@ -88,22 +82,22 @@ jobs:
           }}
         run: docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
 
-      - name: Install tmux for macOS
-        if: ${{ github.event.inputs.testInterface == 'true' && github.event.inputs.Distro == 'macos-15' }}
-        run: brew install tmux
-
-      - name: Interface testing in TMUX
-        if: ${{ github.event.inputs.testInterface == 'true' }}
-        run: |
-          tmux -V
-          chmod +x test.sh
-          bash test.sh 5 true
-
-      - name: Go test function
+      - name: Function and interface testing
         if: ${{ github.event.inputs.testFunctions == 'true' }}
-        run: |
-          sudo go test -v
-          sudo go test -cover
+        run: sudo go test -v -cover
+        continue-on-error: true
+
+      - name: Creat markdown report
+        if: ${{ github.event.inputs.testFunctions == 'true' }}
+        run: cat test-report.md >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      - name: Upload markdown report
+        if: ${{ github.event.inputs.testFunctions == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test-report.md
         continue-on-error: true
 
       - name: Update coverage report
@@ -114,6 +108,17 @@ jobs:
           chart: true
           amend: true
         continue-on-error: true
+
+      - name: Install TMUX for macOS
+        if: ${{ github.event.inputs.testInterface == 'true' && github.event.inputs.Distro == 'macos-15' }}
+        run: brew install tmux
+
+      - name: Interface testing in TMUX
+        if: ${{ github.event.inputs.testInterface == 'true' }}
+        run: |
+          tmux -V
+          chmod +x test.sh
+          bash test.sh 5 true
 
       - name: Build binaries
         if: ${{ github.event.inputs.Binary == 'true' }}
