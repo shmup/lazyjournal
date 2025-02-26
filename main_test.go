@@ -423,11 +423,7 @@ func TestInterface(t *testing.T) {
 	app.getOS = runtime.GOOS
 	app.getArch = runtime.GOARCH
 
-	var err error
-	g, err = gocui.NewGui(gocui.OutputNormal, true)
-	if err != nil {
-		log.Panicln(err)
-	}
+	g, _ = gocui.NewGui(gocui.OutputNormal, false)
 	defer g.Close()
 
 	app.gui = g
