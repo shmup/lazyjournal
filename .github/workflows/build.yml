@@ -99,6 +99,13 @@ jobs:
           chmod +x test.sh
           bash test.sh 5 true
 
+      - name: Install xvfb
+        if: ${{ github.event.inputs.testFunctions == 'true' }}
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1024x768x16 &
+          export DISPLAY=:99
+
       - name: Go test function
         if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: |
