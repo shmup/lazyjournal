@@ -391,7 +391,13 @@ func TestFlag(t *testing.T) {
 	app.showVersion()
 }
 
-func TestInterface(t *testing.T) {
+func TestMainInterface(t *testing.T) {
+	go runGoCui(true)
+	time.Sleep(3 * time.Second)
+	quit(g, nil)
+}
+
+func TestMockInterface(t *testing.T) {
 	app := &App{
 		testMode:                     false,
 		startServices:                0,
@@ -575,7 +581,19 @@ func TestInterface(t *testing.T) {
 		// Right
 		app.setUnitListRight(g, v)
 		time.Sleep(3 * time.Second)
+		app.setUnitListRight(g, v)
+		time.Sleep(3 * time.Second)
+		app.setUnitListRight(g, v)
+		time.Sleep(3 * time.Second)
+		app.setUnitListRight(g, v)
+		time.Sleep(3 * time.Second)
 		// Left
+		app.setUnitListLeft(g, v)
+		time.Sleep(3 * time.Second)
+		app.setUnitListLeft(g, v)
+		time.Sleep(3 * time.Second)
+		app.setUnitListLeft(g, v)
+		time.Sleep(3 * time.Second)
 		app.setUnitListLeft(g, v)
 		time.Sleep(3 * time.Second)
 	}
@@ -592,6 +610,18 @@ func TestInterface(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		app.setLogFilesListRight(g, v)
 		time.Sleep(3 * time.Second)
+		app.setLogFilesListRight(g, v)
+		time.Sleep(3 * time.Second)
+		app.setLogFilesListRight(g, v)
+		time.Sleep(3 * time.Second)
+		app.setLogFilesListRight(g, v)
+		time.Sleep(3 * time.Second)
+		app.setLogFilesListLeft(g, v)
+		time.Sleep(3 * time.Second)
+		app.setLogFilesListLeft(g, v)
+		time.Sleep(3 * time.Second)
+		app.setLogFilesListLeft(g, v)
+		time.Sleep(3 * time.Second)
 		app.setLogFilesListLeft(g, v)
 		time.Sleep(3 * time.Second)
 	}
@@ -605,6 +635,14 @@ func TestInterface(t *testing.T) {
 		app.prevDockerContainer(v, 100)
 		time.Sleep(1 * time.Second)
 		app.setContainersListRight(g, v)
+		time.Sleep(1 * time.Second)
+		app.setContainersListRight(g, v)
+		time.Sleep(1 * time.Second)
+		app.setContainersListRight(g, v)
+		time.Sleep(1 * time.Second)
+		app.setContainersListLeft(g, v)
+		time.Sleep(1 * time.Second)
+		app.setContainersListLeft(g, v)
 		time.Sleep(1 * time.Second)
 		app.setContainersListLeft(g, v)
 		time.Sleep(1 * time.Second)

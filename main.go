@@ -201,7 +201,7 @@ var (
 
 var g *gocui.Gui
 
-func main() {
+func runGoCui(mock bool) {
 	// Инициализация значений по умолчанию + компиляция регулярных выражений для покраски
 	app := &App{
 		testMode:                     false,
@@ -260,7 +260,11 @@ func main() {
 
 	// Создаем GUI
 	var err error
-	g, err = gocui.NewGui(gocui.OutputNormal, true) // 2-й параметр для форка
+	if mock {
+		g, err = gocui.NewGui(gocui.OutputSimulator, true) // 1-й параметр для режима работы терминала (tcell) и 2-й параметр для форка
+	} else {
+		g, err = gocui.NewGui(gocui.OutputNormal, true)
+	}
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -400,6 +404,10 @@ func main() {
 	if err := g.MainLoop(); err != nil && !errors.Is(err, gocui.ErrQuit) {
 		log.Panicln(err)
 	}
+}
+
+func main() {
+	runGoCui(false)
 }
 
 // Структура интерфейса окон GUI
