@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
+	"log"
+	"os"
 	"os/exec"
+	"os/user"
 	"regexp"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/micmonay/keybd_event"
+	"github.com/awesome-gocui/gocui"
 )
 
 func TestWinFiles(t *testing.T) {
@@ -381,112 +386,256 @@ func TestFilterColor(t *testing.T) {
 }
 
 func TestInterface(t *testing.T) {
-	go main()
-
-	time.Sleep(2 * time.Second)
-
-	if g == nil {
-		t.Error("GoCUI not initialized")
+	app := &App{
+		testMode:                     false,
+		startServices:                0,
+		selectedJournal:              0,
+		startFiles:                   0,
+		selectedFile:                 0,
+		startDockerContainers:        0,
+		selectedDockerContainer:      0,
+		selectUnits:                  "services",
+		selectPath:                   "/var/log/",
+		selectContainerizationSystem: "docker",
+		selectFilterMode:             "default",
+		logViewCount:                 "200000",
+		journalListFrameColor:        gocui.ColorDefault,
+		fileSystemFrameColor:         gocui.ColorDefault,
+		dockerFrameColor:             gocui.ColorDefault,
+		autoScroll:                   true,
+		trimHttpRegex:                trimHttpRegex,
+		trimHttpsRegex:               trimHttpsRegex,
+		trimPrefixPathRegex:          trimPrefixPathRegex,
+		trimPostfixPathRegex:         trimPostfixPathRegex,
+		hexByteRegex:                 hexByteRegex,
+		dateTimeRegex:                dateTimeRegex,
+		timeMacAddressRegex:          timeMacAddressRegex,
+		timeRegex:                    timeRegex,
+		macAddressRegex:              macAddressRegex,
+		dateIpAddressRegex:           dateIpAddressRegex,
+		dateRegex:                    dateRegex,
+		ipAddressRegex:               ipAddressRegex,
+		procRegex:                    procRegex,
+		syslogUnitRegex:              syslogUnitRegex,
+		keybindingsEnabled:           true,
 	}
 
-	app := &App{}
-	kb, err := keybd_event.NewKeyBonding()
+	app.getOS = runtime.GOOS
+	app.getArch = runtime.GOARCH
+
+	var err error
+	g, err = gocui.NewGui(gocui.OutputNormal, true)
 	if err != nil {
-		t.Error(err)
+		log.Panicln(err)
+	}
+	defer g.Close()
+
+	app.gui = g
+	g.SetManagerFunc(app.layout)
+	g.Mouse = false
+
+	g.FgColor = gocui.ColorDefault
+	g.BgColor = gocui.ColorDefault
+
+	if err := app.setupKeybindings(); err != nil {
+		log.Panicln("Error key bindings", err)
 	}
 
-	kb.SetKeys(keybd_event.VK_A)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_BACKSPACE)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
+	if err := app.layout(g); err != nil {
+		log.Panicln(err)
+	}
 
+	app.hostName, _ = os.Hostname()
+	if strings.Contains(app.hostName, ".") {
+		app.hostName = strings.Split(app.hostName, ".")[0]
+	}
+	currentUser, _ := user.Current()
+	app.userName = currentUser.Username
+	if strings.Contains(app.userName, "\\") {
+		app.userName = strings.Split(app.userName, "\\")[1]
+	}
+	app.systemDisk = os.Getenv("SystemDrive")
+	if len(app.systemDisk) >= 1 {
+		app.systemDisk = string(app.systemDisk[0])
+	} else {
+		app.systemDisk = "C"
+	}
+	passwd, _ := os.Open("/etc/passwd")
+	scanner := bufio.NewScanner(passwd)
+	for scanner.Scan() {
+		line := scanner.Text()
+		userName := strings.Split(line, ":")
+		if len(userName) > 0 {
+			app.userNameArray = append(app.userNameArray, userName[0])
+		}
+	}
+	files, _ := os.ReadDir("/")
+	for _, file := range files {
+		if file.IsDir() {
+			app.rootDirArray = append(app.rootDirArray, file.Name())
+		}
+	}
+
+	if v, err := g.View("services"); err == nil {
+		_, viewHeight := v.Size()
+		app.maxVisibleServices = viewHeight
+	}
+	if app.getOS == "windows" {
+		v, err := g.View("services")
+		if err != nil {
+			log.Panicln(err)
+		}
+		v.Title = " < Windows Event Logs (0) > "
+		go func() {
+			app.loadWinEvents()
+		}()
+	} else {
+		app.loadServices(app.selectUnits)
+	}
+
+	if v, err := g.View("varLogs"); err == nil {
+		_, viewHeight := v.Size()
+		app.maxVisibleFiles = viewHeight
+	}
+
+	if app.getOS == "windows" {
+		selectedVarLog, err := g.View("varLogs")
+		if err != nil {
+			log.Panicln(err)
+		}
+		g.Update(func(g *gocui.Gui) error {
+			selectedVarLog.Clear()
+			fmt.Fprintln(selectedVarLog, "Searching log files...")
+			selectedVarLog.Highlight = false
+			return nil
+		})
+		selectedVarLog.Title = " < Program Files (0) > "
+		app.selectPath = "ProgramFiles"
+		go func() {
+			app.loadWinFiles(app.selectPath)
+		}()
+	} else {
+		app.loadFiles(app.selectPath)
+	}
+
+	if v, err := g.View("docker"); err == nil {
+		_, viewHeight := v.Size()
+		app.maxVisibleDockerContainers = viewHeight
+	}
+	app.loadDockerContainer(app.selectContainerizationSystem)
+
+	if _, err := g.SetCurrentView("filterList"); err != nil {
+		return
+	}
+
+	go func() {
+		app.updateLogOutput(3)
+	}()
+
+	go func() {
+		app.updateWindowSize(1)
+	}()
+
+	// Start GUI
+	go g.MainLoop()
+
+	time.Sleep(3 * time.Second)
+
+	// Text for filter list
+	app.filterListText = "a"
+	app.applyFilterList()
+	time.Sleep(1 * time.Second)
+	app.filterListText = ""
+	app.applyFilterList()
+	time.Sleep(1 * time.Second)
+
+	// TAB journal
 	app.nextView(g, nil)
-	kb.SetKeys(keybd_event.VK_RIGHT)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_LEFT)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_DOWN)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_UP)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
+	if v, err := g.View("services"); err == nil {
+		// DOWN
+		app.nextService(v, 100)
+		time.Sleep(1 * time.Second)
+		// UP
+		app.prevService(v, 100)
+	}
 
+	// TAB filesystem
 	app.nextView(g, nil)
-	kb.SetKeys(keybd_event.VK_RIGHT)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_LEFT)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_DOWN)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_UP)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
+	if v, err := g.View("varLogs"); err == nil {
+		app.nextFileName(v, 100)
+		time.Sleep(1 * time.Second)
+		app.prevFileName(v, 100)
+	}
 
+	// TAB docker
 	app.nextView(g, nil)
-	kb.SetKeys(keybd_event.VK_RIGHT)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_LEFT)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_DOWN)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_UP)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_ENTER)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
+	if v, err := g.View("docker"); err == nil {
+		app.nextDockerContainer(v, 100)
+		time.Sleep(1 * time.Second)
+		app.prevDockerContainer(v, 100)
+	}
 
+	// TAB filter
 	app.nextView(g, nil)
-	kb.SetKeys(keybd_event.VK_A)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_UP)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_UP)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_DOWN)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.HasCTRL(true)
-	kb.SetKeys(keybd_event.VK_W)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.HasCTRL(false)
+	time.Sleep(1 * time.Second)
+	if v, err := g.View("filter"); err == nil {
+		// fuzzy
+		app.setFilterModeRight(g, v)
+		time.Sleep(1 * time.Second)
+		// regex
+		app.setFilterModeRight(g, v)
+		time.Sleep(1 * time.Second)
+		// default
+		app.setFilterModeRight(g, v)
+		time.Sleep(1 * time.Second)
+		// regex
+		app.setFilterModeLeft(g, v)
+		time.Sleep(1 * time.Second)
+		// fuzzy
+		app.setFilterModeLeft(g, v)
+		time.Sleep(1 * time.Second)
+		// default
+		app.setFilterModeLeft(g, v)
+		time.Sleep(1 * time.Second)
+	}
 
+	// Text for filter logs output
+	app.filterText = "a"
+	app.applyFilter(true)
+	time.Sleep(1 * time.Second)
+	app.filterText = ""
+	app.applyFilter(true)
+	time.Sleep(1 * time.Second)
+
+	// TAB logs output
 	app.nextView(g, nil)
-	kb.SetKeys(keybd_event.VK_UP)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_DOWN)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
+	if v, err := g.View("logs"); err == nil {
+		app.setCountLogViewDown(g, v)
+		time.Sleep(1 * time.Second)
+		app.setCountLogViewUp(g, v)
 
-	kb.HasCTRL(true)
-	kb.SetKeys(keybd_event.VK_A)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.SetKeys(keybd_event.VK_E)
-	kb.Launching()
-	time.Sleep(2 * time.Second)
-	kb.HasCTRL(false)
+		// UP
+		app.scrollUpLogs(1)
+		time.Sleep(1 * time.Second)
+		// DOWN
+		app.scrollDownLogs(1)
+		time.Sleep(1 * time.Second)
 
+		// Ctrl+A
+		app.pageUpLogs()
+		time.Sleep(1 * time.Second)
+		// Ctrl+E
+		app.updateLogsView(true)
+		time.Sleep(1 * time.Second)
+	}
+
+	// Shift+TAB
 	app.backView(g, nil)
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
-	app.nextView(g, nil)
-	app.nextView(g, nil)
-	time.Sleep(2 * time.Second)
+	quit(g, nil)
 }
