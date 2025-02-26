@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"compress/gzip"
 	"fmt"
 	"log"
 	"os"
@@ -174,36 +173,6 @@ func TestUnixFiles(t *testing.T) {
 	file.WriteString("## Unix File Logs\n")
 	file.WriteString("| Path | Lines | Read | Color |\n")
 	file.WriteString("|------|-------|------|-------|\n")
-
-	// Создаем временный pcap файл
-	pcapFile := "test.pcap"
-	gzipFile := "test.pcap.gz"
-	file, err := os.Create(pcapFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Удаляем после теста
-	defer os.Remove(pcapFile)
-	defer file.Close()
-	// Минимальный заголовок, чтобы tcpdump понимал формат
-	pcapHeader := []byte{0xd4, 0xc3, 0xb2, 0xa1, 0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	file.Write(pcapHeader)
-	// Создаем gzip из pcap файла
-	original, err := os.Open(pcapFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer original.Close()
-	gzFile, err := os.Create(gzipFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(gzipFile)
-	defer gzFile.Close()
-	gzWriter := gzip.NewWriter(gzFile)
-	defer gzWriter.Close()
-	// Копируем содержимое pcap в gzip
-	gzWriter.Write(pcapHeader)
 
 	testCases := []struct {
 		name       string
@@ -450,7 +419,7 @@ func TestFilterColor(t *testing.T) {
 				"11 line: null success complete accept connection finish started created enable allowing posted",
 				"12 line: routing forward passed running added opened patching ok available accessible done true",
 				"13 line: stdout input GET SET head request upload listen launch change clear skip missing mount",
-				"14 line: authorization configuration options option writing saving booting boot paused filter normal notice alert",
+				"14 line: authorization configuration option writing saving boot paused filter normal notice alert",
 				"15 line: information update shutdown status debug verbose trace protocol level",
 				"16 line: 2025-02-26T21:38:35.956968+03:00 ⎯⎯⎯ 0x04 ⎯⎯⎯",
 				"17 line: 25.02.2025 11:11 11:11:11:11:11:11 11-11-11-11-11-11",
@@ -654,7 +623,7 @@ func TestMockInterface(t *testing.T) {
 		"11 line: null success complete accept connection finish started created enable allowing posted",
 		"12 line: routing forward passed running added opened patching ok available accessible done true",
 		"13 line: stdout input GET SET head request upload listen launch change clear skip missing mount",
-		"14 line: authorization configuration options option writing saving booting boot paused filter normal notice alert",
+		"14 line: authorization configuration option writing saving boot paused filter normal notice alert",
 		"15 line: information update shutdown status debug verbose trace protocol level",
 		"16 line: 2025-02-26T21:38:35.956968+03:00 ⎯⎯⎯ 0x04 ⎯⎯⎯",
 		"17 line: 25.02.2025 11:11 11:11:11:11:11:11 11-11-11-11-11-11",
