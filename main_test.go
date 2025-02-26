@@ -536,12 +536,12 @@ func TestInterface(t *testing.T) {
 		app.updateWindowSize(1)
 	}()
 
-	// Start GUI
-	go g.MainLoop()
+	// Включить отображение GUI
+	// go g.MainLoop()
 
 	time.Sleep(3 * time.Second)
 
-	// Text for filter list
+	// Проверяем фильтрацию текста для списков
 	app.filterListText = "a"
 	app.applyFilterList()
 	time.Sleep(1 * time.Second)
@@ -576,10 +576,20 @@ func TestInterface(t *testing.T) {
 		app.nextDockerContainer(v, 100)
 		time.Sleep(1 * time.Second)
 		app.prevDockerContainer(v, 100)
+		// Загружаем журнал
+		app.selectDocker(g, v)
+		time.Sleep(1 * time.Second)
 	}
 
 	// TAB filter
 	app.nextView(g, nil)
+
+	// Проверяем фильтрацию текста для вывода журнала
+	app.filterText = "a"
+	app.applyFilter(true)
+	time.Sleep(1 * time.Second)
+
+	// Проверяем режимы фильтрации
 	time.Sleep(1 * time.Second)
 	if v, err := g.View("filter"); err == nil {
 		// fuzzy
@@ -602,10 +612,6 @@ func TestInterface(t *testing.T) {
 		time.Sleep(1 * time.Second)
 	}
 
-	// Text for filter logs output
-	app.filterText = "a"
-	app.applyFilter(true)
-	time.Sleep(1 * time.Second)
 	app.filterText = ""
 	app.applyFilter(true)
 	time.Sleep(1 * time.Second)
