@@ -3,7 +3,7 @@
 # bash test.sh <timeout> <log>
 # bash test.sh 3 true
 
-timeout=${1:-5}
+timeout=${1:-5} # default timeout 5 seconds
 debug=$2
 
 exitCode=0
@@ -35,7 +35,7 @@ if [ "$journalctlVersion" == "false" ]; then
 else
     tmux send-keys -t test-session "cron"
     tmux send-keys -t test-session "$(echo -e '\t')"
-    tmux send-keys -t test-session "$(echo -e '\x1b[C')" 
+    tmux send-keys -t test-session "$(echo -e '\x1b[C')"
 
     start_time=$(date +%s)
     while true; do
@@ -75,6 +75,17 @@ fi
 # Test 2
 tmux send-keys -t test-session "input"
 tmux send-keys -t test-session "$(echo -e '\t\t')"
+tmux send-keys -t test-session "$(echo -e '\x1b[C')"
+
+start_time=$(date +%s)
+while true; do
+    current_time=$(date +%s)
+    elapsed=$((current_time - start_time))
+    if [[ $(tmux capture-pane -p | grep -q "<  Optional p") && $(tmux capture-pane -p | grep -q -v "Searching") ]] || [ "$elapsed" -ge "$timeout" ]; then
+        break
+    fi
+done
+
 tmux send-keys -t test-session "$(echo -e '\x1b[C')"
 
 start_time=$(date +%s)

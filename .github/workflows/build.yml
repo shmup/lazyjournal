@@ -29,18 +29,13 @@ on:
         default: true
         type: boolean
       testFunctions:
-        description: 'Testing functions and performance'
+        description: 'Go test function'
         default: true
         type: boolean
       testInterface:
-        description: 'Testing interface'
+        description: 'Interface testing in TMUX'
         default: true
         type: boolean
-      Timeout:
-        description: 'Timeout for interface testing'
-        required: true
-        default: 5
-        type: number
 
 jobs:
   build:
@@ -97,14 +92,14 @@ jobs:
         if: ${{ github.event.inputs.testInterface == 'true' && github.event.inputs.Distro == 'macos-15' }}
         run: brew install tmux
 
-      - name: Interface testing
+      - name: Interface testing in TMUX
         if: ${{ github.event.inputs.testInterface == 'true' }}
         run: |
           tmux -V
           chmod +x test.sh
-          bash test.sh ${{ github.event.inputs.Timeout }} true
+          bash test.sh 5 true
 
-      - name: Go test functions
+      - name: Go test function
         if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: |
           sudo go test -v
