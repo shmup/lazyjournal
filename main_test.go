@@ -385,6 +385,12 @@ func TestFilterColor(t *testing.T) {
 	}
 }
 
+func TestFlag(t *testing.T) {
+	app := &App{}
+	showHelp()
+	app.showVersion()
+}
+
 func TestInterface(t *testing.T) {
 	app := &App{
 		testMode:                     false,
@@ -424,7 +430,10 @@ func TestInterface(t *testing.T) {
 	app.getArch = runtime.GOARCH
 
 	var err error
+	// Отключение tcell для CI
 	g, err = gocui.NewGui(gocui.OutputSimulator, true)
+	// Включить отображение интерфейса
+	// g, err = gocui.NewGui(gocui.OutputNormal, true)
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -536,8 +545,8 @@ func TestInterface(t *testing.T) {
 		app.updateWindowSize(1)
 	}()
 
-	// Включить отображение GUI
-	// go g.MainLoop()
+	// Отображение GUI в режиме OutputNormal
+	go g.MainLoop()
 
 	time.Sleep(3 * time.Second)
 
@@ -556,8 +565,19 @@ func TestInterface(t *testing.T) {
 		// DOWN
 		app.nextService(v, 100)
 		time.Sleep(1 * time.Second)
+		// Загружаем журнал
+		app.selectService(g, v)
+		time.Sleep(3 * time.Second)
 		// UP
 		app.prevService(v, 100)
+		time.Sleep(1 * time.Second)
+		// Переключаем списки
+		// Right
+		app.setUnitListRight(g, v)
+		time.Sleep(3 * time.Second)
+		// Left
+		app.setUnitListLeft(g, v)
+		time.Sleep(3 * time.Second)
 	}
 
 	// TAB filesystem
@@ -566,7 +586,14 @@ func TestInterface(t *testing.T) {
 	if v, err := g.View("varLogs"); err == nil {
 		app.nextFileName(v, 100)
 		time.Sleep(1 * time.Second)
+		app.selectFile(g, v)
+		time.Sleep(3 * time.Second)
 		app.prevFileName(v, 100)
+		time.Sleep(1 * time.Second)
+		app.setLogFilesListRight(g, v)
+		time.Sleep(3 * time.Second)
+		app.setLogFilesListLeft(g, v)
+		time.Sleep(3 * time.Second)
 	}
 
 	// TAB docker
@@ -576,21 +603,27 @@ func TestInterface(t *testing.T) {
 		app.nextDockerContainer(v, 100)
 		time.Sleep(1 * time.Second)
 		app.prevDockerContainer(v, 100)
-		// Загружаем журнал
-		app.selectDocker(g, v)
 		time.Sleep(1 * time.Second)
+		app.setContainersListRight(g, v)
+		time.Sleep(1 * time.Second)
+		app.setContainersListLeft(g, v)
+		time.Sleep(1 * time.Second)
+		app.selectDocker(g, v)
+		time.Sleep(3 * time.Second)
 	}
 
-	// TAB filter
+	// TAB filter logs
 	app.nextView(g, nil)
 
 	// Проверяем фильтрацию текста для вывода журнала
 	app.filterText = "a"
 	app.applyFilter(true)
-	time.Sleep(1 * time.Second)
+	time.Sleep(3 * time.Second)
+	app.filterText = ""
+	app.applyFilter(true)
+	time.Sleep(3 * time.Second)
 
 	// Проверяем режимы фильтрации
-	time.Sleep(1 * time.Second)
 	if v, err := g.View("filter"); err == nil {
 		// fuzzy
 		app.setFilterModeRight(g, v)
@@ -611,10 +644,6 @@ func TestInterface(t *testing.T) {
 		app.setFilterModeLeft(g, v)
 		time.Sleep(1 * time.Second)
 	}
-
-	app.filterText = ""
-	app.applyFilter(true)
-	time.Sleep(1 * time.Second)
 
 	// TAB logs output
 	app.nextView(g, nil)
@@ -639,7 +668,23 @@ func TestInterface(t *testing.T) {
 		time.Sleep(1 * time.Second)
 	}
 
+	// TAB filter list
+	app.nextView(g, nil)
+	time.Sleep(1 * time.Second)
+
 	// Shift+TAB
+	app.backView(g, nil)
+	time.Sleep(1 * time.Second)
+	app.backView(g, nil)
+	time.Sleep(1 * time.Second)
+	app.backView(g, nil)
+	time.Sleep(1 * time.Second)
+	app.backView(g, nil)
+	time.Sleep(1 * time.Second)
+	app.backView(g, nil)
+	time.Sleep(1 * time.Second)
+	app.backView(g, nil)
+	time.Sleep(1 * time.Second)
 	app.backView(g, nil)
 	time.Sleep(1 * time.Second)
 
