@@ -670,8 +670,8 @@ func (app *App) loadServices(journalName string) {
 		}
 		var bootRecords []BootInfo
 		err = json.Unmarshal(bootOutput, &bootRecords)
-		// Если JSON невалидный
-		if err != nil {
+		// Если JSON невалидный или режим тестирования (Ubuntu 20.04 не поддерживает вывод в формате json)
+		if err != nil || app.testMode {
 			// Парсим вывод построчно
 			lines := strings.Split(string(bootOutput), "\n")
 			for _, line := range lines {
@@ -705,7 +705,10 @@ func (app *App) loadServices(journalName string) {
 					})
 				}
 			}
-		} else {
+		}
+		if err == nil {
+			// Очищаем массив, если он был заполнен в режиме тестирования
+			app.journals = []Journal{}
 			// Добавляем информацию о загрузках в app.journals
 			for _, bootRecord := range bootRecords {
 				// Преобразуем наносекунды в секунды
@@ -1199,7 +1202,9 @@ func (app *App) loadFiles(logPath string) {
 				"-name", "*.[0-9]*", "-o",
 				"-name", "*.[0-9].*", "-o",
 				"-name", "*.pcap", "-o",
-				"-name", "*.pcapng",
+				"-name", "*.pcap.*", "-o",
+				"-name", "*.pcapng", "-o",
+				"-name", "*.pcapng.*",
 			)
 		} else {
 			// Загрузка системных журналов для Linux: все файлы, которые содержат log в расширение или названии (архивы включительно), а также расширение с цифрой (архивные) и pcap/pcapng
@@ -1211,7 +1216,9 @@ func (app *App) loadFiles(logPath string) {
 				"-name", "*.[0-9]*", "-o",
 				"-name", "*.[0-9].*", "-o",
 				"-name", "*.pcap", "-o",
-				"-name", "*.pcapng",
+				"-name", "*.pcap.*", "-o",
+				"-name", "*.pcapng", "-o",
+				"-name", "*.pcapng.*",
 			)
 		}
 		output, _ = cmd.Output()
@@ -1277,6 +1284,10 @@ func (app *App) loadFiles(logPath string) {
 			"-type", "f",
 			"-name", "*.log", "-o",
 			"-name", "*.log.*", "-o",
+			"-name", "*.pcap", "-o",
+			"-name", "*.pcap.*", "-o",
+			"-name", "*.pcapng", "-o",
+			"-name", "*.pcapng.*",
 		)
 		output, _ = cmd.Output()
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -1327,7 +1338,9 @@ func (app *App) loadFiles(logPath string) {
 			"-name", "*.log", "-o",
 			"-name", "*.asl", "-o",
 			"-name", "*.pcap",
+			"-name", "*.pcap.*",
 			"-name", "*.pcapng",
+			"-name", "*.pcapng.*",
 			")",
 			"-print",
 		)
@@ -1359,7 +1372,9 @@ func (app *App) loadFiles(logPath string) {
 			"-type", "f",
 			"-name", "*.log", "-o",
 			"-name", "*.pcap",
+			"-name", "*.pcap.*",
 			"-name", "*.pcapng",
+			"-name", "*.pcapng.*",
 		)
 		outputRootDir, err := cmdRootDir.Output()
 		// Добавляем содержимое директории /root/ в общий массив, если есть доступ

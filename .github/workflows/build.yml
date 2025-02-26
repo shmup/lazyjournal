@@ -92,14 +92,6 @@ jobs:
         run: cat test-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
-      - name: Upload markdown report
-        if: ${{ github.event.inputs.testFunctions == 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report
-          path: test-report.md
-        continue-on-error: true
-
       - name: Update coverage report
         if: ${{ github.event.inputs.testFunctions == 'true' }}
         uses: ncruces/go-coverage-report@v0
