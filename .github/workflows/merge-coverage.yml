@@ -150,7 +150,7 @@ jobs:
           path: merge-coverage.out
 
       - name: Save summary report to file
-        run: echo "$GITHUB_STEP_SUMMARY" > summary-report.md
+        run: cat "$GITHUB_STEP_SUMMARY" > summary-report.md
 
       - name: Upload test summary report
         uses: actions/upload-artifact@v4
