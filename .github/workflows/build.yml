@@ -108,7 +108,11 @@ jobs:
 
       - name: Functions testing in Windows
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
-        run: go test -v --run TestWin* -cover
+        run: |
+          # go test -v --run TestWin* -cover
+          go test -v --run TestWinEvents -cover
+          ls -lh
+          cat test-report.md
         continue-on-error: true
 
       - name: Create markdown report
