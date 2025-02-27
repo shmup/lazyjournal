@@ -41,9 +41,9 @@ func TestWinFiles(t *testing.T) {
 	}{
 		// {"Program Files", "ProgramFiles"},
 		// {"Program Files 86", "ProgramFiles86"},
-		// {"ProgramData", "ProgramData"},
+		{"ProgramData", "ProgramData"},
 		// {"AppData/Local", "AppDataLocal"},
-		{"AppData/Roaming", "AppDataRoaming"},
+		// {"AppData/Roaming", "AppDataRoaming"},
 	}
 
 	for _, tc := range testCases {
