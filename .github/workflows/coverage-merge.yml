@@ -103,6 +103,7 @@ jobs:
 
       - name: Check coverage reports
         run: |
+          ls -lh
           go tool cover -func coverage-linux.out
           go tool cover -func coverage-windows.out
 
