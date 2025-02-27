@@ -106,6 +106,13 @@ jobs:
         run: sudo go test -v -cover
         continue-on-error: true
 
+      - name: Create test file in Windows
+        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
+        run: |
+          "line test" | Out-File -FilePath "$env:LOCALAPPDATA\test.log" -Encoding utf8
+          # "line test" | Out-File -FilePath "$env:APPDATA\test.log" -Encoding utf8
+        shell: pwsh
+
       - name: Functions testing in Windows
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: go test -v --run TestWin* -cover

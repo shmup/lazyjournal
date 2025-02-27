@@ -101,8 +101,17 @@ jobs:
           name: coverage-windows
           path: .
 
+      - name: Check coverage reports
+        run: |
+          go tool cover -func coverage-linux.out
+          go tool cover -func coverage-windows.out
+
       - name: Install go coverage merge
-        run: go install github.com/wadey/gocovmerge@latest
+        run: |
+          go install github.com/wadey/gocovmerge@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+          export PATH=$HOME/go/bin:$PATH
+          which gocovmerge
 
       - name: Merge coverage reports
         run: |
