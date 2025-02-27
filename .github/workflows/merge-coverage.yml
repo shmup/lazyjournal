@@ -71,13 +71,11 @@ jobs:
           go mod verify
           go build -v ./...
 
-      - name: Create log files for Windows
+      - name: Create log file for Windows
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: |
           New-Item -Path "$env:APPDATA\test" -Type Directory
           "line test" | Out-File -FilePath "$env:APPDATA\test\test.log"
-          New-Item -Path "$env:LOCALAPPDATA\test" -Type Directory
-          "line test" | Out-File -FilePath "$env:LOCALAPPDATA\test\test.log"
         shell: pwsh
         continue-on-error: true
 
@@ -86,7 +84,10 @@ jobs:
         continue-on-error: true
 
       - name: Create markdown report
-        run: cat test-report.md >> $GITHUB_STEP_SUMMARY
+        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
+        run: |
+          Get-Content test-report.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+        shell: pwsh
         continue-on-error: true
 
       - name: Upload coverage report for Windows
