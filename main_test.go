@@ -179,7 +179,7 @@ func TestUnixFiles(t *testing.T) {
 		selectPath string
 	}{
 		{"System var logs", "/var/log/"},
-		// {"Optional package logs", "/opt/"},
+		{"Optional package logs", "/opt/"},
 		{"Users home logs", "/home/"},
 		{"Process descriptor logs", "descriptor"},
 	}

@@ -1202,9 +1202,9 @@ func (app *App) loadFiles(logPath string) {
 				"-name", "*.[0-9]*", "-o",
 				"-name", "*.[0-9].*", "-o",
 				"-name", "*.pcap", "-o",
-				"-name", "*.pcap.*", "-o",
+				"-name", "*.pcap.gz", "-o",
 				"-name", "*.pcapng", "-o",
-				"-name", "*.pcapng.*",
+				"-name", "*.pcapng.gz",
 			)
 		} else {
 			// Загрузка системных журналов для Linux: все файлы, которые содержат log в расширение или названии (архивы включительно), а также расширение с цифрой (архивные) и pcap/pcapng
@@ -1216,9 +1216,10 @@ func (app *App) loadFiles(logPath string) {
 				"-name", "*.[0-9]*", "-o",
 				"-name", "*.[0-9].*", "-o",
 				"-name", "*.pcap", "-o",
-				"-name", "*.pcap.*", "-o",
+				"-name", "*.pcap", "-o",
+				"-name", "*.pcap.gz", "-o",
 				"-name", "*.pcapng", "-o",
-				"-name", "*.pcapng.*",
+				"-name", "*.pcapng.gz",
 			)
 		}
 		output, _ = cmd.Output()
@@ -1334,9 +1335,9 @@ func (app *App) loadFiles(logPath string) {
 			"-name", "*.log", "-o",
 			"-name", "*.asl", "-o",
 			"-name", "*.pcap", "-o",
-			"-name", "*.pcap.*", "-o",
+			"-name", "*.pcap.gz", "-o",
 			"-name", "*.pcapng", "-o",
-			"-name", "*.pcapng.*",
+			"-name", "*.pcapng.gz",
 			")",
 		)
 		output, _ = cmd.Output()
@@ -1367,9 +1368,9 @@ func (app *App) loadFiles(logPath string) {
 			"-type", "f",
 			"-name", "*.log", "-o",
 			"-name", "*.pcap", "-o",
-			"-name", "*.pcap.*", "-o",
+			"-name", "*.pcap.gz", "-o",
 			"-name", "*.pcapng", "-o",
-			"-name", "*.pcapng.*",
+			"-name", "*.pcapng.gz",
 		)
 		outputRootDir, err := cmdRootDir.Output()
 		// Добавляем содержимое директории /root/ в общий массив, если есть доступ

@@ -85,6 +85,8 @@ jobs:
       - name: Creat test data
         if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: |
+          echo -e "line 1\nline 2" | sudo tee /opt/test.log > /dev/null
+          sudo ls -lh /opt
           sudo tcpdump -i any -c 1 -w test.pcap
           gzip -c test.pcap > test.pcap.gz
           ls -lh
