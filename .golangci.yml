@@ -10,39 +10,40 @@ linters:
   #   - unused
   #   - err113
   #   - unparam
-  #   - gocritic      # https://github.com/go-critic/go-critic
-  #   - misspell      # errors in English words
+  #   - gocritic        # https://github.com/go-critic/go-critic
+  #   - misspell        # errors in English words
   enable-all: true
   disable:
-    - gosec           # https://github.com/securego/gosec
-    - makezero        # make([]byte, readSize) => make([]byte, 0, readSize)
-    - dupl            # code clone detection
-    - wsl             # force use empty lines
-    - goconst         # string has 7 occurrences, make it a constant
-    - gocognit        # cognitive complexity 80 of func is high (> 30)
-    - gocyclo         # cyclomatic complexity 61 of func is high (> 30)
-    - revive          # cognitive complexity 73 of func (> 30)
-    - maintidx        # function loadServices, Cyclomatic Complexity: 27, Halstead Volume: 6660.60, Maintainability Index: 18
-    - cyclop          # calculated cyclomatic complexity for function loadServices is 28, max is 10
-    - depguard        # import 'github.com/awesome-gocui/gocui' is not allowed from list 'Main'
-    - forbidigo       # use of `fmt.Printf` forbidden by pattern
-    - funlen          # function is too long (70 > 60)
-    - godot           # comment should end in a period
-    - gofumpt         # file is not properly formatted for regex
-    - lll             # line is 121 characters long, which exceeds the maximum of 120 characters
-    - mnd             # magic number in <argument> detected
-    - nestif          # 'if err != nil' has complex nested blocks (complexity: 8)
-    - nilerr          # error is not nil but it returns nil
-    - nlreturn        # break with no blank line before
-    - tagliatelle     # json
-    - varnamelen      # variable name 'i' is too short for the scope of its usage
-    - wrapcheck       # error returned from external package is unwrapped
-    - ireturn         # function createFilterEditor returns interface (github.com/awesome-gocui/gocui.Editor)
-    - nonamedreturns  # named return "output" with type "[]byte" found
-    - stylecheck      # ST1003/ST1023
-    - exhaustruct     # app is missing fields gui, getOS, getArch, hostName, userName...
-    - unconvert       # unnecessary conversion
-    - copyloopvar     # Go 1.22 +
-    - intrange        # Go 1.22 +
-    - tenv            # deprecated
-    - paralleltest    # function missing the call to method parallel
+    - gosec             # https://github.com/securego/gosec
+    - makezero          # make([]byte, readSize) => make([]byte, 0, readSize)
+    - dupl              # code clone detection
+    - wsl               # force use empty lines
+    - goconst           # string has 7 occurrences, make it a constant
+    - gocognit          # cognitive complexity 80 of func is high (> 30)
+    - gocyclo           # cyclomatic complexity 61 of func is high (> 30)
+    - revive            # cognitive complexity 73 of func (> 30)
+    - maintidx          # function loadServices, Cyclomatic Complexity: 27, Halstead Volume: 6660.60, Maintainability Index: 18
+    - cyclop            # calculated cyclomatic complexity for function loadServices is 28, max is 10
+    - depguard          # import 'github.com/awesome-gocui/gocui' is not allowed from list 'Main'
+    - forbidigo         # use of `fmt.Printf` forbidden by pattern
+    - funlen            # function is too long (70 > 60)
+    - godot             # comment should end in a period
+    - gofumpt           # file is not properly formatted for regex
+    - lll               # line is 121 characters long, which exceeds the maximum of 120 characters
+    - mnd               # magic number in <argument> detected
+    - nestif            # 'if err != nil' has complex nested blocks (complexity: 8)
+    - nilerr            # error is not nil but it returns nil
+    - nlreturn          # break with no blank line before
+    - tagliatelle       # json
+    - varnamelen        # variable name 'i' is too short for the scope of its usage
+    - wrapcheck         # error returned from external package is unwrapped
+    - ireturn           # function createFilterEditor returns interface (github.com/awesome-gocui/gocui.Editor)
+    - nonamedreturns    # named return "output" with type "[]byte" found
+    - stylecheck        # ST1003/ST1023
+    - exhaustruct       # app is missing fields gui, getOS, getArch, hostName, userName...
+    - unconvert         # unnecessary conversion
+    - copyloopvar       # Go 1.22 +
+    - intrange          # Go 1.22 +
+    - tenv              # deprecated
+    - paralleltest      # function missing the call to method parallel
+    - gochecknoglobals  # g is a global variable

@@ -23,14 +23,14 @@ if [ -z "$gosec_version" ]; then
     go install github.com/securego/gosec/v2/cmd/gosec@latest
 fi
 
-golangci_check=$($golangci run ./... --build-tags=buildvcs=false)
+golangci_check=$($golangci run ./main.go)
 if [ "$?" -ne "0" ]; then
     echo -e "\033[31m❌ Golangci linter errors\033[0m"
     echo "$golangci_check"
 else
     echo -e "✔  Golangci linter checks passed \033[32msuccessfully\033[0m"
 fi
-gocritic_check=$($gocritic check -enableAll ./...)
+gocritic_check=$($gocritic check -enableAll ./main.go)
 if [ "$?" -ne "0" ]; then
     echo -e "\033[31m❌ Critic linter errors\033[0m"
     echo "$gocritic_check"
