@@ -29,7 +29,7 @@ jobs:
           docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
           docker run -d --name TorAPI -p 8443:8443 lifailon/torapi:latest
 
-      - name: Create pcap files
+      - name: Create pcap files for Linux
         run: |
           sudo tcpdump -i any -c 1 -w test.pcap
           gzip -c test.pcap > test.pcap.gz
@@ -71,8 +71,18 @@ jobs:
           go mod verify
           go build -v ./...
 
+      - name: Create log files for Windows
+        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
+        run: |
+          New-Item -Path "$env:APPDATA\test" -Type Directory
+          "line test" | Out-File -FilePath "$env:APPDATA\test\test.log"
+          New-Item -Path "$env:LOCALAPPDATA\test" -Type Directory
+          "line test" | Out-File -FilePath "$env:LOCALAPPDATA\test\test.log"
+        shell: pwsh
+        continue-on-error: true
+
       - name: Run test in Windows
-        run: go test -v --run TestWinEvents -cover -coverprofile coverage-windows.out
+        run: go test -v --run TestWin* -cover -coverprofile coverage-windows.out
         continue-on-error: true
 
       - name: Create markdown report

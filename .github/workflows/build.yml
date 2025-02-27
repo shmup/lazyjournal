@@ -90,7 +90,7 @@ jobs:
           chmod +x test.sh
           bash test.sh 5 true
 
-      - name: Create pcap files
+      - name: Create pcap files for Linux
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'windows-2022' }}
         run: |
           sudo tcpdump -i any -c 1 -w test.pcap
@@ -106,17 +106,19 @@ jobs:
         run: sudo go test -v -cover
         continue-on-error: true
 
-      - name: Functions testing in Windows
+      - name: Create log files for Windows
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: |
           New-Item -Path "$env:APPDATA\test" -Type Directory
           "line test" | Out-File -FilePath "$env:APPDATA\test\test.log"
-          ls "$env:APPDATA\test\test.log"
-          cat "$env:APPDATA\test\test.log"
-          go test -v --run TestWin* -cover
-          ls
-          cat test-report.md
+          New-Item -Path "$env:LOCALAPPDATA\test" -Type Directory
+          "line test" | Out-File -FilePath "$env:LOCALAPPDATA\test\test.log"
         shell: pwsh
+        continue-on-error: true
+
+      - name: Functions testing in Windows
+        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
+        run: go test -v --run TestWin* -cover
         continue-on-error: true
 
       - name: Create markdown report

@@ -42,7 +42,7 @@ func TestWinFiles(t *testing.T) {
 		// {"Program Files", "ProgramFiles"},
 		// {"Program Files 86", "ProgramFiles86"},
 		// {"ProgramData", "ProgramData"},
-		// {"AppData/Local", "AppDataLocal"},
+		{"AppData/Local", "AppDataLocal"},
 		{"AppData/Roaming", "AppDataRoaming"},
 	}
 
