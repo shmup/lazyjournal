@@ -4,6 +4,7 @@
 
 <p align="center">
     <a href="https://github.com/Lifailon/lazyjournal/actions/workflows/build.yml"><img title="Actions Build"src="https://github.com/Lifailon/lazyjournal/actions/workflows/build.yml/badge.svg"></a>
+    <a href="https://raw.githubusercontent.com/wiki/Lifailon/lazyjournal/coverage.html"><img title="Go coverage report"src="https://raw.githubusercontent.com/wiki/Lifailon/lazyjournal/coverage.svg"></a>
     <a href="https://goreportcard.com/report/github.com/Lifailon/lazyjournal"><img src="https://goreportcard.com/badge/github.com/Lifailon/lazyjournal" alt="Go Report"></a>
     <a href="https://pkg.go.dev/github.com/Lifailon/lazyjournal"><img src="https://pkg.go.dev/badge/github.com/Lifailon/lazyjournal.svg" alt="Go Reference"></a>
     <a href="https://aur.archlinux.org/packages/lazyjournal"><img title="Arch Linux"src="https://img.shields.io/aur/version/lazyjournal?logo=arch-linux"></a>
@@ -12,7 +13,7 @@
 
 Terminal user interface for reading logs from `journalctl`, file system, Docker and Podman containers, as well Kubernetes pods for quick viewing and filtering with fuzzy find (like `fzf`), regex support (like `grep`) and coloring the output, written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
 
-This tool is inspired by and with love for [LazyDocker](https://github.com/jesseduffield/lazydocker) and [LazyGit](https://github.com/jesseduffield/lazygit), as well as is included in [Awesome-TUIs](https://github.com/rothgar/awesome-tuis) and [Awesome-Docker](https://github.com/veggiemonk/awesome-docker?tab=readme-ov-file#terminal-ui), check out other useful projects on the repository pages.
+This tool is inspired by and with love for [LazyDocker](https://github.com/jesseduffield/lazydocker) and [LazyGit](https://github.com/jesseduffield/lazygit), as well as is included in [Awesome-TUIs](https://github.com/rothgar/awesome-tuis?tab=readme-ov-file#development) and [Awesome-Docker](https://github.com/veggiemonk/awesome-docker?tab=readme-ov-file#terminal-ui), check out other useful projects on the repository pages.
 
 ![interface](/img/fuzzy.jpg)
 
@@ -27,7 +28,7 @@ This tool is inspired by and with love for [LazyDocker](https://github.com/jesse
 - Reading archived logs (`gz`, `xz` or `bz2` format), packet capture (`pcap` format) and Apple System Log (`asl` format).
 - Docker containers (including `timestamp` and `stderr`), Podman pods and the Docker Swarm services.
 - Kubernetes pods via `kubectl`
-- Windows Event (in test mode via `wevtutil`) and application logs from Windows file system.
+- Windows Event Logs (in test mode via `powershell` and reading via `wevtutil`) and application logs from Windows file system.
 - Filtering lists to find the desired journal.
 - Displays the currently selected log output in real-time.
 
@@ -56,9 +57,9 @@ List of supported systems and architectures in which functionality is checked:
 | OS        | amd64 | arm64 | Systems                                                                                                                          |
 | -         | -     | -     | -                                                                                                                                |
 | Linux     | ✔     |  ✔   | Raspberry Pi (`aarch64`), Arch Linux, Oracle Linux (RHEL-based in WSL environment), Ubuntu Server 20.04.6 (GLIBC 2.31) and above |
-| Darwin    | ✔     |  ✔   | macOS Sequoia 15.2 `x64` on MacBook and the `arm` in GitHub Actions                                                              |
+| Darwin    | ✔     |  ✔   | macOS Sequoia 15.2 `x64` on MacBook and the `arm64` in GitHub Actions                                                            |
 | BSD       | ✔     |       | OpenBSD 7.6 and FreeBSD 14.2                                                                                                     |
-| Windows   | ✔     |       | Windows 10 and Windows 11                                                                                                        |
+| Windows   | ✔     |       | Windows 10 and 11                                                                                                                |
 
 ### Unix-based
 
@@ -140,7 +141,18 @@ Check the source code on the linter using [golangci-lint](https://github.com/gol
 
 ```shell
 bash build.sh
+bash build.sh false # only linter check
 ```
+
+## Testing
+
+Checking functions and their performance:
+
+```shell
+go test -v
+```
+
+The test coverage report using CI Actions is available on the [Wiki](https://github.com/Lifailon/lazyjournal/wiki) page.
 
 ## Hotkeys
 
