@@ -109,8 +109,10 @@ jobs:
       - name: Functions testing in Windows
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: |
-          "line test" | Out-File -FilePath "$env:APPDATA\test.log" -Encoding utf8
-          ls "$env:APPDATA\test.log"
+          New-Item -Path "$env:APPDATA\test" -Type Directory
+          "line test" | Out-File -FilePath "$env:APPDATA\test\test.log"
+          ls "$env:APPDATA\test\test.log"
+          cat "$env:APPDATA\test\test.log"
           go test -v --run TestWin* -cover
           ls
           cat test-report.md
