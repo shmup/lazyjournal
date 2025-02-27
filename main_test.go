@@ -50,14 +50,13 @@ func TestWinFiles(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Заполняем базовые параметры структуры
 			app := &App{
-				selectPath:       tc.selectPath,
-				testMode:         true,
-				logViewCount:     "100000",
-				getOS:            "windows",
-				systemDisk:       "C",
-				userName:         "lifailon",
-				selectFilterMode: "fuzzy", // режим фильтрации
-				filterText:       "",      // текст для фильтрации
+				selectPath:   tc.selectPath,
+				testMode:     true,
+				logViewCount: "100000",
+				getOS:        "windows",
+				// Режим и текст для фильтрации
+				selectFilterMode: "fuzzy",
+				filterText:       "",
 				// Инициализируем переменные с регулярными выражениями
 				trimHttpRegex:        trimHttpRegex,
 				trimHttpsRegex:       trimHttpsRegex,
@@ -74,6 +73,20 @@ func TestWinFiles(t *testing.T) {
 				procRegex:            procRegex,
 				syslogUnitRegex:      syslogUnitRegex,
 			}
+
+			currentUser, _ := user.Current()
+			app.userName = currentUser.Username
+			if strings.Contains(app.userName, "\\") {
+				app.userName = strings.Split(app.userName, "\\")[1]
+			}
+			t.Log("Username: ", app.userName)
+			app.systemDisk = os.Getenv("SystemDrive")
+			if len(app.systemDisk) >= 1 {
+				app.systemDisk = string(app.systemDisk[0])
+			} else {
+				app.systemDisk = "C"
+			}
+			t.Log("System disk: ", app.systemDisk)
 
 			// (1) Заполняем массив из названий файлов и путей к ним
 			app.loadWinFiles(app.selectPath)
