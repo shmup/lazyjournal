@@ -109,10 +109,11 @@ jobs:
       - name: Functions testing in Windows
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: |
-          # go test -v --run TestWin* -cover
-          go test -v --run TestWinEvents -cover
-          ls -lh
+          Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command 'go test -v --run TestWin* -cover'" -Verb RunAs
+          # go test -v --run TestWinEvents -cover
+          ls
           cat test-report.md
+        shell: pwsh
         continue-on-error: true
 
       - name: Create markdown report
