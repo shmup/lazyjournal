@@ -1,4 +1,4 @@
-name: Merge coverage
+name: Merge coverage and update report
 
 on:
   workflow_dispatch:
@@ -85,8 +85,7 @@ jobs:
 
       - name: Create markdown report
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
-        run: |
-          Get-Content test-report.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+        run: Get-Content test-report.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
         shell: pwsh
         continue-on-error: true
 
