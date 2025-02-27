@@ -46,6 +46,12 @@ jobs:
         run: cat test-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
+      - name: Upload test summary report for Linux
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-report
+          path: test-report.md
+
       - name: Upload coverage report for Linux
         uses: actions/upload-artifact@v4
         with:
@@ -86,6 +92,12 @@ jobs:
         run: Get-Content test-report.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
         shell: pwsh
         continue-on-error: true
+
+      - name: Upload test summary report for Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-report
+          path: test-report.md
 
       - name: Upload coverage report for Windows
         uses: actions/upload-artifact@v4
@@ -148,15 +160,6 @@ jobs:
         with:
           name: merge-coverage
           path: merge-coverage.out
-
-      - name: Save summary report to file
-        run: cat "$GITHUB_STEP_SUMMARY" > summary-report.md
-
-      - name: Upload test summary report
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary-report
-          path: summary-report.md
 
       - name: Update merge coverage report in Wiki
         uses: ncruces/go-coverage-report@v0
