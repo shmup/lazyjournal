@@ -1283,11 +1283,7 @@ func (app *App) loadFiles(logPath string) {
 			"find", logPath,
 			"-type", "f",
 			"-name", "*.log", "-o",
-			"-name", "*.log.*", "-o",
-			"-name", "*.pcap", "-o",
-			"-name", "*.pcap.*", "-o",
-			"-name", "*.pcapng", "-o",
-			"-name", "*.pcapng.*",
+			"-name", "*.log.*",
 		)
 		output, _ = cmd.Output()
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -1337,12 +1333,11 @@ func (app *App) loadFiles(logPath string) {
 			"(",
 			"-name", "*.log", "-o",
 			"-name", "*.asl", "-o",
-			"-name", "*.pcap",
-			"-name", "*.pcap.*",
-			"-name", "*.pcapng",
+			"-name", "*.pcap", "-o",
+			"-name", "*.pcap.*", "-o",
+			"-name", "*.pcapng", "-o",
 			"-name", "*.pcapng.*",
 			")",
-			"-print",
 		)
 		output, _ = cmd.Output()
 		files := strings.Split(strings.TrimSpace(string(output)), "\n")

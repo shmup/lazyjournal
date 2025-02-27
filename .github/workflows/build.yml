@@ -82,6 +82,15 @@ jobs:
           }}
         run: docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
 
+      - name: Creat test data
+        if: ${{ github.event.inputs.testFunctions == 'true' }}
+        run: |
+          sudo tcpdump -i any -c 1 -w test.pcap
+          gzip -c test.pcap > test.pcap.gz
+          echo -e "line 1\nline 2" | sudo tee /opt/test.log > /dev/null
+
+        continue-on-error: true
+
       - name: Function and interface testing
         if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: sudo go test -v -cover
