@@ -1,10 +1,15 @@
 # Build
 /bin/
+*.exe
+
+# Packages
 /DEBIAN/
 /usr/
 *.snap
 *.deb
 *.rpm
-*.exe
+
+# Test reports
 *.log
 *report.md
+*.out

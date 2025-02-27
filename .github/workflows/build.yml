@@ -72,8 +72,8 @@ jobs:
 
       - name: Start docker container for test in Ubuntu
         if: ${{ 
-            (github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'macos-15') || 
-            (github.event.inputs.testInterface == 'true' && github.event.inputs.Distro != 'macos-15')
+            (github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022') || 
+            (github.event.inputs.testInterface == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022')
           }}
         run: |
           docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
