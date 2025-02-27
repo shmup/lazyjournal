@@ -1366,9 +1366,9 @@ func (app *App) loadFiles(logPath string) {
 			"find", "/root/",
 			"-type", "f",
 			"-name", "*.log", "-o",
-			"-name", "*.pcap",
-			"-name", "*.pcap.*",
-			"-name", "*.pcapng",
+			"-name", "*.pcap", "-o",
+			"-name", "*.pcap.*", "-o",
+			"-name", "*.pcapng", "-o",
 			"-name", "*.pcapng.*",
 		)
 		outputRootDir, err := cmdRootDir.Output()
