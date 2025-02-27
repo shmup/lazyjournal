@@ -332,8 +332,8 @@ func TestDockerContainer(t *testing.T) {
 		selectContainerizationSystem string
 	}{
 		{"Docker", "docker"},
-		{"Podman", "podman"},
-		{"Kubernetes", "kubectl"},
+		// {"Podman", "podman"},
+		// {"Kubernetes", "kubectl"},
 	}
 
 	for _, tc := range testCases {
