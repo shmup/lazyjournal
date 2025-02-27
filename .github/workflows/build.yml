@@ -109,8 +109,9 @@ jobs:
       - name: Functions testing in Windows
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: |
-          Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command 'go test -v --run TestWin* -cover'" -Verb RunAs
-          # go test -v --run TestWinEvents -cover
+          "line test" | Out-File -FilePath "$env:APPDATA\test.log" -Encoding utf8
+          ls "$env:APPDATA\test.log"
+          go test -v --run TestWin* -cover
           ls
           cat test-report.md
         shell: pwsh
