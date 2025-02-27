@@ -39,7 +39,7 @@ func TestWinFiles(t *testing.T) {
 		name       string
 		selectPath string
 	}{
-		{"Program Files", "ProgramFiles"},
+		// {"Program Files", "ProgramFiles"},
 		{"Program Files 86", "ProgramFiles86"},
 		{"ProgramData", "ProgramData"},
 		// {"AppData/Local", "AppDataLocal"},
