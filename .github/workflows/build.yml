@@ -110,6 +110,12 @@ jobs:
         if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: |
           Get-ChildItem -Path "C:\" -Force
+          $env:ProgramFiles
+          $env:ProgramData
+          $env:LOCALAPPDATA
+          $env:USERPROFILE
+          Get-ChildItem -Path $env:LOCALAPPDATA -Force -ErrorAction Ignore
+          Get-ChildItem -Path $env:USERPROFILE -Force -ErrorAction Ignore
           go test -v --run TestWinEvents -cover
         continue-on-error: true
 
@@ -119,7 +125,7 @@ jobs:
         continue-on-error: true
 
       - name: Update coverage report
-        if: ${{ github.event.inputs.testFunctions == 'true' }}
+        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'windows-2022' }}
         uses: ncruces/go-coverage-report@v0
         with:
           report: true
