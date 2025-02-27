@@ -87,6 +87,11 @@ jobs:
         run: sudo go test -v -cover
         continue-on-error: true
 
+      - name: Creat markdown report
+        if: ${{ github.event.inputs.testFunctions == 'true' }}
+        run: cat test-report.md >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
       - name: Update coverage report
         if: ${{ github.event.inputs.testFunctions == 'true' }}
         uses: ncruces/go-coverage-report@v0
@@ -94,30 +99,6 @@ jobs:
           report: true
           chart: true
           amend: true
-        continue-on-error: true
-
-      - name: Creat markdown report
-        if: ${{ github.event.inputs.testFunctions == 'true' }}
-        run: cat test-report.md >> $GITHUB_STEP_SUMMARY
-        continue-on-error: true
-
-      - name: Clone wiki repository
-        run: |
-          git clone https://github.com/${{ github.repository }}.wiki.git wiki
-          cd wiki
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-        continue-on-error: true
-
-      - name: Upload markdown report to Wiki
-        run: |
-          cp test-report.md wiki/Test-functions-report.md
-          cd wiki
-          git add Test-functions-report.md
-          git commit -m "update test functions report"
-          git push "https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
       - name: Install TMUX for macOS

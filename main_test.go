@@ -694,9 +694,9 @@ func TestMockInterface(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		if runtime.GOOS != "windows" {
 			app.setLogFilesListRight(g, v)
-			time.Sleep(5 * time.Second)
+			time.Sleep(10 * time.Second)
 			app.setLogFilesListRight(g, v)
-			time.Sleep(5 * time.Second)
+			time.Sleep(10 * time.Second)
 			app.setLogFilesListRight(g, v)
 			time.Sleep(5 * time.Second)
 			app.setLogFilesListRight(g, v)
