@@ -22,11 +22,7 @@ on:
         description: 'Linter checks'
         default: true
         type: boolean
-      testInterface:
-        description: 'Interface testing in TMUX'
-        default: true
-        type: boolean
-      testFunctions:
+      Test:
         description: 'Interface and functions testing'
         default: true
         type: boolean
@@ -71,27 +67,13 @@ jobs:
           gosec -severity=high ./...
 
       - name: Start docker container for test in Ubuntu
-        if: ${{ 
-            (github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022') || 
-            (github.event.inputs.testInterface == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022')
-          }}
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022' }}
         run: |
           docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
           docker run -d --name TorAPI -p 8443:8443 lifailon/torapi:latest
 
-      - name: Install TMUX for macOS
-        if: ${{ github.event.inputs.testInterface == 'true' && github.event.inputs.Distro == 'macos-15' }}
-        run: brew install tmux
-
-      - name: Interface testing in TMUX
-        if: ${{ github.event.inputs.testInterface == 'true' && github.event.inputs.Distro != 'windows-2022' }}
-        run: |
-          tmux -V
-          chmod +x test.sh
-          bash test.sh 5 true
-
       - name: Create pcap files for Linux
-        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'windows-2022' }}
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'windows-2022' }}
         run: |
           sudo tcpdump -i any -c 1 -w test.pcap
           gzip -c test.pcap > test.pcap.gz
@@ -102,17 +84,17 @@ jobs:
         continue-on-error: true
 
       - name: Interface and functions testing in Linux
-        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'windows-2022' }}
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'windows-2022' }}
         run: sudo go test -v -cover
         continue-on-error: true
 
       - name: Create markdown report in Linux
-        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'windows-2022' }}
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'windows-2022' }}
         run: cat test-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
       - name: Create log file for Windows
-        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: |
           New-Item -Path "$env:APPDATA\test" -Type Directory
           "line test" | Out-File -FilePath "$env:APPDATA\test\test.log"
@@ -120,12 +102,12 @@ jobs:
         continue-on-error: true
 
       - name: Functions testing in Windows
-        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: go test -v --run TestWin* -cover
         continue-on-error: true
 
       - name: Create markdown report in Windows
-        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: Get-Content test-report.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
         shell: pwsh
         continue-on-error: true

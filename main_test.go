@@ -39,11 +39,11 @@ func TestWinFiles(t *testing.T) {
 		name       string
 		selectPath string
 	}{
-		// {"Program Files", "ProgramFiles"},
-		// {"Program Files 86", "ProgramFiles86"},
-		// {"ProgramData", "ProgramData"},
-		// {"AppData/Local", "AppDataLocal"},
-		{"AppData/Roaming", "AppDataRoaming"}, // Works in CI Actions
+		{"Program Files", "ProgramFiles"},
+		{"Program Files 86", "ProgramFiles86"},
+		{"ProgramData", "ProgramData"},
+		{"AppData/Local", "AppDataLocal"},
+		{"AppData/Roaming", "AppDataRoaming"},
 	}
 
 	for _, tc := range testCases {
@@ -79,14 +79,17 @@ func TestWinFiles(t *testing.T) {
 			if strings.Contains(app.userName, "\\") {
 				app.userName = strings.Split(app.userName, "\\")[1]
 			}
-			t.Log("Username: ", app.userName)
 			app.systemDisk = os.Getenv("SystemDrive")
 			if len(app.systemDisk) >= 1 {
 				app.systemDisk = string(app.systemDisk[0])
 			} else {
 				app.systemDisk = "C"
 			}
-			t.Log("System disk: ", app.systemDisk)
+
+			// Пропускаем тесты для CI
+			if app.userName == "runneradmin" && tc.selectPath != "AppDataRoaming" {
+				t.Skip("Skip test for", app.userName, "in CI")
+			}
 
 			// (1) Заполняем массив из названий файлов и путей к ним
 			app.loadWinFiles(app.selectPath)
@@ -329,8 +332,8 @@ func TestDockerContainer(t *testing.T) {
 		selectContainerizationSystem string
 	}{
 		{"Docker", "docker"},
-		// {"Podman", "podman"},
-		// {"Kubernetes", "kubectl"},
+		{"Podman", "podman"},
+		{"Kubernetes", "kubectl"},
 	}
 
 	for _, tc := range testCases {
