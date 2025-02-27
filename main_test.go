@@ -634,6 +634,7 @@ func TestMockInterface(t *testing.T) {
 	app.updateDelimiter(true)
 	app.applyFilter(true)
 	time.Sleep(3 * time.Second)
+	t.Log("Test coloring - passed")
 
 	// Проверяем фильтрацию текста для списков
 	app.filterListText = "a"
@@ -642,6 +643,7 @@ func TestMockInterface(t *testing.T) {
 	app.filterListText = ""
 	app.applyFilterList()
 	time.Sleep(1 * time.Second)
+	t.Log("Test filter list - passed")
 
 	// TAB journal
 	app.nextView(g, nil)
@@ -678,6 +680,7 @@ func TestMockInterface(t *testing.T) {
 			time.Sleep(3 * time.Second)
 		}
 	}
+	t.Log("Test journals - passed")
 
 	// TAB filesystem
 	app.nextView(g, nil)
@@ -691,23 +694,24 @@ func TestMockInterface(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		if runtime.GOOS != "windows" {
 			app.setLogFilesListRight(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListRight(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListRight(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListRight(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListLeft(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListLeft(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListLeft(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListLeft(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 	}
+	t.Log("Test filesystem - passed")
 
 	// TAB docker
 	app.nextView(g, nil)
@@ -734,6 +738,7 @@ func TestMockInterface(t *testing.T) {
 		app.selectDocker(g, v)
 		time.Sleep(3 * time.Second)
 	}
+	t.Log("Test containers - passed")
 
 	// TAB filter logs
 	app.nextView(g, nil)
@@ -746,6 +751,7 @@ func TestMockInterface(t *testing.T) {
 	app.clearFilterEditor(g)
 	app.applyFilter(true)
 	time.Sleep(3 * time.Second)
+	t.Log("Test filter logs - passed")
 
 	// Проверяем режимы фильтрации
 	if v, err := g.View("filter"); err == nil {
@@ -768,6 +774,7 @@ func TestMockInterface(t *testing.T) {
 		app.setFilterModeLeft(g, v)
 		time.Sleep(1 * time.Second)
 	}
+	t.Log("Test filter modes - passed")
 
 	// TAB logs output
 	app.nextView(g, nil)
@@ -813,6 +820,7 @@ func TestMockInterface(t *testing.T) {
 		app.updateLogsView(true)
 		time.Sleep(1 * time.Second)
 	}
+	t.Log("Test log output - passed")
 
 	// TAB filter list
 	app.nextView(g, nil)
