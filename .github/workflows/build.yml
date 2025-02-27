@@ -80,15 +80,17 @@ jobs:
             (github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'macos-15') || 
             (github.event.inputs.testInterface == 'true' && github.event.inputs.Distro != 'macos-15')
           }}
-        run: docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
+        run: |
+          docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
+          docker run -d --name TorAPI -p 8443:8443 lifailon/torapi:latest
 
-      - name: Creat test data
+      - name: Create pcap file
         if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: |
-          echo -e "line 1\nline 2" | sudo tee /opt/test.log > /dev/null
-          sudo ls -lh /opt
           sudo tcpdump -i any -c 1 -w test.pcap
           gzip -c test.pcap > test.pcap.gz
+          sudo tcpdump -i any -c 1 -w test.pcapng
+          gzip -c test.pcapng > test.pcapng.gz
           ls -lh
 
         continue-on-error: true
@@ -98,7 +100,7 @@ jobs:
         run: sudo go test -v -cover
         continue-on-error: true
 
-      - name: Creat markdown report
+      - name: Create markdown report
         if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: cat test-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true

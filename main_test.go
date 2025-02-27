@@ -805,7 +805,7 @@ func TestMockInterface(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		app.setCountLogViewUp(g, v)
 		time.Sleep(1 * time.Second)
-		app.setCountLogViewDown(g, v)
+		app.setCountLogViewUp(g, v)
 		time.Sleep(1 * time.Second)
 		// UP output
 		app.scrollUpLogs(1)
