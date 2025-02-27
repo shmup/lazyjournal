@@ -14,17 +14,17 @@ on:
           - 'ubuntu-24.04'
           - 'macos-15'
           - 'windows-2022'
-      Binary:
-        description: 'Build binary'
-        default: false
-        type: boolean
       Linter:
         description: 'Linter checks'
-        default: true
+        default: false
         type: boolean
       Test:
         description: 'Interface and functions testing'
-        default: true
+        default: false
+        type: boolean
+      Binary:
+        description: 'Build binary'
+        default: false
         type: boolean
 
 jobs:

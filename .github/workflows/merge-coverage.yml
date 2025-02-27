@@ -148,7 +148,16 @@ jobs:
         with:
           name: merge-coverage
           path: merge-coverage.out
-      
+
+      - name: Save summary report to file
+        run: echo "$GITHUB_STEP_SUMMARY" > summary-report.md
+
+      - name: Upload test summary report
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-report
+          path: summary-report.md
+
       - name: Update merge coverage report in Wiki
         uses: ncruces/go-coverage-report@v0
         with:
