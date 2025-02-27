@@ -22,12 +22,12 @@ on:
         description: 'Linter checks'
         default: true
         type: boolean
-      testFunctions:
-        description: 'Function and interface testing'
-        default: true
-        type: boolean
       testInterface:
         description: 'Interface testing in TMUX'
+        default: true
+        type: boolean
+      testFunctions:
+        description: 'Interface and functions testing'
         default: true
         type: boolean
 
@@ -43,11 +43,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 1.23
-
-      - name: Check versions
-        run: |
-          go version
-          echo "GLIBC version: $(ldd --version | head -n 1 | sed -r 's/.+\)\s//')"
 
       - name: Install dependencies
         run: |
@@ -84,8 +79,19 @@ jobs:
           docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
           docker run -d --name TorAPI -p 8443:8443 lifailon/torapi:latest
 
-      - name: Create pcap file
-        if: ${{ github.event.inputs.testFunctions == 'true' }}
+      - name: Install TMUX for macOS
+        if: ${{ github.event.inputs.testInterface == 'true' && github.event.inputs.Distro == 'macos-15' }}
+        run: brew install tmux
+
+      - name: Interface testing in TMUX
+        if: ${{ github.event.inputs.testInterface == 'true' && github.event.inputs.Distro != 'windows-2022' }}
+        run: |
+          tmux -V
+          chmod +x test.sh
+          bash test.sh 5 true
+
+      - name: Create pcap files
+        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'windows-2022' }}
         run: |
           sudo tcpdump -i any -c 1 -w test.pcap
           gzip -c test.pcap > test.pcap.gz
@@ -95,9 +101,14 @@ jobs:
 
         continue-on-error: true
 
-      - name: Function and interface testing
-        if: ${{ github.event.inputs.testFunctions == 'true' }}
+      - name: Interface and functions testing in Linux
+        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'windows-2022' }}
         run: sudo go test -v -cover
+        continue-on-error: true
+
+      - name: Interface and functions testing in Windows
+        if: ${{ github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro == 'windows-2022' }}
+        run: go test -v --run TestWin* -cover
         continue-on-error: true
 
       - name: Create markdown report
@@ -113,17 +124,6 @@ jobs:
           chart: true
           amend: true
         continue-on-error: true
-
-      - name: Install TMUX for macOS
-        if: ${{ github.event.inputs.testInterface == 'true' && github.event.inputs.Distro == 'macos-15' }}
-        run: brew install tmux
-
-      - name: Interface testing in TMUX
-        if: ${{ github.event.inputs.testInterface == 'true' }}
-        run: |
-          tmux -V
-          chmod +x test.sh
-          bash test.sh 5 true
 
       - name: Build binaries
         if: ${{ github.event.inputs.Binary == 'true' }}
