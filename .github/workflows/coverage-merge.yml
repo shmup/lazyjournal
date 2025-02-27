@@ -1,4 +1,4 @@
-name: CI
+name: Coverage
 
 on:
   workflow_dispatch:
@@ -25,16 +25,11 @@ jobs:
           go build -v ./...
 
       - name: Start docker container for test in Ubuntu
-        if: ${{ 
-            (github.event.inputs.testFunctions == 'true' && github.event.inputs.Distro != 'macos-15') || 
-            (github.event.inputs.testInterface == 'true' && github.event.inputs.Distro != 'macos-15')
-          }}
         run: |
           docker run -d --name pinguem -p 8085:8085 -p 3005:3005 lifailon/pinguem:latest
           docker run -d --name TorAPI -p 8443:8443 lifailon/torapi:latest
 
       - name: Create pcap files
-        if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: |
           sudo tcpdump -i any -c 1 -w test.pcap
           gzip -c test.pcap > test.pcap.gz
@@ -44,12 +39,10 @@ jobs:
         continue-on-error: true
 
       - name: Run test in Linux
-        if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: sudo go test -v -cover -coverprofile coverage-linux.out
         continue-on-error: true
 
       - name: Create markdown report
-        if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: cat test-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
@@ -83,7 +76,6 @@ jobs:
         continue-on-error: true
 
       - name: Create markdown report
-        if: ${{ github.event.inputs.testFunctions == 'true' }}
         run: cat test-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
