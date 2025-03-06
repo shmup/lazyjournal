@@ -2,9 +2,11 @@
 
 go fmt ./...        # Formatting code
 go vet ./...        # Analyzing code for errors
+go get ./...        # Download all dependencies from go.mod
 go mod tidy         # Removal of unused and installing missing dependencies
 go mod verify       # Checking dependencies
 go build -v ./...   # Checking code compilation
+go get -u ./...     # Update dependencies
 
 golangci=$(echo $(go env GOPATH)/bin/golangci-lint)
 gocritic=$(echo $(go env GOPATH)/bin/gocritic)
