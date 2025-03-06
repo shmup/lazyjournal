@@ -190,7 +190,14 @@ func (app *App) showAudit() {
 	auditText = append(auditText, "  os: "+app.getOS)
 	auditText = append(auditText, "  arch: "+app.getArch)
 
+	currentUser, _ := user.Current()
+	app.userName = currentUser.Username
+	if strings.Contains(app.userName, "\\") {
+		app.userName = strings.Split(app.userName, "\\")[1]
+	}
+
 	if app.getOS == "windows" {
+		// Windows Event
 		app.loadWinEvents()
 		auditText = append(auditText, "winEvent:")
 		lenLogs := fmt.Sprint(len(app.journals))
@@ -202,11 +209,6 @@ func (app *App) showAudit() {
 			app.systemDisk = string(app.systemDisk[0])
 		} else {
 			app.systemDisk = "C"
-		}
-		currentUser, _ := user.Current()
-		app.userName = currentUser.Username
-		if strings.Contains(app.userName, "\\") {
-			app.userName = strings.Split(app.userName, "\\")[1]
 		}
 		auditText = append(auditText, "fileSystem:")
 		auditText = append(auditText, "  systemDisk: "+app.systemDisk)
@@ -251,7 +253,52 @@ func (app *App) showAudit() {
 		// Ожидаем завершения всех горутин
 		wg.Wait()
 	} else {
-		// linux/darwin
+		// systemd/journald
+		auditText = append(auditText, "systemd:")
+		auditText = append(auditText, "  journald:")
+		csCheck := exec.Command("journalctl", "--version")
+		_, err := csCheck.Output()
+		if err == nil {
+			auditText = append(auditText, "  - installed: true")
+			auditText = append(auditText, "    journals:")
+			journalList := []struct {
+				name        string
+				journalName string
+			}{
+				{"Unit list", "services"},
+				{"System journals", "UNIT"},
+				{"User journals", "USER_UNIT"},
+				{"Kernel boot", "kernel"},
+			}
+			for _, journal := range journalList {
+				app.loadServices(journal.journalName)
+				lenJournals := fmt.Sprint(len(app.journals))
+				auditText = append(auditText, "    - name: "+journal.name)
+				auditText = append(auditText, "      count: "+lenJournals)
+			}
+		} else {
+			auditText = append(auditText, "  - installed: false")
+		}
+		// Filesystem
+		auditText = append(auditText, "fileSystem:")
+		auditText = append(auditText, "  username: "+app.userName)
+		auditText = append(auditText, "  files:")
+		paths := []struct {
+			name string
+			path string
+		}{
+			{"System var logs", "/var/log/"},
+			{"Optional package logs", "/opt/"},
+			{"Users home logs", "/home/"},
+			{"Process descriptor logs", "descriptor"},
+		}
+		for _, path := range paths {
+			app.loadFiles(path.path)
+			lenLogFiles := fmt.Sprint(len(app.logfiles))
+			auditText = append(auditText, "  - name: "+path.name)
+			auditText = append(auditText, "    path: "+path.path)
+			auditText = append(auditText, "    count: "+lenLogFiles)
+		}
 	}
 	auditText = append(auditText, "containerization: ")
 	auditText = append(auditText, "  system: ")
@@ -686,6 +733,7 @@ func parseDateFromName(name string) time.Time {
 
 // Функция для загрузки списка журналов служб или загрузок системы из journalctl
 func (app *App) loadServices(journalName string) {
+	app.journals = nil
 	// Проверка, что в системе установлен/поддерживается утилита journalctl
 	checkJournald := exec.Command("journalctl", "--version")
 	// Проверяем на ошибки (очищаем список служб, отключаем курсор и выводим ошибку)
@@ -700,7 +748,7 @@ func (app *App) loadServices(journalName string) {
 		return
 	}
 	if err != nil && app.testMode {
-		log.Fatal("systemd-journald not supported")
+		log.Print("Error: systemd-journald not supported")
 	}
 	switch {
 	case journalName == "services":
@@ -714,7 +762,7 @@ func (app *App) loadServices(journalName string) {
 				app.journalListFrameColor = gocui.ColorRed
 				vError.FrameColor = app.journalListFrameColor
 				vError.Highlight = false
-				fmt.Fprintln(vError, "\033[31mAccess denied in systemd (systemctl)\033[0m")
+				fmt.Fprintln(vError, "\033[31mAccess denied in systemd via systemctl\033[0m")
 				return
 			}
 			v, _ := app.gui.View("services")
@@ -725,7 +773,7 @@ func (app *App) loadServices(journalName string) {
 			v.Highlight = true
 		}
 		if err != nil && app.testMode {
-			log.Fatal("Access denied in systemd (systemctl)")
+			log.Print("Error: access denied in systemd via systemctl")
 		}
 		// Чтение данных в формате JSON
 		var units []map[string]interface{}
@@ -803,7 +851,7 @@ func (app *App) loadServices(journalName string) {
 			}
 		}
 		if err != nil && app.testMode {
-			log.Fatal("Error getting boot information from journald")
+			log.Print("Error: getting boot information from journald")
 		}
 		// Структура для парсинга JSON
 		type BootInfo struct {
@@ -884,7 +932,7 @@ func (app *App) loadServices(journalName string) {
 				app.journalListFrameColor = gocui.ColorRed
 				vError.FrameColor = app.journalListFrameColor
 				vError.Highlight = false
-				fmt.Fprintln(vError, "\033[31mError getting services from journald (journalctl)\033[0m")
+				fmt.Fprintln(vError, "\033[31mError getting services from journald via journalctl\033[0m")
 				return
 			} else {
 				vError, _ := app.gui.View("services")
@@ -896,7 +944,7 @@ func (app *App) loadServices(journalName string) {
 			}
 		}
 		if err != nil && app.testMode {
-			log.Fatal("Error getting services from journald (journalctl)")
+			log.Print("Error: getting services from journald via journalctl")
 		}
 		// Создаем массив (хеш-таблица с доступом по ключу) для уникальных имен служб
 		serviceMap := make(map[string]bool)
@@ -926,6 +974,7 @@ func (app *App) loadServices(journalName string) {
 
 // Функция для загрузки списка всех журналов событий Windows через PowerShell
 func (app *App) loadWinEvents() {
+	app.journals = nil
 	// Получаем список, игнорируем ошибки, фильтруем пустые журналы, забираем нужные параметры, сортируем и выводим в формате JSON
 	cmd := exec.Command("powershell", "-Command",
 		"Get-WinEvent -ListLog * -ErrorAction Ignore | "+
@@ -1158,7 +1207,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool) {
 			return
 		}
 		if err != nil && app.testMode {
-			log.Fatal("Error getting kernal logs: ", err)
+			log.Print("Error: getting kernal logs. ", err)
 		}
 		// Для юнитов systemd
 	default:
@@ -1176,7 +1225,7 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool) {
 			return
 		}
 		if err != nil && app.testMode {
-			log.Fatal("Error getting journald logs: ", err)
+			log.Print("Error: getting journald logs.  ", err)
 		}
 	}
 	// Сохраняем строки журнала в массив
@@ -1287,6 +1336,7 @@ func (app *App) loadWinEventLog(eventName string) (output []byte) {
 // ---------------------------------------- Filesystem ----------------------------------------
 
 func (app *App) loadFiles(logPath string) {
+	app.logfiles = nil
 	var output []byte
 	switch {
 	case logPath == "descriptor":
@@ -1320,7 +1370,7 @@ func (app *App) loadFiles(logPath string) {
 			}
 		} else {
 			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
-				log.Fatal("Permission denied (files not found)")
+				log.Print("Error: permission denied (files not found from descriptor)")
 			}
 		}
 		// Очищаем массив перед добавлением отфильтрованных файлов
@@ -1390,7 +1440,7 @@ func (app *App) loadFiles(logPath string) {
 			}
 		} else {
 			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
-				log.Fatal("Permission denied (files not found)")
+				log.Print("Error: files not found in /var/log")
 			}
 		}
 		// Добавляем пути по умолчанию для /var/log
@@ -1452,7 +1502,7 @@ func (app *App) loadFiles(logPath string) {
 			}
 		} else {
 			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
-				log.Fatal("Files not found")
+				log.Print("Error: files not found in /opt/")
 			}
 		}
 	default:
@@ -1490,7 +1540,7 @@ func (app *App) loadFiles(logPath string) {
 				vError, _ := app.gui.View("varLogs")
 				vError.Clear()
 				vError.Highlight = false
-				fmt.Fprintln(vError, "\033[32mNo logs available\033[0m")
+				fmt.Fprintln(vError, "\033[32mFiles not found\033[0m")
 				return
 			} else {
 				vError, _ := app.gui.View("varLogs")
@@ -1502,7 +1552,7 @@ func (app *App) loadFiles(logPath string) {
 			}
 		} else {
 			if len(files) == 0 || (len(files) == 1 && files[0] == "") {
-				log.Fatal("No logs available")
+				log.Print("Error: files not found in home directories")
 			}
 		}
 		// Получаем содержимое файлов из домашнего каталога пользователя root
@@ -1694,7 +1744,7 @@ func (app *App) loadWinFiles(logPath string) {
 		}
 	} else {
 		if len(files) == 0 || (len(files) == 1 && files[0] == "") {
-			log.Fatal("Permission denied (files not found)")
+			log.Print("Error: files not found in ", logPath)
 		}
 	}
 	serviceMap := make(map[string]bool)
@@ -1905,7 +1955,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool) {
 				return
 			}
 			if stringErrors != "nil" && app.testMode {
-				log.Fatal("Error: ", stringErrors)
+				log.Print("Error: ", stringErrors)
 			}
 			app.currentLogLines = strings.Split(string(decodedOutput), "\n")
 		} else {
@@ -1922,7 +1972,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool) {
 					return
 				}
 				if err != nil && app.testMode {
-					log.Fatal("Error reading log using syslog tool in ASL (Apple System Log) format. Error: ", err)
+					log.Print("Error: reading log using syslog tool in ASL (Apple System Log) format. ", err)
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 			// Читаем журналы Packet Capture в формате pcap/pcapng
@@ -1936,7 +1986,7 @@ func (app *App) loadFileLogs(logName string, newUpdate bool) {
 					return
 				}
 				if err != nil && app.testMode {
-					log.Fatal("Error reading log using tcpdump tool. Error: ", err)
+					log.Print("Error: reading log using tcpdump tool. ", err)
 				}
 				app.currentLogLines = strings.Split(string(output), "\n")
 			// Packet Filter (PF) Firewall OpenBSD
@@ -2259,6 +2309,7 @@ func (app *App) loadWinFileLog(filePath string) (output []byte, stringErrors str
 // ---------------------------------------- Docker/Podman/k8s ----------------------------------------
 
 func (app *App) loadDockerContainer(containerizationSystem string) {
+	app.dockerContainers = nil
 	// Получаем версию для проверки, что система контейнеризации установлена
 	cmd := exec.Command(containerizationSystem, "version")
 	_, err := cmd.Output()
@@ -2272,7 +2323,7 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 		return
 	}
 	if err != nil && app.testMode {
-		log.Fatal(containerizationSystem + " not installed (environment not found)")
+		log.Print("Error:", containerizationSystem+" not installed (environment not found)")
 	}
 	if containerizationSystem == "kubectl" {
 		// Получаем список подов из k8s
@@ -2307,7 +2358,7 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 		}
 	}
 	if err != nil && app.testMode {
-		log.Fatal("Access denied or " + containerizationSystem + " not running")
+		log.Print("Error: access denied or " + containerizationSystem + " not running")
 	}
 	containers := strings.Split(strings.TrimSpace(string(output)), "\n")
 	// Проверяем, что список контейнеров не пустой
@@ -2500,11 +2551,11 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool) {
 			if err != nil && !app.testMode {
 				v, _ := app.gui.View("logs")
 				v.Clear()
-				fmt.Fprintln(v, "\033[31mError reading log:", err, "\033[0m")
+				fmt.Fprintln(v, "\033[31mError reading log (tail):", err, "\033[0m")
 				return
 			}
 			if err != nil && app.testMode {
-				log.Fatal("Error reading log: ", err)
+				log.Print("Error: reading log via tail. ", err)
 			}
 			// Разбиваем строки на массив
 			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -2556,7 +2607,7 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool) {
 			return
 		}
 		if err != nil && app.testMode {
-			log.Fatal("Error getting logs from ", containerName, " (id:", containerId, ")", " container. Error: ", err)
+			log.Print("Error: getting logs from ", containerName, " (id:", containerId, ")", " container. Error: ", err)
 		}
 		app.currentLogLines = strings.Split(string(output), "\n")
 	}
@@ -2719,7 +2770,7 @@ func (app *App) applyFilter(color bool) {
 					return
 				}
 				if err != nil && !app.testMode {
-					log.Fatal("Error regex syntax")
+					log.Print("Error: regex syntax")
 					return
 				}
 			}
