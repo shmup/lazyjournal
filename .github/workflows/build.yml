@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       Distro:
-        description: 'Select a distribution' # https://github.com/actions/runner-images
+        description: 'Select runner image' # https://github.com/actions/runner-images
         required: true
         default: 'ubuntu-20.04'
         type: choice
@@ -19,7 +19,7 @@ on:
         default: false
         type: boolean
       Test:
-        description: 'Interface and functions testing'
+        description: 'Unit testing'
         default: false
         type: boolean
       Binary:
@@ -73,7 +73,7 @@ jobs:
           docker run -d --name TorAPI -p 8443:8443 lifailon/torapi:latest
 
       - name: Create pcap files for Linux
-        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'windows-2022' }}
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022' }}
         run: |
           sudo tcpdump -i any -c 1 -w test.pcap
           gzip -c test.pcap > test.pcap.gz
@@ -81,15 +81,23 @@ jobs:
           gzip -c test.pcapng > test.pcapng.gz
           ls -lh
 
-        continue-on-error: true
-
-      - name: Interface and functions testing in Linux
-        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'windows-2022' }}
+      - name: Unit testing (all functions and mock interface) in Linux
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022' }}
         run: sudo go test -v -cover
         continue-on-error: true
 
       - name: Create markdown report in Linux
-        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'windows-2022' }}
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022' }}
+        run: cat test-report.md >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      - name: Unit testing (files, flags and run main interface) in macOS
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'macos-15' }}
+        run: sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface" -cover
+        continue-on-error: true
+
+      - name: Create markdown report in macOS
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'macos-15' }}
         run: cat test-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
@@ -101,9 +109,9 @@ jobs:
         shell: pwsh
         continue-on-error: true
 
-      - name: Functions testing in Windows
+      - name: Unit testing (events, files, flags and run main interface) in Windows
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
-        run: go test -v --run TestWin* -cover
+        run: go test -v --run "TestWin*|TestFlags|TestMainInterface" -cover
         continue-on-error: true
 
       - name: Create markdown report in Windows

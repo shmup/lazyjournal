@@ -226,6 +226,11 @@ func TestUnixFiles(t *testing.T) {
 				syslogUnitRegex:      syslogUnitRegex,
 			}
 
+			// Пропускаем тесты в macOS
+			if runtime.GOOS == "darwin" && tc.selectPath != "/var/log/" {
+				t.Skip("Skip test for macOS in CI")
+			}
+
 			app.loadFiles(app.selectPath)
 			if len(app.logfiles) == 0 {
 				t.Errorf("File list is null")
@@ -453,10 +458,11 @@ func TestFilterColor(t *testing.T) {
 	}
 }
 
-func TestFlag(t *testing.T) {
+func TestFlags(t *testing.T) {
 	app := &App{}
 	showHelp()
 	app.showVersion()
+	app.showAudit()
 }
 
 func TestMainInterface(t *testing.T) {
