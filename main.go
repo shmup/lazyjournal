@@ -149,10 +149,11 @@ func showHelp() {
 	fmt.Println("    lazyjournal                Run interface")
 	fmt.Println("    lazyjournal --help, -h     Show help")
 	fmt.Println("    lazyjournal --version, -v  Show version")
+	fmt.Println("    lazyjournal --audit, -a  	Show audit information")
 }
 
 func (app *App) showVersion() {
-	fmt.Println("Version:", "0.7.4")
+	fmt.Println("Version:", "0.7.5")
 	data, err := os.ReadFile("/etc/os-release")
 	// Если ошибка при чтении файла, то возвращаем только название ОС
 	if err != nil {
@@ -179,6 +180,142 @@ func (app *App) showVersion() {
 		}
 	}
 	fmt.Println("If you have problems with the application, please open issue: https://github.com/Lifailon/lazyjournal/issues")
+}
+
+func (app *App) showAudit() {
+	var auditText []string
+	app.testMode = true
+
+	auditText = append(auditText, "system:")
+	auditText = append(auditText, "  os: "+app.getOS)
+	auditText = append(auditText, "  arch: "+app.getArch)
+
+	if app.getOS == "windows" {
+		app.loadWinEvents()
+		auditText = append(auditText, "winEvent:")
+		lenLogs := fmt.Sprint(len(app.journals))
+		auditText = append(auditText, "  logs: ")
+		auditText = append(auditText, "  - count: "+lenLogs)
+		// Filesystem
+		app.systemDisk = os.Getenv("SystemDrive")
+		if len(app.systemDisk) >= 1 {
+			app.systemDisk = string(app.systemDisk[0])
+		} else {
+			app.systemDisk = "C"
+		}
+		currentUser, _ := user.Current()
+		app.userName = currentUser.Username
+		if strings.Contains(app.userName, "\\") {
+			app.userName = strings.Split(app.userName, "\\")[1]
+		}
+		auditText = append(auditText, "fileSystem:")
+		auditText = append(auditText, "  systemDisk: "+app.systemDisk)
+		auditText = append(auditText, "  username: "+app.userName)
+		auditText = append(auditText, "  files:")
+		paths := []struct {
+			fullPath string
+			path     string
+		}{
+			{"Program Files", "ProgramFiles"},
+			{"Program Files (x86)", "ProgramFiles86"},
+			{"ProgramData", "ProgramData"},
+			{"/AppData/Local", "AppDataLocal"},
+			{"/AppData/Roaming", "AppDataRoaming"},
+		}
+		// Создаем группу для ожидания выполнения всех горутин
+		var wg sync.WaitGroup
+		// Мьютекс для безопасного доступа к переменной auditText
+		var mu sync.Mutex
+		for _, path := range paths {
+			// Увеличиваем счетчик горутин
+			wg.Add(1)
+			go func(path struct{ fullPath, path string }) {
+				// Отнимаем счетчик горутин при завершении выполнения горутины
+				defer wg.Done()
+				var fullPath string
+				if strings.HasPrefix(path.fullPath, "Program") {
+					fullPath = "\"" + app.systemDisk + ":/" + path.fullPath + "\""
+				} else {
+					fullPath = "\"" + app.systemDisk + ":/Users/" + app.userName + path.fullPath + "\""
+				}
+				app.loadWinFiles(path.path)
+				lenLogFiles := fmt.Sprint(len(app.logfiles))
+				// Блокируем доступ на завись в переменную auditText
+				mu.Lock()
+				auditText = append(auditText, "  - path: "+fullPath)
+				auditText = append(auditText, "    count: "+lenLogFiles)
+				// Разблокировать мьютекс
+				mu.Unlock()
+			}(path)
+		}
+		// Ожидаем завершения всех горутин
+		wg.Wait()
+	} else {
+		// linux/darwin
+	}
+	auditText = append(auditText, "containerization: ")
+	auditText = append(auditText, "  system: ")
+	containerizationSystems := []string{
+		"docker",
+		"podman",
+		"kubernetes",
+	}
+	for _, cs := range containerizationSystems {
+		auditText = append(auditText, "  - name: "+cs)
+		if cs == "kubernetes" {
+			csCheck := exec.Command("kubectl", "version")
+			output, _ := csCheck.Output()
+			// По умолчанию у version код возврата всегда 1, по этому проверяем вывод
+			if strings.Contains(string(output), "Version:") {
+				auditText = append(auditText, "    installed: true")
+				// Преобразуем байты в строку и обрезаем пробелы
+				csVersion := strings.TrimSpace(string(output))
+				// Удаляем текст до номера версии
+				csVersion = strings.Split(csVersion, "Version: ")[1]
+				// Забираем первую строку
+				csVersion = strings.Split(csVersion, "\n")[0]
+				auditText = append(auditText, "    version: "+csVersion)
+				cmd := exec.Command(
+					cs, "get", "pods", "-o",
+					"jsonpath={range .items[*]}{.metadata.uid} {.metadata.name} {.status.phase}{'\\n'}{end}",
+				)
+				_, err := cmd.Output()
+				if err == nil {
+					app.loadDockerContainer(cs)
+					auditText = append(auditText, "    pods: "+fmt.Sprint(len(app.dockerContainers)))
+				} else {
+					auditText = append(auditText, "    pods: 0")
+				}
+			} else {
+				auditText = append(auditText, "    installed: false")
+			}
+		} else {
+			csCheck := exec.Command(cs, "--version")
+			output, err := csCheck.Output()
+			if err == nil {
+				auditText = append(auditText, "    installed: true")
+				csVersion := strings.TrimSpace(string(output))
+				csVersion = strings.Split(csVersion, "version ")[1]
+				auditText = append(auditText, "    version: "+csVersion)
+				cmd := exec.Command(
+					cs, "ps", "-a",
+					"--format", "{{.ID}} {{.Names}} {{.State}}",
+				)
+				_, err := cmd.Output()
+				if err == nil {
+					app.loadDockerContainer(cs)
+					auditText = append(auditText, "    containers: "+fmt.Sprint(len(app.dockerContainers)))
+				} else {
+					auditText = append(auditText, "    containers: 0")
+				}
+			} else {
+				auditText = append(auditText, "    installed: false")
+			}
+		}
+	}
+	for _, line := range auditText {
+		fmt.Println(line)
+	}
 }
 
 // Предварительная компиляция регулярных выражений для покраски вывода и их доступности в тестах
@@ -246,6 +383,8 @@ func runGoCui(mock bool) {
 	flag.BoolVar(help, "h", false, "Show help")
 	version := flag.Bool("version", false, "Show version")
 	flag.BoolVar(version, "v", false, "Show version")
+	audit := flag.Bool("audit", false, "Show audit information")
+	flag.BoolVar(audit, "a", false, "Show audit information")
 
 	// Обработка аргументов
 	flag.Parse()
@@ -255,6 +394,10 @@ func runGoCui(mock bool) {
 	}
 	if *version {
 		app.showVersion()
+		os.Exit(0)
+	}
+	if *audit {
+		app.showAudit()
 		os.Exit(0)
 	}
 
@@ -2133,11 +2276,16 @@ func (app *App) loadDockerContainer(containerizationSystem string) {
 	}
 	if containerizationSystem == "kubectl" {
 		// Получаем список подов из k8s
-		cmd = exec.Command(containerizationSystem, "get", "pods", "-o",
-			"jsonpath={range .items[*]}{.metadata.uid} {.metadata.name} {.status.phase}{'\\n'}{end}")
+		cmd = exec.Command(
+			containerizationSystem, "get", "pods", "-o",
+			"jsonpath={range .items[*]}{.metadata.uid} {.metadata.name} {.status.phase}{'\\n'}{end}",
+		)
 	} else {
 		// Получаем список контейнеров из Docker или Podman
-		cmd = exec.Command(containerizationSystem, "ps", "-a", "--format", "{{.ID}} {{.Names}} {{.State}}")
+		cmd = exec.Command(
+			containerizationSystem, "ps", "-a",
+			"--format", "{{.ID}} {{.Names}} {{.State}}",
+		)
 	}
 	output, err := cmd.Output()
 	if !app.testMode {
