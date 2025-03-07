@@ -142,22 +142,34 @@ type App struct {
 }
 
 func showHelp() {
-	fmt.Println("lazyjournal - terminal user interface for journalctl, file system logs, as well Docker and Podman containers")
+	fmt.Println("lazyjournal - terminal user interface for reading logs from journalctl, file system, Docker and Podman containers, as well Kubernetes pods")
 	fmt.Println("Source code: https://github.com/Lifailon/lazyjournal")
+	fmt.Println("If you have problems with the application, please open issue: https://github.com/Lifailon/lazyjournal/issues")
 	fmt.Println("")
 	fmt.Println("  Flags:")
 	fmt.Println("    lazyjournal                Run interface")
 	fmt.Println("    lazyjournal --help, -h     Show help")
 	fmt.Println("    lazyjournal --version, -v  Show version")
-	fmt.Println("    lazyjournal --audit, -a  	Show audit information")
+	fmt.Println("    lazyjournal --audit, -a    Show audit information")
 }
 
 func (app *App) showVersion() {
-	fmt.Println("Version:", "0.7.5")
+	fmt.Println("0.7.5")
+}
+
+func (app *App) showAudit() {
+	var auditText []string
+	app.testMode = true
+
+	auditText = append(auditText, "system:")
+	auditText = append(auditText, "  date: "+time.Now().Format("02.01.2006 15:04:05"))
+	goVersion := strings.ReplaceAll(runtime.Version(), "go", "")
+	auditText = append(auditText, "  go: "+goVersion)
+
 	data, err := os.ReadFile("/etc/os-release")
 	// Если ошибка при чтении файла, то возвращаем только название ОС
 	if err != nil {
-		fmt.Printf("OS: %s\n", app.getOS)
+		auditText = append(auditText, "  os: "+app.getOS)
 	} else {
 		var name, version string
 		for _, line := range strings.Split(string(data), "\n") {
@@ -168,26 +180,9 @@ func (app *App) showVersion() {
 				version = strings.Trim(line[8:], "\"")
 			}
 		}
-		fmt.Printf("OS: %s %s %s\n", app.getOS, name, version)
+		auditText = append(auditText, "  os: "+app.getOS+" "+name+" "+version)
 	}
-	fmt.Printf("Arch: %s\n", app.getArch)
-	execPath, err := os.Executable()
-	if err == nil {
-		if strings.Contains(execPath, "tmp/go-build") || strings.Contains(execPath, "Temp\\go-build") {
-			fmt.Printf("Executable type: source code (%s)\n", execPath)
-		} else {
-			fmt.Printf("Executable type: binary file (%s)\n", execPath)
-		}
-	}
-	fmt.Println("If you have problems with the application, please open issue: https://github.com/Lifailon/lazyjournal/issues")
-}
 
-func (app *App) showAudit() {
-	var auditText []string
-	app.testMode = true
-
-	auditText = append(auditText, "system:")
-	auditText = append(auditText, "  os: "+app.getOS)
 	auditText = append(auditText, "  arch: "+app.getArch)
 
 	currentUser, _ := user.Current()
@@ -195,6 +190,21 @@ func (app *App) showAudit() {
 	if strings.Contains(app.userName, "\\") {
 		app.userName = strings.Split(app.userName, "\\")[1]
 	}
+	auditText = append(auditText, "  username: "+app.userName)
+
+	if app.getOS != "windows" {
+		auditText = append(auditText, "  privilege: "+(map[bool]string{true: "root/admin", false: "user"})[os.Geteuid() == 0])
+	}
+
+	execPath, err := os.Executable()
+	if err == nil {
+		if strings.Contains(execPath, "tmp/go-build") || strings.Contains(execPath, "Temp\\go-build") {
+			auditText = append(auditText, "  execType: source code")
+		} else {
+			auditText = append(auditText, "  execType: binary file")
+		}
+	}
+	auditText = append(auditText, "  execPath: "+execPath)
 
 	if app.getOS == "windows" {
 		// Windows Event
@@ -281,7 +291,6 @@ func (app *App) showAudit() {
 		}
 		// Filesystem
 		auditText = append(auditText, "fileSystem:")
-		auditText = append(auditText, "  username: "+app.userName)
 		auditText = append(auditText, "  files:")
 		paths := []struct {
 			name string
