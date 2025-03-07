@@ -193,7 +193,7 @@ func (app *App) showAudit() {
 	auditText = append(auditText, "  username: "+app.userName)
 
 	if app.getOS != "windows" {
-		auditText = append(auditText, "  privilege: "+(map[bool]string{true: "root/admin", false: "user"})[os.Geteuid() == 0])
+		auditText = append(auditText, "  privilege: "+(map[bool]string{true: "root", false: "user"})[os.Geteuid() == 0])
 	}
 
 	execPath, err := os.Executable()
