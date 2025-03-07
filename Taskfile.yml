@@ -25,7 +25,7 @@ tasks:
       - go install github.com/securego/gosec/v2/cmd/gosec@latest
 
   linter:
-    desc: "Linter checks"
+    desc: "Run linter checks"
     cmds:
       - task: install
       - golangci-lint run ./main.go
@@ -33,31 +33,26 @@ tasks:
       - gosec -severity=high ./...
 
   test:
-    desc: "Run unit test in Linux"
+    desc: "Run unit test for Linux/macOS/Windows"
     cmds:
       - |
         {{if eq OS "windows"}}
-        go test -v --run "TestWin*|TestFlags|TestMainInterface" -cover
+          go test -v --run "TestWin.*|TestFlags|TestMainInterface" -cover
         {{else if eq OS "darwin"}}
-        sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface" -cover
+          sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface" -cover
         {{else}}
-        sudo go test -v -cover
+          sudo go test -v --run "TestUnixFiles|TestLinuxJournal|TestFlags|TestMainInterface" -cover
         {{end}}
 
-  mac:
-    desc: "Run unit test in macOS"
-    cmds:
-      - sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface" -cover
-
-  win:
-    desc: "Run unit test in Windows"
-    cmds:
-      - go test -v --run "TestWin*|TestFlags|TestMainInterface" -cover
-
   interface:
-    desc: "Run test interface"
+    desc: "Run unit test interface"
     cmds:
       - go test -v --run "TestM.*" -cover
+
+  docker:
+    desc: "Run unit test containerization system"
+    cmds:
+      - go test -v --run "TestDockerContainer" -cover
 
   build:
     desc: "Build"
@@ -65,6 +60,7 @@ tasks:
       VERSION:
         sh: go run main.go -v # Get version from flag in source code
     cmds:
+      - echo Build version {{.VERSION}}
       - task: prep
       - GOOS=linux GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-linux-amd64
       - GOOS=linux GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-linux-arm64

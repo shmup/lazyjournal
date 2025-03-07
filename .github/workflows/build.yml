@@ -120,7 +120,7 @@ jobs:
 
       - name: Unit testing (events, files, flags and run main interface) in Windows
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
-        run: go test -v --run "TestWin*|TestFlags|TestMainInterface" -cover
+        run: go test -v --run "TestWin.*|TestFlags|TestMainInterface" -cover
         continue-on-error: true
 
       - name: Create markdown report in Windows
