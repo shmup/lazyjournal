@@ -17,42 +17,33 @@ tasks:
       - task: prep
       - go get -u ./...
 
-  install:
+  install-lint:
     desc: "Install dependencies for linter checks"
     cmds:
       - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
       - go install github.com/go-critic/go-critic/cmd/gocritic@latest
       - go install github.com/securego/gosec/v2/cmd/gosec@latest
 
-  linter:
+  lint:
     desc: "Run linter checks"
     cmds:
-      - task: install
+      - task: prep
+      - task: install-lint
       - golangci-lint run ./main.go
       - gocritic check -enableAll ./main.go
       - gosec -severity=high ./...
 
+  list:
+    desc: "Get test list"
+    cmds:
+      - go test -list . ./...
+
+  # task test-run -- TestFlags
   test:
-    desc: "Run unit test for Linux/macOS/Windows"
+    desc: "Run the selected unit test"
     cmds:
-      - |
-        {{if eq OS "windows"}}
-          go test -v --run "TestWin.*|TestFlags|TestMainInterface" -cover
-        {{else if eq OS "darwin"}}
-          sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface" -cover
-        {{else}}
-          sudo go test -v --run "TestUnixFiles|TestLinuxJournal|TestFlags|TestMainInterface" -cover
-        {{end}}
-
-  interface:
-    desc: "Run unit test interface"
-    cmds:
-      - go test -v --run "TestM.*" -cover
-
-  docker:
-    desc: "Run unit test containerization system"
-    cmds:
-      - go test -v --run "TestDockerContainer" -cover
+      - task: prep
+      - go test -run {{.CLI_ARGS}} ./...
 
   build:
     desc: "Build"
