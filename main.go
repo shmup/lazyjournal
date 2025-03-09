@@ -160,6 +160,7 @@ func (app *App) showVersion() {
 func (app *App) showAudit() {
 	var auditText []string
 	app.testMode = true
+	app.getOS = runtime.GOOS
 
 	auditText = append(auditText, "system:")
 	auditText = append(auditText, "  date: "+time.Now().Format("02.01.2006 15:04:05"))
