@@ -44,7 +44,9 @@ jobs:
         continue-on-error: true
 
       - name: Create markdown report
-        run: cat test-linux-report.md >> $GITHUB_STEP_SUMMARY
+        run: |
+          mv test-report.md test-linux-report.md
+          cat test-linux-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
       - name: Upload test summary report
@@ -85,7 +87,9 @@ jobs:
         continue-on-error: true
 
       - name: Create markdown report
-        run: cat test-macos-report.md >> $GITHUB_STEP_SUMMARY
+        run: |
+          mv test-report.md test-macos-report.md
+          cat test-macos-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
       - name: Upload test summary report
@@ -132,7 +136,9 @@ jobs:
         continue-on-error: true
 
       - name: Create markdown report
-        run: Get-Content test-windows-report.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+        run: |
+          Rename-Item -Path test-report.md -NewName test-windows-report.md
+          Get-Content test-windows-report.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
         shell: pwsh
         continue-on-error: true
 
