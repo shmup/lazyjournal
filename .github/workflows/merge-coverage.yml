@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  linux:
+  Linux:
     runs-on: ubuntu-24.04
 
     steps:
@@ -20,6 +20,7 @@ jobs:
         run: |
           go fmt ./...
           go vet ./...
+          go get ./...
           go mod tidy
           go mod verify
           go build -v ./...
@@ -38,27 +39,68 @@ jobs:
           ls -lh
         continue-on-error: true
 
-      - name: Run test in Linux
+      - name: Run unit test in Linux
         run: sudo go test -v -cover -coverprofile linux-coverage.out
         continue-on-error: true
 
       - name: Create markdown report
-        run: cat test-report.md >> $GITHUB_STEP_SUMMARY
+        run: cat test-linux-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
-      - name: Upload test summary report for Linux
+      - name: Upload test summary report
         uses: actions/upload-artifact@v4
         with:
           name: linux-report
-          path: test-report.md
+          path: test-linux-report.md
 
-      - name: Upload coverage report for Linux
+      - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: linux-coverage
           path: linux-coverage.out
 
-  windows:
+  macOS:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Clone main repository
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.23
+
+      - name: Install dependencies
+        run: |
+          go fmt ./...
+          go vet ./...
+          go get ./...
+          go mod tidy
+          go mod verify
+          go build -v ./...
+
+      - name: Run unit test in macOS
+        run: sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface" -cover -coverprofile macos-coverage.out
+        continue-on-error: true
+
+      - name: Create markdown report
+        run: cat test-macos-report.md >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      - name: Upload test summary report
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-report
+          path: test-macos-report.md
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-coverage
+          path: macos-coverage.out
+
+  Windows:
     runs-on: windows-2022
     steps:
       - name: Clone main repository
@@ -73,6 +115,7 @@ jobs:
         run: |
           go fmt ./...
           go vet ./...
+          go get ./...
           go mod tidy
           go mod verify
           go build -v ./...
@@ -84,22 +127,22 @@ jobs:
         shell: pwsh
         continue-on-error: true
 
-      - name: Run test in Windows
-        run: go test -v --run TestWin* -cover -coverprofile windows-coverage.out
+      - name: Run unit test in Windows
+        run: go test -v --run "TestWin.*|TestFlags|TestMainInterface" -cover -coverprofile windows-coverage.out
         continue-on-error: true
 
       - name: Create markdown report
-        run: Get-Content test-report.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+        run: Get-Content test-windows-report.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
         shell: pwsh
         continue-on-error: true
 
-      - name: Upload test summary report for Windows
+      - name: Upload test summary report
         uses: actions/upload-artifact@v4
         with:
           name: windows-report
-          path: test-report.md
+          path: test-windows-report.md
 
-      - name: Upload coverage report for Windows
+      - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: windows-coverage
@@ -107,7 +150,7 @@ jobs:
 
   merge_coverage_test:
     runs-on: ubuntu-latest
-    needs: [linux, windows]
+    needs: [Linux, macOS, Windows]
     steps:
       - name: Clone main repository
         uses: actions/checkout@v4
@@ -117,18 +160,16 @@ jobs:
         with:
           go-version: 1.23
 
-      - name: Install dependencies
-        run: |
-          go fmt ./...
-          go vet ./...
-          go mod tidy
-          go mod verify
-          go build -v ./...
-
       - name: Download coverage report for Linux
         uses: actions/download-artifact@v4
         with:
           name: linux-coverage
+          path: .
+
+      - name: Download coverage report for macOS
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-coverage
           path: .
 
       - name: Download coverage report for Windows
@@ -139,6 +180,9 @@ jobs:
 
       - name: Check coverage report for Linux
         run: go tool cover -func linux-coverage.out
+
+      - name: Check coverage report for macOS
+        run: go tool cover -func macos-coverage.out
 
       - name: Check coverage report for Windows
         run: go tool cover -func windows-coverage.out
@@ -152,7 +196,7 @@ jobs:
 
       - name: Merge coverage reports
         run: |
-          gocovmerge linux-coverage.out windows-coverage.out > merge-coverage.out
+          gocovmerge linux-coverage.out macos-coverage.out windows-coverage.out > merge-coverage.out
           go tool cover -func merge-coverage.out
 
       - name: Upload merge coverage report
@@ -169,3 +213,33 @@ jobs:
           chart: true
           amend: true
         continue-on-error: true
+
+      - name: Download test summary report for Linux
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-report
+          path: .
+
+      - name: Download test summary report for macOS
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-report
+          path: .
+
+      - name: Download test summary report for Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-report
+          path: .
+
+      - name: Merge test summary reports
+        run: |
+          cat "test-linux-report.md" > test-summary-report.md
+          cat "test-macos-report.md" >> test-summary-report.md
+          cat "test-windows-report.md" >> test-summary-report.md
+
+      - name: Upload merge test summary report
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary-report
+          path: test-summary-report.md
