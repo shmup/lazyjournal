@@ -214,6 +214,7 @@ func (app *App) showAudit() {
 		lenLogs := fmt.Sprint(len(app.journals))
 		auditText = append(auditText, "  logs: ")
 		auditText = append(auditText, "  - count: "+lenLogs)
+		fmt.Print("OK -> WinEvent: ", lenLogs)
 		// Filesystem
 		app.systemDisk = os.Getenv("SystemDrive")
 		if len(app.systemDisk) >= 1 {
@@ -223,7 +224,7 @@ func (app *App) showAudit() {
 		}
 		auditText = append(auditText, "fileSystem:")
 		auditText = append(auditText, "  systemDisk: "+app.systemDisk)
-		auditText = append(auditText, "  username: "+app.userName)
+		fmt.Print("OK -> systemDisk: ", app.systemDisk)
 		auditText = append(auditText, "  files:")
 		paths := []struct {
 			fullPath string
@@ -257,6 +258,7 @@ func (app *App) showAudit() {
 				mu.Lock()
 				auditText = append(auditText, "  - path: "+fullPath)
 				auditText = append(auditText, "    count: "+lenLogFiles)
+				fmt.Print("OK -> ", fullPath, ":", fullPath)
 				// Разблокировать мьютекс
 				mu.Unlock()
 			}(path)

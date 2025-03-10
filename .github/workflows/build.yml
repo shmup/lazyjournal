@@ -75,6 +75,7 @@ jobs:
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           gosec -severity=high ./...
 
+      # Linux
       - name: Start docker container for test in Ubuntu
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022' }}
         run: |
@@ -94,22 +95,26 @@ jobs:
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022' }}
         run: sudo go test -v -cover
         continue-on-error: true
+        timeout-minutes: 5
 
       - name: Create markdown report in Linux
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022' }}
         run: cat test-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
+      # macOS
       - name: Unit testing (files, flags and run main interface) in macOS
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'macos-15' }}
         run: sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface" -cover
         continue-on-error: true
+        timeout-minutes: 5
 
       - name: Create markdown report in macOS
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'macos-15' }}
         run: cat test-report.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
 
+      # Windows
       - name: Create log file for Windows
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: |
@@ -122,6 +127,13 @@ jobs:
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: go test -v --run "TestWin.*|TestFlags|TestMainInterface" -cover
         continue-on-error: true
+        timeout-minutes: 5
+
+      - name: Unit mock interface for Windows
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
+        run: go test -v --run TestMainInterface -cover
+        continue-on-error: true
+        timeout-minutes: 5
 
       - name: Create markdown report in Windows
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
@@ -129,6 +141,7 @@ jobs:
         shell: pwsh
         continue-on-error: true
 
+      # Build
       - name: Build binaries
         if: ${{ github.event.inputs.Binary == 'true' }}
         run: |
