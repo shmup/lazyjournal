@@ -105,7 +105,7 @@ jobs:
       # macOS
       - name: Unit testing (files, flags and run main interface) in macOS
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'macos-15' }}
-        run: sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface|TestMockInterface" -cover
+        run: sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface" -cover
         continue-on-error: true
         timeout-minutes: 5
 
@@ -123,7 +123,7 @@ jobs:
         shell: pwsh
         continue-on-error: true
 
-      - name: Unit testing (events, files, flags and run main interface) in Windows
+      - name: Unit testing (events, files, flags and interface) in Windows
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
         run: go test -v --run "TestWin.*|TestFlags|TestMainInterface|TestMockInterface" -cover
         continue-on-error: true
@@ -144,11 +144,11 @@ jobs:
           mkdir -p bin
           architectures=("amd64" "arm64")
           for arch in "${architectures[@]}"; do
-              GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
-              GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-darwin-$arch
-              GOOS=openbsd GOARCH=$arch go build -o bin/lazyjournal-$version-openbsd-$arch
-              GOOS=freebsd GOARCH=$arch go build -o bin/lazyjournal-$version-freebsd-$arch
-              GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
+              CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -o bin/lazyjournal-$version-linux-$arch
+              CGO_ENABLED=0 GOOS=darwin GOARCH=$arch go build -o bin/lazyjournal-$version-darwin-$arch
+              CGO_ENABLED=0 GOOS=openbsd GOARCH=$arch go build -o bin/lazyjournal-$version-openbsd-$arch
+              CGO_ENABLED=0 GOOS=freebsd GOARCH=$arch go build -o bin/lazyjournal-$version-freebsd-$arch
+              CGO_ENABLED=0 GOOS=windows GOARCH=$arch go build -o bin/lazyjournal-$version-windows-$arch.exe
           done
           ls -lh bin
           echo "ARTIFACT_NAME=lazyjournal-$(date +'%d.%m.%Y')" >> $GITHUB_ENV

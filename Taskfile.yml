@@ -53,13 +53,13 @@ tasks:
     cmds:
       - echo Build version {{.VERSION}}
       - task: prep
-      - GOOS=linux GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-linux-amd64
-      - GOOS=linux GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-linux-arm64
-      - GOOS=darwin GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-darwin-amd64
-      - GOOS=darwin GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-darwin-arm64
-      - GOOS=openbsd GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-openbsd-amd64
-      - GOOS=openbsd GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-openbsd-arm64
-      - GOOS=freebsd GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-freebsd-amd64
-      - GOOS=freebsd GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-freebsd-arm64
-      - GOOS=windows GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-windows-amd64
-      - GOOS=windows GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-windows-arm64
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-linux-amd64
+      - CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-linux-arm64
+      - CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-darwin-amd64
+      - CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-darwin-arm64
+      - CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-openbsd-amd64
+      - CGO_ENABLED=0 GOOS=openbsd GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-openbsd-arm64
+      - CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-freebsd-amd64
+      - CGO_ENABLED=0 GOOS=freebsd GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-freebsd-arm64
+      - CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o bin/lazyjournal-{{.VERSION}}-windows-amd64
+      - CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o bin/lazyjournal-{{.VERSION}}-windows-arm64
