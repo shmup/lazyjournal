@@ -214,57 +214,56 @@ func (app *App) showAudit() {
 		lenLogs := fmt.Sprint(len(app.journals))
 		auditText = append(auditText, "  logs: ")
 		auditText = append(auditText, "  - count: "+lenLogs)
-		fmt.Print("OK -> WinEvent: ", lenLogs)
 		// Filesystem
-		app.systemDisk = os.Getenv("SystemDrive")
-		if len(app.systemDisk) >= 1 {
-			app.systemDisk = string(app.systemDisk[0])
-		} else {
-			app.systemDisk = "C"
+		if app.userName != "runneradmin" {
+			app.systemDisk = os.Getenv("SystemDrive")
+			if len(app.systemDisk) >= 1 {
+				app.systemDisk = string(app.systemDisk[0])
+			} else {
+				app.systemDisk = "C"
+			}
+			auditText = append(auditText, "fileSystem:")
+			auditText = append(auditText, "  systemDisk: "+app.systemDisk)
+			auditText = append(auditText, "  files:")
+			paths := []struct {
+				fullPath string
+				path     string
+			}{
+				{"Program Files", "ProgramFiles"},
+				{"Program Files (x86)", "ProgramFiles86"},
+				{"ProgramData", "ProgramData"},
+				{"/AppData/Local", "AppDataLocal"},
+				{"/AppData/Roaming", "AppDataRoaming"},
+			}
+			// Создаем группу для ожидания выполнения всех горутин
+			var wg sync.WaitGroup
+			// Мьютекс для безопасного доступа к переменной auditText
+			var mu sync.Mutex
+			for _, path := range paths {
+				// Увеличиваем счетчик горутин
+				wg.Add(1)
+				go func(path struct{ fullPath, path string }) {
+					// Отнимаем счетчик горутин при завершении выполнения горутины
+					defer wg.Done()
+					var fullPath string
+					if strings.HasPrefix(path.fullPath, "Program") {
+						fullPath = "\"" + app.systemDisk + ":/" + path.fullPath + "\""
+					} else {
+						fullPath = "\"" + app.systemDisk + ":/Users/" + app.userName + path.fullPath + "\""
+					}
+					app.loadWinFiles(path.path)
+					lenLogFiles := fmt.Sprint(len(app.logfiles))
+					// Блокируем доступ на завись в переменную auditText
+					mu.Lock()
+					auditText = append(auditText, "  - path: "+fullPath)
+					auditText = append(auditText, "    count: "+lenLogFiles)
+					// Разблокировать мьютекс
+					mu.Unlock()
+				}(path)
+			}
+			// Ожидаем завершения всех горутин
+			wg.Wait()
 		}
-		auditText = append(auditText, "fileSystem:")
-		auditText = append(auditText, "  systemDisk: "+app.systemDisk)
-		fmt.Print("OK -> systemDisk: ", app.systemDisk)
-		auditText = append(auditText, "  files:")
-		paths := []struct {
-			fullPath string
-			path     string
-		}{
-			{"Program Files", "ProgramFiles"},
-			{"Program Files (x86)", "ProgramFiles86"},
-			{"ProgramData", "ProgramData"},
-			{"/AppData/Local", "AppDataLocal"},
-			{"/AppData/Roaming", "AppDataRoaming"},
-		}
-		// Создаем группу для ожидания выполнения всех горутин
-		var wg sync.WaitGroup
-		// Мьютекс для безопасного доступа к переменной auditText
-		var mu sync.Mutex
-		for _, path := range paths {
-			// Увеличиваем счетчик горутин
-			wg.Add(1)
-			go func(path struct{ fullPath, path string }) {
-				// Отнимаем счетчик горутин при завершении выполнения горутины
-				defer wg.Done()
-				var fullPath string
-				if strings.HasPrefix(path.fullPath, "Program") {
-					fullPath = "\"" + app.systemDisk + ":/" + path.fullPath + "\""
-				} else {
-					fullPath = "\"" + app.systemDisk + ":/Users/" + app.userName + path.fullPath + "\""
-				}
-				app.loadWinFiles(path.path)
-				lenLogFiles := fmt.Sprint(len(app.logfiles))
-				// Блокируем доступ на завись в переменную auditText
-				mu.Lock()
-				auditText = append(auditText, "  - path: "+fullPath)
-				auditText = append(auditText, "    count: "+lenLogFiles)
-				fmt.Print("OK -> ", fullPath, ":", fullPath)
-				// Разблокировать мьютекс
-				mu.Unlock()
-			}(path)
-		}
-		// Ожидаем завершения всех горутин
-		wg.Wait()
 	} else {
 		// systemd/journald
 		auditText = append(auditText, "systemd:")

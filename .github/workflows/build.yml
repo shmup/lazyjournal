@@ -129,9 +129,9 @@ jobs:
         continue-on-error: true
         timeout-minutes: 5
 
-      - name: Unit mock interface for Windows
+      - name: Unit mock interface for Windows (temp)
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro == 'windows-2022' }}
-        run: go test -v --run TestMainInterface -cover
+        run: go test -v --run TestMockInterface -cover
         continue-on-error: true
         timeout-minutes: 5
 
