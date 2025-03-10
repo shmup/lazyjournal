@@ -56,7 +56,7 @@ List of supported systems and architectures in which functionality is checked:
 
 | OS        | amd64 | arm64 | Systems                                                                                                                                   |
 | -         | -     | -     | -                                                                                                                                         |
-| Linux     | ✔     |  ✔   | Raspberry Pi (`aarch64`), Oracle Linux (RHEL-based in WSL environment), Arch Linux, Ubuntu Server 20.04.6 (GLIBC 2.31) and above         |
+| Linux     | ✔     |  ✔   | Raspberry Pi (`aarch64`), Oracle Linux (RHEL-based in WSL environment), Arch Linux, Rocky Linux, Ubuntu Server 20.04.6 and above         |
 | Darwin    | ✔     |  ✔   | macOS Sequoia 15.2 `x64` on MacBook and the `arm64` in GitHub Actions                                                                    |
 | BSD       | ✔     |       | OpenBSD 7.6 and FreeBSD 14.2                                                                                                             |
 | Windows   | ✔     |       | Windows 10 and 11                                                                                                                        |

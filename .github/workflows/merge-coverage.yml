@@ -42,6 +42,7 @@ jobs:
       - name: Run unit test in Linux
         run: sudo go test -v -cover -coverprofile linux-coverage.out
         continue-on-error: true
+        timeout-minutes: 5
 
       - name: Create markdown report
         run: |
@@ -85,6 +86,7 @@ jobs:
       - name: Run unit test in macOS
         run: sudo go test -v --run "TestUnixFiles|TestFlags|TestMainInterface" -cover -coverprofile macos-coverage.out
         continue-on-error: true
+        timeout-minutes: 5
 
       - name: Create markdown report
         run: |
@@ -132,8 +134,9 @@ jobs:
         continue-on-error: true
 
       - name: Run unit test in Windows
-        run: go test -v --run "TestWin.*|TestFlags|TestMainInterface" -cover -coverprofile windows-coverage.out
+        run: go test -v --run "TestWin.*|TestFlags|TestMainInterface|TestMockInterface" -cover -coverprofile windows-coverage.out
         continue-on-error: true
+        timeout-minutes: 5
 
       - name: Create markdown report
         run: |
