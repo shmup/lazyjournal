@@ -139,7 +139,7 @@ jobs:
       - name: Build binaries
         if: ${{ github.event.inputs.Binary == 'true' }}
         run: |
-          version=$(cat main.go | grep Version: | awk -F '"' '{print $4}')
+          version=$(go run main.go -v)
           echo "Get version from main.go: $version"
           mkdir -p bin
           architectures=("amd64" "arm64")
