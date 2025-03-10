@@ -54,12 +54,12 @@ Binaries are available for download on the [releases](https://github.com/Lifailo
 
 List of supported systems and architectures in which functionality is checked: 
 
-| OS        | amd64 | arm64 | Systems                                                                                                                          |
-| -         | -     | -     | -                                                                                                                                |
-| Linux     | ✔     |  ✔   | Raspberry Pi (`aarch64`), Arch Linux, Oracle Linux (RHEL-based in WSL environment), Ubuntu Server 20.04.6 (GLIBC 2.31) and above |
-| Darwin    | ✔     |  ✔   | macOS Sequoia 15.2 `x64` on MacBook and the `arm64` in GitHub Actions                                                            |
-| BSD       | ✔     |       | OpenBSD 7.6 and FreeBSD 14.2                                                                                                     |
-| Windows   | ✔     |       | Windows 10 and 11                                                                                                                |
+| OS        | amd64 | arm64 | Systems                                                                                                                                   |
+| -         | -     | -     | -                                                                                                                                         |
+| Linux     | ✔     |  ✔   | Raspberry Pi (`aarch64`), Oracle Linux (RHEL-based in WSL environment), Arch Linux, Ubuntu Server 20.04.6 (GLIBC 2.31) and above         |
+| Darwin    | ✔     |  ✔   | macOS Sequoia 15.2 `x64` on MacBook and the `arm64` in GitHub Actions                                                                    |
+| BSD       | ✔     |       | OpenBSD 7.6 and FreeBSD 14.2                                                                                                             |
+| Windows   | ✔     |       | Windows 10 and 11                                                                                                                        |
 
 ### Unix-based
 
@@ -123,6 +123,7 @@ You can run the interface from anywhere:
 lazyjournal                # Run interface
 lazyjournal --help, -h     # Show help
 lazyjournal --version, -v  # Show version
+lazyjournal --audit, -a    # Show audit information
 ```
 
 Access to all system logs and containers may require elevated privileges for the current user.
@@ -137,22 +138,29 @@ cd lazyjournal
 go run main.go
 ```
 
-Check the source code on the linter using [golangci-lint](https://github.com/golangci/golangci-lint) (including critic and security) and build binaries for different platforms and systems:
+Use make or [go-task](https://github.com/go-task/task) to build binaries for different platforms and systems:
 
 ```shell
-bash build.sh
-bash build.sh false # only linter check
+make build
+# or
+task build
+```
+
+Check the source code on the base linters using [golangci-lint](https://github.com/golangci/golangci-lint) (including critic and security):
+
+```shell
+make lint
 ```
 
 ## Testing
 
-Checking functions and their performance:
+Run unit tests to check functions and their performance:
 
 ```shell
 go test -v
 ```
 
-The test coverage report using CI Actions is available on the [Wiki](https://github.com/Lifailon/lazyjournal/wiki) page.
+The test coverage report using CI Actions for different systems is available on the [Wiki](https://github.com/Lifailon/lazyjournal/wiki) page.
 
 ## Hotkeys
 
