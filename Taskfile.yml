@@ -38,12 +38,12 @@ tasks:
     cmds:
       - go test -list . ./...
 
-  # task test-run -- TestFlags
+  # task test -- TestMain
   test:
     desc: "Run the selected unit test"
     cmds:
       - task: prep
-      - go test -run {{.CLI_ARGS}} ./...
+      - go test -v -cover --run {{.CLI_ARGS}} ./...
 
   build:
     desc: "Build"

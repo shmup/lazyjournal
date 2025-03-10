@@ -25,9 +25,9 @@ lint: prep install-lint
 list:
 	@go test -list . ./...
 
-# make test-run n=TestMain
+# make test n=TestMain
 test: prep
-	go test -run $(n) ./...
+	go test -v -cover --run $(n) ./...
 
 build: prep
 	@echo "Build version: $(version)"
