@@ -162,10 +162,11 @@ func (app *App) showAudit() {
 	app.testMode = true
 	app.getOS = runtime.GOOS
 
-	auditText = append(auditText, "system:")
-	auditText = append(auditText, "  date: "+time.Now().Format("02.01.2006 15:04:05"))
-	goVersion := strings.ReplaceAll(runtime.Version(), "go", "")
-	auditText = append(auditText, "  go: "+goVersion)
+	auditText = append(auditText,
+		"system:",
+		"  date: "+time.Now().Format("02.01.2006 15:04:05"),
+		"  go: "+strings.ReplaceAll(runtime.Version(), "go", ""),
+	)
 
 	data, err := os.ReadFile("/etc/os-release")
 	// Если ошибка при чтении файла, то возвращаем только название ОС
@@ -210,10 +211,11 @@ func (app *App) showAudit() {
 	if app.getOS == "windows" {
 		// Windows Event
 		app.loadWinEvents()
-		auditText = append(auditText, "winEvent:")
-		lenLogs := fmt.Sprint(len(app.journals))
-		auditText = append(auditText, "  logs: ")
-		auditText = append(auditText, "  - count: "+lenLogs)
+		auditText = append(auditText,
+			"winEvent:",
+			"  logs: ",
+			"  - count: "+strconv.Itoa(len(app.journals)),
+		)
 		// Filesystem
 		if app.userName != "runneradmin" {
 			app.systemDisk = os.Getenv("SystemDrive")
@@ -222,9 +224,11 @@ func (app *App) showAudit() {
 			} else {
 				app.systemDisk = "C"
 			}
-			auditText = append(auditText, "fileSystem:")
-			auditText = append(auditText, "  systemDisk: "+app.systemDisk)
-			auditText = append(auditText, "  files:")
+			auditText = append(auditText,
+				"fileSystem:",
+				"  systemDisk: "+app.systemDisk,
+				"  files:",
+			)
 			paths := []struct {
 				fullPath string
 				path     string
@@ -252,11 +256,13 @@ func (app *App) showAudit() {
 						fullPath = "\"" + app.systemDisk + ":/Users/" + app.userName + path.fullPath + "\""
 					}
 					app.loadWinFiles(path.path)
-					lenLogFiles := fmt.Sprint(len(app.logfiles))
+					lenLogFiles := strconv.Itoa(len(app.logfiles))
 					// Блокируем доступ на завись в переменную auditText
 					mu.Lock()
-					auditText = append(auditText, "  - path: "+fullPath)
-					auditText = append(auditText, "    count: "+lenLogFiles)
+					auditText = append(auditText,
+						"  - path: "+fullPath,
+						"    count: "+lenLogFiles,
+					)
 					// Разблокировать мьютекс
 					mu.Unlock()
 				}(path)
@@ -266,13 +272,17 @@ func (app *App) showAudit() {
 		}
 	} else {
 		// systemd/journald
-		auditText = append(auditText, "systemd:")
-		auditText = append(auditText, "  journald:")
+		auditText = append(auditText,
+			"systemd:",
+			"  journald:",
+		)
 		csCheck := exec.Command("journalctl", "--version")
 		_, err := csCheck.Output()
 		if err == nil {
-			auditText = append(auditText, "  - installed: true")
-			auditText = append(auditText, "    journals:")
+			auditText = append(auditText,
+				"  - installed: true",
+				"    journals:",
+			)
 			journalList := []struct {
 				name        string
 				journalName string
@@ -284,16 +294,20 @@ func (app *App) showAudit() {
 			}
 			for _, journal := range journalList {
 				app.loadServices(journal.journalName)
-				lenJournals := fmt.Sprint(len(app.journals))
-				auditText = append(auditText, "    - name: "+journal.name)
-				auditText = append(auditText, "      count: "+lenJournals)
+				lenJournals := strconv.Itoa(len(app.journals))
+				auditText = append(auditText,
+					"    - name: "+journal.name,
+					"      count: "+lenJournals,
+				)
 			}
 		} else {
 			auditText = append(auditText, "  - installed: false")
 		}
 		// Filesystem
-		auditText = append(auditText, "fileSystem:")
-		auditText = append(auditText, "  files:")
+		auditText = append(auditText,
+			"fileSystem:",
+			"  files:",
+		)
 		paths := []struct {
 			name string
 			path string
@@ -305,14 +319,18 @@ func (app *App) showAudit() {
 		}
 		for _, path := range paths {
 			app.loadFiles(path.path)
-			lenLogFiles := fmt.Sprint(len(app.logfiles))
-			auditText = append(auditText, "  - name: "+path.name)
-			auditText = append(auditText, "    path: "+path.path)
-			auditText = append(auditText, "    count: "+lenLogFiles)
+			lenLogFiles := strconv.Itoa(len(app.logfiles))
+			auditText = append(auditText,
+				"  - name: "+path.name,
+				"    path: "+path.path,
+				"    count: "+lenLogFiles,
+			)
 		}
 	}
-	auditText = append(auditText, "containerization: ")
-	auditText = append(auditText, "  system: ")
+	auditText = append(auditText,
+		"containerization: ",
+		"  system: ",
+	)
 	containerizationSystems := []string{
 		"docker",
 		"podman",
@@ -340,7 +358,7 @@ func (app *App) showAudit() {
 				_, err := cmd.Output()
 				if err == nil {
 					app.loadDockerContainer(cs)
-					auditText = append(auditText, "    pods: "+fmt.Sprint(len(app.dockerContainers)))
+					auditText = append(auditText, "    pods: "+strconv.Itoa(len(app.dockerContainers)))
 				} else {
 					auditText = append(auditText, "    pods: 0")
 				}
@@ -362,7 +380,7 @@ func (app *App) showAudit() {
 				_, err := cmd.Output()
 				if err == nil {
 					app.loadDockerContainer(cs)
-					auditText = append(auditText, "    containers: "+fmt.Sprint(len(app.dockerContainers)))
+					auditText = append(auditText, "    containers: "+strconv.Itoa(len(app.dockerContainers)))
 				} else {
 					auditText = append(auditText, "    containers: 0")
 				}
