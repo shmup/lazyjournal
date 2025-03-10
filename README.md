@@ -83,7 +83,7 @@ paru -S lazyjournal
 
 Thank you [Matteo Giordano](https://github.com/malteo) for upload and update the package in AUR.
 
-### conda/mamba/pixi (Linux/MacOS/Windows)
+### conda / mamba / pixi (Linux / MacOS / Windows)
 
 If you use package managers like conda or mamba, you can install lazyjournal from [conda-forge](https://conda-forge.org/).
 
@@ -98,7 +98,7 @@ You can install lazyjournal user-globally using [pixi](https://prefix.dev/).
 pixi global install lazyjournal
 ```
 
-### Homebrew (MacOS/Linux)
+### Homebrew (MacOS / Linux)
 
 Use the following command to install lazyjournal using [Homebrew](https://brew.sh/).
 
