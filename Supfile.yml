@@ -1,0 +1,53 @@
+env:
+  GIT_URL: https://github.com/Lifailon/lazyjournal
+
+networks:
+  bsd:
+    hosts:
+      - root@192.168.3.102:22
+      - root@192.168.3.103:22
+
+commands:
+  install:
+    desc: Install Go
+    run: |
+      if [ "$(uname -s)" = "FreeBSD" ]; then 
+        pkg install go
+      elif [ "$(uname -s)" = "OpenBSD" ]; then 
+        pkg_add go
+      fi
+
+  clone:
+    desc: Clone repository
+    run: |
+      git clone $GIT_URL
+      cd lazyjournal
+      ls -lh
+
+  prep:
+    desc: Install dependencies and code preparation
+    run: |
+      cd lazyjournal
+      go fmt ./...
+      go vet ./...
+      go get ./...
+      go mod tidy
+      go mod verify
+      go build -o /dev/null -v ./...
+
+  test:
+    desc: Run unit test for interface
+    run: |
+      cd lazyjournal
+      go test -v -cover --run "TestMainInterface|TestMockInterface"
+
+  remove:
+    desc: Remove repository
+    run: rm -rf lazyjournal
+
+targets:
+  deploy:
+    - clone
+    - prep
+    - test
+    - remove

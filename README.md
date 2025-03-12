@@ -7,10 +7,11 @@
     <a href="https://raw.githubusercontent.com/wiki/Lifailon/lazyjournal/coverage.html"><img title="Go coverage report"src="https://raw.githubusercontent.com/wiki/Lifailon/lazyjournal/coverage.svg"></a>
     <a href="https://goreportcard.com/report/github.com/Lifailon/lazyjournal"><img src="https://goreportcard.com/badge/github.com/Lifailon/lazyjournal" alt="Go Report"></a>
     <a href="https://pkg.go.dev/github.com/Lifailon/lazyjournal"><img src="https://pkg.go.dev/badge/github.com/Lifailon/lazyjournal.svg" alt="Go Reference"></a>
-    <a href="https://aur.archlinux.org/packages/lazyjournal"><img title="Arch Linux" src="https://img.shields.io/aur/version/lazyjournal?logo=arch-linux"></a>
-    <a href="https://anaconda.org/conda-forge/lazyjournal"><img title="conda-forge" src="https://img.shields.io/conda/vn/conda-forge/lazyjournal?logo=anaconda"></a>
-    <a href="https://formulae.brew.sh/formula/lazyjournal"><img title="Homebrew" src="https://img.shields.io/homebrew/v/lazyjournal?logo=homebrew"></a>
     <a href="https://github.com/Lifailon/Kinozal-Bot/blob/rsa/LICENSE"><img title="License"src="https://img.shields.io/github/license/Lifailon/Kinozal-Bot?logo=readme&color=white"></a>
+    <br>
+    <a href="https://aur.archlinux.org/packages/lazyjournal"><img title="Arch Linux" src="https://img.shields.io/aur/version/lazyjournal?logo=arch-linux&color=blue"></a>
+    <a href="https://anaconda.org/conda-forge/lazyjournal"><img title="conda-forge" src="https://img.shields.io/conda/vn/conda-forge/lazyjournal?logo=anaconda&color=green"></a>
+    <a href="https://formulae.brew.sh/formula/lazyjournal"><img title="Homebrew" src="https://img.shields.io/homebrew/v/lazyjournal?logo=homebrew&color=yellow"></a>
 </p>
 
 Terminal user interface for reading logs from `journalctl`, file system, Docker and Podman containers, as well Kubernetes pods for quick viewing and filtering with fuzzy find (like `fzf`), regex support (like `grep`) and coloring the output, written in Go with the [awesome-gocui](https://github.com/awesome-gocui/gocui) (fork [gocui](https://github.com/jroimartin/gocui)) library.
@@ -83,28 +84,30 @@ paru -S lazyjournal
 
 Thank you [Matteo Giordano](https://github.com/malteo) for upload and update the package in AUR.
 
-### conda / mamba / pixi (Linux / MacOS / Windows)
+### Conda / mamba / pixi (Linux / macOS / Windows)
 
-If you use package managers like conda or mamba, you can install lazyjournal from [conda-forge](https://conda-forge.org/).
+If you use package managers like conda or mamba, you can install lazyjournal from [conda-forge](https://anaconda.org/conda-forge/lazyjournal):
 
 ```shell
 conda install -c conda-forge lazyjournal
 mamba install -c conda-forge lazyjournal
 ```
 
-You can install lazyjournal user-globally using [pixi](https://prefix.dev/).
+You can install lazyjournal user-globally using [pixi](https://prefix.dev):
 
 ```shell
 pixi global install lazyjournal
 ```
 
-### Homebrew (MacOS / Linux)
+### Homebrew (macOS / Linux)
 
-Use the following command to install lazyjournal using [Homebrew](https://brew.sh/).
+Use the following command to install lazyjournal using [Homebrew](https://formulae.brew.sh/formula/lazyjournal):
 
 ```shell
 brew install lazyjournal
 ```
+
+Thank you [Ueno M.](https://github.com/eunos-1128) for upload and update the package in homebrew and conda.
 
 ### Windows
 
@@ -185,7 +188,9 @@ Run unit tests to check functions and their performance:
 go test -v
 ```
 
-The test coverage report using CI Actions for different systems is available on the [Wiki](https://github.com/Lifailon/lazyjournal/wiki) page.
+The test coverage report using CI Actions for Linux, macOS and Windows systems is available on the [Wiki](https://github.com/Lifailon/lazyjournal/wiki) page.
+
+Testing in BSD-based systems is done in a home environment using [usup](https://github.com/Lifailon/usup).
 
 ## Hotkeys
 
