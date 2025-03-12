@@ -2,12 +2,12 @@
 version := $(shell go run main.go -v)
 
 prep:
-	@go fmt ./...         # Formatting code
-	@go vet ./...         # Analyzing code for errors
-	@go get ./...         # Download all dependencies from go.mod
-	@go mod tidy          # Removal of unused and installing missing dependencies
-	@go mod verify        # Checking dependencies
-	@go build -v ./...    # Checking code compilation
+	@go fmt ./...
+	@go vet ./...
+	@go get ./...
+	@go mod tidy
+	@go mod verify
+	@go build -o /dev/null -v ./...
 
 update: prep
 	go get -u ./...
