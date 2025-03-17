@@ -2628,7 +2628,7 @@ func (app *App) loadDockerLogs(containerName string, newUpdate bool) {
 			containerId = parts[0]
 		}
 		cmd := exec.Command(containerizationSystem, "logs", "--tail", app.logViewCount, containerId)
-		output, err := cmd.Output()
+		output, err := cmd.CombinedOutput() // читаем весь вывод, включая stderr
 		if err != nil && !app.testMode {
 			v, _ := app.gui.View("logs")
 			v.Clear()
@@ -4369,6 +4369,19 @@ func (app *App) setupKeybindings() error {
 	// Очистка поля ввода для фильтра (Ctrl+W)
 	if err := app.gui.SetKeybinding("", gocui.KeyCtrlW, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		app.clearFilterEditor(g)
+		return nil
+	}); err != nil {
+		return err
+	}
+	// Обновить все текущие списки журналов вручную (Ctrl+R)
+	if err := app.gui.SetKeybinding("", gocui.KeyCtrlR, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if app.getOS != "windows" {
+			app.loadServices(app.selectUnits)
+			app.loadFiles(app.selectPath)
+		} else {
+			app.loadWinFiles(app.selectPath)
+		}
+		app.loadDockerContainer(app.selectContainerizationSystem)
 		return nil
 	}); err != nil {
 		return err
