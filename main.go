@@ -132,8 +132,6 @@ type App struct {
 	hexByteRegex         *regexp.Regexp
 	dateTimeRegex        *regexp.Regexp
 	timeMacAddressRegex  *regexp.Regexp
-	timeRegex            *regexp.Regexp
-	macAddressRegex      *regexp.Regexp
 	dateIpAddressRegex   *regexp.Regexp
 	dateRegex            *regexp.Regexp
 	ipAddressRegex       *regexp.Regexp
@@ -154,7 +152,7 @@ func showHelp() {
 }
 
 func (app *App) showVersion() {
-	fmt.Println("0.7.5")
+	fmt.Println("0.7.6")
 }
 
 func (app *App) showAudit() {
@@ -396,20 +394,30 @@ func (app *App) showAudit() {
 
 // Предварительная компиляция регулярных выражений для покраски вывода и их доступности в тестах
 var (
-	trimHttpRegex        = regexp.MustCompile(`^.*http://|([^a-zA-Z0-9:/._?&=+-].*)$`)                                                                                            // исключаем все до http:// (включительно) в начале строки
-	trimHttpsRegex       = regexp.MustCompile(`^.*https://|([^a-zA-Z0-9:/._?&=+-].*)$`)                                                                                           // и после любого символа, который не может содержать в себе url
-	trimPrefixPathRegex  = regexp.MustCompile(`^[^/]+`)                                                                                                                           // иключаем все до первого символа слэша (не включительно)
-	trimPostfixPathRegex = regexp.MustCompile(`[=:'"(){}\[\]]+.*$`)                                                                                                               // исключаем все после первого символа, который не должен (но может) содержаться в пути
-	hexByteRegex         = regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`)                                                                                                               // Байты или числа в шестнадцатеричном формате: 0x2 || 0xc0000001
-	dateTimeRegex        = regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`)                                                              // YYYY-MM-DDTHH:MM:SS.MS+HH:MM
-	timeMacAddressRegex  = regexp.MustCompile(`\b(?:\d{1,2}:\d{2}(:\d{2}([.,+]\d{2,6})?)?|\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b)\b`)                                        // Time + MAC address
-	timeRegex            = regexp.MustCompile(`\b\d{1,2}:\d{2}(:\d{2}([.,+]\d{1,6})?)?([+-]\d{2}(:\d{2})?)?\b`)                                                                   // Time: H:MM || HH:MM || HH:MM:SS || XX:XX:XX:XX || HH:MM:SS,XXX || HH:MM:SS.XXX || HH:MM:SS+03
-	macAddressRegex      = regexp.MustCompile(`\b([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b`)                                                                                        // MAC: XX:XX:XX:XX:XX:XX || XX-XX-XX-XX-XX-XX
-	dateIpAddressRegex   = regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?|\d+\.\d+\.\d+|\d+\.\d+)\b`) // Date + IP address + version
-	dateRegex            = regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d+\.\d+\.\d+|\d+\.\d+)\b`)                                             // Date: DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD || 5.7.5 (version) || 5.709076
-	ipAddressRegex       = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?\b`)                                                                                  // IP: 255.255.255.255 || 255.255.255.255:443 || 255.255.255.255.443 || 255.255.255.255/24
-	procRegex            = regexp.MustCompile(`(\d+)%`)                                                                                                                           // int%
-	syslogUnitRegex      = regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]:$`)
+	// Исключаем все до http:// (включительно) в начале строки
+	trimHttpRegex = regexp.MustCompile(`^.*http://|([^a-zA-Z0-9:/._?&=+-].*)$`)
+	// И после любого символа, который не может содержать в себе url
+	trimHttpsRegex = regexp.MustCompile(`^.*https://|([^a-zA-Z0-9:/._?&=+-].*)$`)
+	// Иключаем все до первого символа слэша (не включительно)
+	trimPrefixPathRegex = regexp.MustCompile(`^[^/]+`)
+	// Исключаем все после первого символа, который не должен (но может) содержаться в пути
+	trimPostfixPathRegex = regexp.MustCompile(`[=:'"(){}\[\]]+.*$`)
+	// Байты или числа в шестнадцатеричном формате: 0x2 || 0xc0000001
+	hexByteRegex = regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`)
+	// Date: YYYY-MM-DDTHH:MM:SS.MS+HH:MM
+	dateTimeRegex = regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`)
+	// MAC address + Time: H:MM || HH:MM || HH:MM:SS || XX:XX:XX:XX || XX:XX:XX:XX:XX:XX || XX-XX-XX-XX-XX-XX || HH:MM:SS,XXX || HH:MM:SS.XXX || HH:MM:SS+03
+	timeMacAddressRegex = regexp.MustCompile(`\b(?:\d{1,2}:\d{2}(:\d{2}([.,+]\d{2,6})?)?|\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b)\b`)
+	// Date + IP address + version (1.0 || 1.0.7 || 1.0-build)
+	dateIpAddressRegex = regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?|\d+\.\d+[+-.\w\d]+|\d+\.\d+)\b`)
+	// Date: DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD
+	dateRegex = regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2})\b`)
+	// IP: 255.255.255.255 || 255.255.255.255:443 || 255.255.255.255.443 || 255.255.255.255/24
+	ipAddressRegex = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?\b`)
+	// int%
+	procRegex = regexp.MustCompile(`(\d+)%`)
+	// Syslog UNIT
+	syslogUnitRegex = regexp.MustCompile(`^[a-zA-Z-_.]+\[\d+\]:$`)
 )
 
 var g *gocui.Gui
@@ -440,8 +448,6 @@ func runGoCui(mock bool) {
 		hexByteRegex:                 hexByteRegex,
 		dateTimeRegex:                dateTimeRegex,
 		timeMacAddressRegex:          timeMacAddressRegex,
-		timeRegex:                    timeRegex,
-		macAddressRegex:              macAddressRegex,
 		dateIpAddressRegex:           dateIpAddressRegex,
 		dateRegex:                    dateRegex,
 		ipAddressRegex:               ipAddressRegex,
@@ -609,9 +615,9 @@ func runGoCui(mock bool) {
 		return
 	}
 
-	// Горутина для автоматического обновления вывода журнала каждын 3 секунды
+	// Горутина для автоматического обновления вывода журнала каждые 5 секунд
 	go func() {
-		app.updateLogOutput(3)
+		app.updateLogOutput(5)
 	}()
 
 	// Горутина для отслеживания изменений размера окна
@@ -2716,40 +2722,42 @@ func (app *App) applyFilterList() {
 	app.journals = filteredJournals
 	app.logfiles = filteredLogFiles
 	app.dockerContainers = filteredDockerContainers
-	// Обновляем списки в интерфейсе
-	app.updateServicesList()
-	app.updateLogsList()
-	app.updateDockerContainerList()
 	// Обновляем статус количества служб
-	v, _ := app.gui.View("services")
-	// Обновляем счетчик в заголовке
-	re := regexp.MustCompile(`\s\(.+\) >`)
-	updateTitle := " (0) >"
-	if len(app.journals) != 0 {
-		updateTitle = " (" + strconv.Itoa(app.selectedJournal+1) + "/" + strconv.Itoa(len(app.journals)) + ") >"
+	if !app.testMode {
+		// Обновляем списки в интерфейсе
+		app.updateServicesList()
+		app.updateLogsList()
+		app.updateDockerContainerList()
+		v, _ := app.gui.View("services")
+		// Обновляем счетчик в заголовке
+		re := regexp.MustCompile(`\s\(.+\) >`)
+		updateTitle := " (0) >"
+		if len(app.journals) != 0 {
+			updateTitle = " (" + strconv.Itoa(app.selectedJournal+1) + "/" + strconv.Itoa(len(app.journals)) + ") >"
+		}
+		v.Title = re.ReplaceAllString(v.Title, updateTitle)
+		// Обновляем статус количества файлов
+		v, _ = app.gui.View("varLogs")
+		// Обновляем счетчик в заголовке
+		re = regexp.MustCompile(`\s\(.+\) >`)
+		updateTitle = " (0) >"
+		if len(app.logfiles) != 0 {
+			updateTitle = " (" + strconv.Itoa(app.selectedFile+1) + "/" + strconv.Itoa(len(app.logfiles)) + ") >"
+		}
+		v.Title = re.ReplaceAllString(v.Title, updateTitle)
+		// Обновляем статус количества контейнеров
+		v, _ = app.gui.View("docker")
+		// Обновляем счетчик в заголовке
+		re = regexp.MustCompile(`\s\(.+\) >`)
+		updateTitle = " (0) >"
+		if len(app.dockerContainers) != 0 {
+			updateTitle = " (" + strconv.Itoa(app.selectedDockerContainer+1) + "/" + strconv.Itoa(len(app.dockerContainers)) + ") >"
+		}
+		v.Title = re.ReplaceAllString(v.Title, updateTitle)
 	}
-	v.Title = re.ReplaceAllString(v.Title, updateTitle)
-	// Обновляем статус количества файлов
-	v, _ = app.gui.View("varLogs")
-	// Обновляем счетчик в заголовке
-	re = regexp.MustCompile(`\s\(.+\) >`)
-	updateTitle = " (0) >"
-	if len(app.logfiles) != 0 {
-		updateTitle = " (" + strconv.Itoa(app.selectedFile+1) + "/" + strconv.Itoa(len(app.logfiles)) + ") >"
-	}
-	v.Title = re.ReplaceAllString(v.Title, updateTitle)
-	// Обновляем статус количества контейнеров
-	v, _ = app.gui.View("docker")
-	// Обновляем счетчик в заголовке
-	re = regexp.MustCompile(`\s\(.+\) >`)
-	updateTitle = " (0) >"
-	if len(app.dockerContainers) != 0 {
-		updateTitle = " (" + strconv.Itoa(app.selectedDockerContainer+1) + "/" + strconv.Itoa(len(app.dockerContainers)) + ") >"
-	}
-	v.Title = re.ReplaceAllString(v.Title, updateTitle)
 }
 
-// Функция для фильтрации записей текущего журнала
+// Функция для фильтрации записей текущего журнала + покраска
 func (app *App) applyFilter(color bool) {
 	filter := app.filterText
 	var skip bool = false
@@ -3288,7 +3296,7 @@ func (app *App) wordColor(inputWord string) string {
 			}
 		}
 	case strings.Contains(inputWordLower, "start"):
-		words := []string{"started", "starting", "start"}
+		words := []string{"started", "starting", "startup", "start"}
 		for _, word := range words {
 			if strings.Contains(inputWordLower, word) {
 				coloredWord = app.replaceWordLower(inputWord, word, "\033[32m")
@@ -3698,12 +3706,12 @@ func (app *App) wordColor(inputWord string) string {
 			}
 			return colored
 		})
-	// Time+MAC (11:11/11:11:11/11:11:11:11:11:11/11-11-11-11-11-11)
+	// Time + MAC
 	case app.timeMacAddressRegex.MatchString(inputWord):
 		coloredWord = app.timeMacAddressRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
 			colored := ""
 			for _, char := range match {
-				if char == '-' || char == ':' {
+				if char == '-' || char == ':' || char == '.' || char == ',' || char == '+' {
 					colored += "\033[35m" + string(char) + "\033[0m"
 				} else {
 					colored += "\033[34m" + string(char) + "\033[0m"
@@ -3711,12 +3719,12 @@ func (app *App) wordColor(inputWord string) string {
 			}
 			return colored
 		})
-	// Date+IP (1.1/1.1.1/127.0.0.1/127.0.0.1:8443)
+	// Date + IP
 	case app.dateIpAddressRegex.MatchString(inputWord):
 		coloredWord = app.dateIpAddressRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
 			colored := ""
 			for _, char := range match {
-				if char == '.' || char == ':' {
+				if char == '.' || char == ':' || char == '-' || char == '+' {
 					colored += "\033[35m" + string(char) + "\033[0m"
 				} else {
 					colored += "\033[34m" + string(char) + "\033[0m"
