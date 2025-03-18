@@ -3633,30 +3633,75 @@ func (app *App) wordColor(inputWord string) string {
 		coloredWord = app.replaceWordLower(inputWord, "protocol", "\033[36m")
 	case strings.Contains(inputWordLower, "level"):
 		coloredWord = app.replaceWordLower(inputWord, "level", "\033[36m")
-	// Голубой (цифры: byte/time+mac/date+ip/%) [34m]
+	// Голубой (цифры) [34m]
+	// Byte (0x04)
 	case app.hexByteRegex.MatchString(inputWord):
 		coloredWord = app.hexByteRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
-			return "\033[34m" + match + "\033[0m"
+			colored := ""
+			for _, char := range match {
+				if char == 'x' {
+					colored += "\033[35m" + string(char) + "\033[0m"
+				} else {
+					colored += "\033[34m" + string(char) + "\033[0m"
+				}
+			}
+			return colored
 		})
+	// DateTime
 	case app.dateTimeRegex.MatchString(inputWord):
 		coloredWord = app.dateTimeRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
-			return "\033[34m" + match + "\033[0m"
+			// return "\033[34m" + match + "\033[0m"
+			colored := ""
+			for _, char := range match {
+				if char == '-' || char == '.' || char == ':' || char == '+' {
+					// Пурпурный для символов
+					colored += "\033[35m" + string(char) + "\033[0m"
+				} else {
+					// Синий для цифр
+					colored += "\033[34m" + string(char) + "\033[0m"
+				}
+			}
+			return colored
 		})
+	// Time+MAC (11:11/11:11:11/11:11:11:11:11:11/11-11-11-11-11-11)
 	case app.timeMacAddressRegex.MatchString(inputWord):
 		coloredWord = app.timeMacAddressRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
-			return "\033[34m" + match + "\033[0m"
+			colored := ""
+			for _, char := range match {
+				if char == '-' || char == ':' {
+					colored += "\033[35m" + string(char) + "\033[0m"
+				} else {
+					colored += "\033[34m" + string(char) + "\033[0m"
+				}
+			}
+			return colored
 		})
+	// Date+IP (1.1/1.1.1/127.0.0.1/127.0.0.1:8443)
 	case app.dateIpAddressRegex.MatchString(inputWord):
 		coloredWord = app.dateIpAddressRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
-			return "\033[34m" + match + "\033[0m"
+			colored := ""
+			for _, char := range match {
+				if char == '.' || char == ':' {
+					colored += "\033[35m" + string(char) + "\033[0m"
+				} else {
+					colored += "\033[34m" + string(char) + "\033[0m"
+				}
+			}
+			return colored
 		})
+	// Percentage (100%)
 	case strings.Contains(inputWordLower, "%"):
 		coloredWord = app.procRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
-			return "\033[34m" + match + "\033[0m"
+			colored := ""
+			for _, char := range match {
+				if char == '%' {
+					colored += "\033[35m" + string(char) + "\033[0m"
+				} else {
+					colored += "\033[34m" + string(char) + "\033[0m"
+				}
+			}
+			return colored
 		})
-	// Update delimiter
-	case strings.Contains(inputWord, "⎯"):
-		coloredWord = app.replaceWordLower(inputWord, "⎯", "\033[32m")
 	// tcpdump
 	case strings.Contains(inputWordLower, "tcp"):
 		coloredWord = app.replaceWordLower(inputWord, "tcp", "\033[33m")
@@ -3672,6 +3717,9 @@ func (app *App) wordColor(inputWord string) string {
 				break
 			}
 		}
+	// Update delimiter
+	case strings.Contains(inputWord, "⎯"):
+		coloredWord = app.replaceWordLower(inputWord, "⎯", "\033[32m")
 	// Исключения
 	case strings.Contains(inputWordLower, "not"):
 		coloredWord = app.replaceWordLower(inputWord, "not", "\033[31m")
