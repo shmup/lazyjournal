@@ -27,6 +27,8 @@ import (
 	"golang.org/x/text/encoding/unicode"
 )
 
+var programVersion string = "0.7.6"
+
 // Структура хранения информации о журналах
 type Journal struct {
 	name    string // название журнала (имя службы) или дата загрузки
@@ -140,7 +142,7 @@ type App struct {
 }
 
 func showHelp() {
-	fmt.Println("lazyjournal - terminal user interface for reading logs from journalctl, file system, Docker and Podman containers, as well Kubernetes pods")
+	fmt.Println("lazyjournal - terminal user interface for reading logs from journalctl, file system, Docker and Podman containers, as well Kubernetes pods.")
 	fmt.Println("Source code: https://github.com/Lifailon/lazyjournal")
 	fmt.Println("If you have problems with the application, please open issue: https://github.com/Lifailon/lazyjournal/issues")
 	fmt.Println("")
@@ -152,7 +154,7 @@ func showHelp() {
 }
 
 func (app *App) showVersion() {
-	fmt.Println("0.7.6")
+	fmt.Println(programVersion)
 }
 
 func (app *App) showAudit() {
@@ -4506,6 +4508,69 @@ func (app *App) setupKeybindings() error {
 		app.loadDockerContainer(app.selectContainerizationSystem)
 		return nil
 	}); err != nil {
+		return err
+	}
+	// Отключить окно справки (F1)
+	if err := app.gui.SetKeybinding("", gocui.KeyF1, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		app.showInterfaceHelp(g)
+		return nil
+	}); err != nil {
+		return err
+	}
+	// Закрыть окно справки (Esc)
+	if err := app.gui.SetKeybinding("", gocui.KeyEsc, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		app.closeHelp(g)
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (app *App) showInterfaceHelp(g *gocui.Gui) {
+	// Получаем размеры терминала
+	maxX, maxY := g.Size()
+	// Размеры окна help
+	width, height := 104, 27
+	// Вычисляем координаты для центрального расположения
+	x0 := (maxX - width) / 2
+	y0 := (maxY - height) / 2
+	x1 := x0 + width
+	y1 := y0 + height
+	helpView, err := g.SetView("help", x0, y0, x1, y1, 0)
+	if err != nil && err != gocui.ErrUnknownView {
+		return
+	}
+	helpView.Title = " Help "
+	helpView.Autoscroll = true
+	helpView.Wrap = true
+	helpView.FrameColor = gocui.ColorGreen
+	helpView.TitleColor = gocui.ColorGreen
+	helpView.Clear()
+	fmt.Fprintln(helpView, "\n  \033[33mlazyjournal\033[0m - terminal user interface for reading logs from journalctl, file system, Docker and")
+	fmt.Fprintln(helpView, "  Podman containers, as well Kubernetes pods.")
+	fmt.Fprintln(helpView, "\n  Version: \033[36m"+programVersion+"\033[0m")
+	fmt.Fprintln(helpView, "\n  Hotkeys:")
+	fmt.Fprintln(helpView, "\n  \033[32mTab\033[0m - switch between windows.")
+	fmt.Fprintln(helpView, "  \033[32mShift+Tab\033[0m - return to previous window.")
+	fmt.Fprintln(helpView, "  \033[32mLeft/Right\033[0m - switch between journal lists in the selected window.")
+	fmt.Fprintln(helpView, "  \033[32mEnter\033[0m - selection a journal from the list to display log output.")
+	fmt.Fprintln(helpView, "  \033[32m<Up/PgUp>\033[0m and \033[32m<Down/PgDown>\033[0m - move up and down through all journal lists and log output,")
+	fmt.Fprintln(helpView, "  as well as changing the filtering mode in the filter window.")
+	fmt.Fprintln(helpView, "  \033[32m<Shift/Alt>+<Up/Down>\033[0m - quickly move up and down through all journal lists and log output")
+	fmt.Fprintln(helpView, "  every 10 or 100 lines (500 for log output).")
+	fmt.Fprintln(helpView, "  \033[32m<Shift/Ctrl>+<U/D>\033[0m - quickly move up and down (alternative for macOS).")
+	fmt.Fprintln(helpView, "  \033[32mCtrl+A\033[0m or \033[32mHome\033[0m - go to top of log.")
+	fmt.Fprintln(helpView, "  \033[32mCtrl+E\033[0m or \033[32mEnd\033[0m - go to the end of the log.")
+	fmt.Fprintln(helpView, "  \033[32mCtrl+R\033[0m - update all log lists.")
+	fmt.Fprintln(helpView, "  \033[32mCtrl+W\033[0m - clear text input field for filter to quickly update current log output without filtering.")
+	fmt.Fprintln(helpView, "  \033[32mEscape\033[0m - close help.")
+	fmt.Fprintln(helpView, "  \033[32mCtrl+C\033[0m - exit.")
+	fmt.Fprintln(helpView, "\n  Source code: \033[35mhttps://github.com/Lifailon/lazyjournal\033[0m")
+}
+
+func (app *App) closeHelp(g *gocui.Gui) error {
+	if err := g.DeleteView("help"); err != nil {
 		return err
 	}
 	return nil
