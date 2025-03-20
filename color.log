@@ -1,0 +1,127 @@
+⎯⎯⎯ URL ⎯⎯⎯
+
+http://127.0.0.1
+http://127.0.0.1:8443
+http://127.0.0.1:8443/api
+https://github.com/Lifailon/lazyjournal
+https://torapi.vercel.app/api/search/title/kinozal?query=The+Rookie&category=0&page=0&year=0&format=0
+
+⎯⎯⎯ Unix file paths ⎯⎯⎯
+
+/var/log/syslog
+/home/lifailon/lazyjournal
+/dev/null
+
+⎯⎯⎯ Unix processes ⎯⎯⎯
+
+systemd[1]: system started
+dockerd[123]: container stopped
+kernel: system running
+rsyslogd: rsyslog running
+sudo: service was restarted
+
+⎯⎯⎯ Numbers ⎯⎯⎯
+
+Byte: 0x04
+DateTime: 2025-02-26T21:38:35.956968+03:00
+Time: 11:11 / 11:11:11
+MAC address: 11:11:11:11:11:11 / 11-11-11-11-11-11
+Date: 20.03.2025
+Versions: 1.0 / 1.0.7 / 1.0-build
+IP address: 127.0.0.1 / 127.0.0.1:8443
+Percentage: 100%
+
+⎯⎯⎯ Green (success) ⎯⎯⎯
+
+unblocking, unblocked, unblock
+successfully, successful, succeeded, succeed, success
+completed, completing, completion, completes, complete
+accepted, accepting, acception, acceptance, acceptable, acceptably, accepte, accepts, accept
+connected, connecting, connection, connects, CONNECT
+finished, finishing, finish
+started, starting, startup, start
+created, creating, creates, create
+enabled, enables, enable
+allowed, allowing, allow
+posting, posted, postrouting, POST
+prerouting, routing, routes, route
+forwarding, forwards, forward
+passed, passing, password
+running, runs, run
+added, add
+opening, opened, open
+ok, available, accessible, done, true
+True
+
+⎯⎯⎯ Red (errors) ⎯⎯⎯
+
+stderr, errors, ERROR, erro, erro
+disconnected, disconnection, disconnects, disconnect, disabled, disabling, disable
+crashed, crashing, crash
+deletion, deleted, deleting, deletes, DELETE
+removing, removed, removes, remove
+stopping, stopped, stoped, stops, stop
+invalidation, invalidating, invalidated, invalidate, invalid
+aborted, aborting, abort
+blocked, blocker, blocking, blocks, block
+inactive, deactivated, deactivating, deactivate
+exited, exiting, exits, exit
+critical, critic, crit
+failed, failure, failing, fails, fail
+rejecting, rejection, rejected, reject
+fatality, fataling, fatals, fatal
+closed, closing, close
+dropped, droping, drops, drop
+killer, killing, kills, kill
+cancellation, cancelation, canceled, cancelling, canceling, cancel
+refusing, refused, refuses, refuse
+restricting, restricted, restriction, restrict
+panicked, panics, panic
+unknown, unavailable, unsuccessful, found, denied, conflict
+false, none, null, not
+
+⎯⎯⎯ Blue (statuses) ⎯⎯⎯
+
+resolved, resolving, resolve, restarting, restarted, restart
+requested, requests, request
+registered, registeration
+reboot, booting, boot
+stdout, timeout, output
+input, PUT
+getting, GET
+settings, setting, setup, SET
+headers, header, heades, head
+logged, login
+overloading, overloaded, overload, uploading, uploaded, uploads, upload
+downloading, downloaded, downloads, download, loading, loaded, load
+reading, readed, read
+patching, patched, PATCH
+updates, updated, updating, update, upgrades, upgraded, upgrading, upgrade, backup, up
+listening, listener, listen
+launched, launching, launch
+changed, changing, change
+cleaning, cleaner, clearing, cleared, clear
+skipping, skipped, skip
+missing, missed
+mountpoint, mounted, mounting, mount
+authenticating, authentication, authorization
+configurations, configuration, configuring, configured, configure, config, conf
+OPTIONS, option
+writing, writed, write
+saved, saving, save
+paused, pausing, pause
+filtration, filtr, filtering, filtered, filter
+normal, norm
+notifications, notification, notify, noting, notice
+alerting, alert
+informations, information, informing, informed, INFO
+installation, installed, installing, install, initialization, initial, using
+shutdown, down
+status, used, use
+DEBUG, verbose, TRACE, protocol, level
+
+⎯⎯⎯ Yellow (hostname/username/warnings/tcpdump) ⎯⎯⎯
+
+lifailon, root, daemon
+warnings, warning, WARN
+TCP, UDP, ICMP, IP

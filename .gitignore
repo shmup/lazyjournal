@@ -10,6 +10,5 @@
 *.rpm
 
 # Test reports
-*.log
 *report.md
 *.out
