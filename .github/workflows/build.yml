@@ -91,6 +91,10 @@ jobs:
           gzip -c test.pcapng > test.pcapng.gz
           ls -lh
 
+      - name: Install tailspin
+        if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022' }}
+        run: sudo apt install -y tailspin
+
       - name: Unit testing (all functions and mock interface) in Linux
         if: ${{ github.event.inputs.Test == 'true' && github.event.inputs.Distro != 'macos-15' && github.event.inputs.Distro != 'windows-2022' }}
         run: sudo go test -v -cover

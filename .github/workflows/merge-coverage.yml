@@ -39,6 +39,9 @@ jobs:
           ls -lh
         continue-on-error: true
 
+      - name: Install tailspin
+        run: sudo apt install -y tailspin
+
       - name: Run unit test in Linux
         run: sudo go test -v -cover -coverprofile linux-coverage.out
         continue-on-error: true
