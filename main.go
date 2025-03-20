@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -49,8 +50,9 @@ type DockerContainers struct {
 type App struct {
 	gui *gocui.Gui // графический интерфейс (gocui)
 
-	testMode  bool // исключаем вызовы к gocui при тестирование функций
-	colorMode bool // отключение/включение покраски ключевых слов
+	testMode     bool // исключаем вызовы к gocui при тестирование функций
+	tailSpinMode bool // режим покраски через tailspin
+	colorMode    bool // отключение/включение покраски ключевых слов
 
 	getOS         string   // название ОС
 	getArch       string   // архитектура процессора
@@ -429,6 +431,7 @@ func runGoCui(mock bool) {
 	// Инициализация значений по умолчанию + компиляция регулярных выражений для покраски
 	app := &App{
 		testMode:                     false,
+		tailSpinMode:                 false,
 		colorMode:                    true,
 		startServices:                0, // начальная позиция списка юнитов
 		selectedJournal:              0, // начальный индекс выбранного журнала
@@ -2817,8 +2820,8 @@ func (app *App) applyFilter(color bool) {
 			}
 			// Проходимся по каждой строке
 			for _, line := range app.currentLogLines {
-				// Fuzzy (неточный поиск без учета регистра)
 				switch {
+				// Fuzzy (неточный поиск без учета регистра)
 				case app.selectFilterMode == "fuzzy":
 					// Разбиваем текст фильтра на массив из строк
 					filterWords := strings.Fields(filter)
@@ -2861,7 +2864,7 @@ func (app *App) applyFilter(color bool) {
 						originalLine = strings.ReplaceAll(originalLine, endColor, "\033[0m")
 						app.filteredLogLines = append(app.filteredLogLines, originalLine)
 					}
-					// Regex (с использованием регулярных выражений Go и без учета регистра по умолчанию)
+				// Regex (с использованием регулярных выражений и без учета регистра по умолчанию)
 				case app.selectFilterMode == "regex":
 					// Проверяем, что строка подходит под регулярное выражение
 					if regex.MatchString(line) {
@@ -2872,7 +2875,7 @@ func (app *App) applyFilter(color bool) {
 						originalLine = strings.ReplaceAll(originalLine, matches[0], "\x1b[0;44m"+matches[0]+"\033[0m")
 						app.filteredLogLines = append(app.filteredLogLines, originalLine)
 					}
-					// Default (точный поиск с учетом регистра)
+				// Default (точный поиск с учетом регистра)
 				default:
 					filter = app.filterText
 					if filter == "" || strings.Contains(line, filter) {
@@ -2882,45 +2885,53 @@ func (app *App) applyFilter(color bool) {
 				}
 			}
 		}
-		// Пропускаем вывод построчно (синхронно) после фильтрации для покраски
-		// var colorLogLines []string
-		// for _, line := range app.filteredLogLines {
-		// 	colorLine := app.lineColor(line)
-		// 	colorLogLines = append(colorLogLines, colorLine)
-		// }
-		// app.filteredLogLines = colorLogLines
-		// Максимальное количество потоков
-		const maxWorkers = 10
-		// Канал для передачи индексов всех строк
-		tasks := make(chan int, len(app.filteredLogLines))
-		// Срез для хранения обработанных строк
-		colorLogLines := make([]string, len(app.filteredLogLines))
-		// Объявляем группу ожидания для синхронизации всех горутин (воркеров)
-		var wg sync.WaitGroup
-		// Создаем maxWorkers горутин, где каждая будет обрабатывать задачи из канала tasks
-		for i := 0; i < maxWorkers; i++ {
-			go func() {
-				// Горутина будет работать, пока в канале tasks есть задачи
-				for index := range tasks {
-					// Обрабатываем строку и сохраняем результат по соответствующему индексу
-					colorLogLines[index] = app.lineColor(app.filteredLogLines[index])
-					// Уменьшаем счетчик задач в группе ожидания.
-					wg.Done()
-				}
-			}()
+		// Режим покраски через tailspin
+		if app.tailSpinMode {
+			cmd := exec.Command("tailspin")
+			logLines := strings.Join(app.filteredLogLines, "\n")
+			// Создаем пайп для передачи данных
+			cmd.Stdin = bytes.NewBufferString(logLines)
+			var out bytes.Buffer
+			cmd.Stdout = &out
+			if err := cmd.Run(); err != nil {
+				fmt.Println(err)
+			}
+			colorLogLines := strings.Split(out.String(), "\n")
+			app.filteredLogLines = colorLogLines
+		} else {
+			// Максимальное количество потоков
+			const maxWorkers = 10
+			// Канал для передачи индексов всех строк
+			tasks := make(chan int, len(app.filteredLogLines))
+			// Срез для хранения обработанных строк
+			colorLogLines := make([]string, len(app.filteredLogLines))
+			// Объявляем группу ожидания для синхронизации всех горутин (воркеров)
+			var wg sync.WaitGroup
+			// Создаем maxWorkers горутин, где каждая будет обрабатывать задачи из канала tasks
+			for i := 0; i < maxWorkers; i++ {
+				go func() {
+					// Горутина будет работать, пока в канале tasks есть задачи
+					for index := range tasks {
+						// Обрабатываем строку и сохраняем результат по соответствующему индексу
+						colorLogLines[index] = app.lineColor(app.filteredLogLines[index])
+						// Уменьшаем счетчик задач в группе ожидания.
+						wg.Done()
+					}
+				}()
+			}
+			// Добавляем задачи в канал
+			for i := range app.filteredLogLines {
+				// Увеличиваем счетчик задач в группе ожидания.
+				wg.Add(1)
+				// Передаем индекс строки в канал tasks
+				tasks <- i
+			}
+			// Закрываем канал задач, чтобы воркеры завершили работу после обработки всех задач
+			close(tasks)
+			// Ждем завершения всех задач
+			wg.Wait()
+			app.filteredLogLines = colorLogLines
 		}
-		// Добавляем задачи в канал
-		for i := range app.filteredLogLines {
-			// Увеличиваем счетчик задач в группе ожидания.
-			wg.Add(1)
-			// Передаем индекс строки в канал tasks
-			tasks <- i
-		}
-		// Закрываем канал задач, чтобы воркеры завершили работу после обработки всех задач
-		close(tasks)
-		// Ждем завершения всех задач
-		wg.Wait()
-		app.filteredLogLines = colorLogLines
 		// Debug end time
 		endTime := time.Since(startTime)
 		app.debugLoadTime = endTime.Truncate(time.Millisecond).String()
@@ -4512,13 +4523,34 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	// Выключение/включение покраски ключевых слов (Ctrl+Q)
+	// Выключение/включение встроенной покраски ключевых слов (Ctrl+Q)
 	if err := app.gui.SetKeybinding("", gocui.KeyCtrlQ, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		if app.colorMode {
 			app.colorMode = false
 		} else {
 			app.colorMode = true
 		}
+		app.applyFilter(true)
+		return nil
+	}); err != nil {
+		return err
+	}
+	// Включение/выключение режима покраски через tailspin (Ctrl+S)
+	if err := app.gui.SetKeybinding("", gocui.KeyCtrlS, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if app.tailSpinMode {
+			app.tailSpinMode = false
+		} else {
+			// Проверяем, что tailspin установлен в системе
+			tsCommands := []string{"tailspin", "tspin"}
+			for _, ts := range tsCommands {
+				cmd := exec.Command(ts, "--version")
+				_, err := cmd.Output()
+				if err == nil {
+					app.tailSpinMode = true
+				}
+			}
+		}
+		app.applyFilter(true)
 		return nil
 	}); err != nil {
 		return err
@@ -4544,7 +4576,7 @@ func (app *App) showInterfaceHelp(g *gocui.Gui) {
 	// Получаем размеры терминала
 	maxX, maxY := g.Size()
 	// Размеры окна help
-	width, height := 104, 28
+	width, height := 104, 29
 	// Вычисляем координаты для центрального расположения
 	x0 := (maxX - width) / 2
 	y0 := (maxY - height) / 2
@@ -4576,6 +4608,7 @@ func (app *App) showInterfaceHelp(g *gocui.Gui) {
 	fmt.Fprintln(helpView, "  \033[32mCtrl+A\033[0m or \033[32mHome\033[0m - go to top of log.")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+E\033[0m or \033[32mEnd\033[0m - go to the end of the log.")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+Q\033[0m - disable (to improve log loading performance) or enable output coloring.")
+	fmt.Fprintln(helpView, "  \033[32mCtrl+S\033[0m - enable or disable coloring via tailspin.")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+R\033[0m - update all log lists.")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+W\033[0m - clear text input field for filter to quickly update current log output without filtering.")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+C\033[0m - exit.")
