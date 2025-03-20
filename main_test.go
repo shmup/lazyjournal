@@ -52,6 +52,8 @@ func TestWinFiles(t *testing.T) {
 			app := &App{
 				selectPath:   tc.selectPath,
 				testMode:     true,
+				colorMode:    true,
+				tailSpinMode: false,
 				logViewCount: "100000",
 				getOS:        "windows",
 				// Режим и текст для фильтрации
@@ -132,6 +134,8 @@ func TestWinEvents(t *testing.T) {
 
 	app := &App{
 		testMode:             true,
+		colorMode:            true,
+		tailSpinMode:         false,
 		logViewCount:         "100000",
 		getOS:                "windows",
 		systemDisk:           "C",
@@ -201,6 +205,8 @@ func TestUnixFiles(t *testing.T) {
 			app := &App{
 				selectPath:           tc.selectPath,
 				testMode:             true,
+				colorMode:            true,
+				tailSpinMode:         false,
 				logViewCount:         "100000",
 				getOS:                "linux",
 				userName:             "lifailon",
@@ -275,6 +281,8 @@ func TestLinuxJournal(t *testing.T) {
 			app := &App{
 				selectUnits:          tc.journalName,
 				testMode:             true,
+				colorMode:            true,
+				tailSpinMode:         false,
 				logViewCount:         "100000",
 				getOS:                "linux",
 				selectFilterMode:     "fuzzy",
@@ -343,6 +351,8 @@ func TestDockerContainer(t *testing.T) {
 			app := &App{
 				selectContainerizationSystem: tc.selectContainerizationSystem,
 				testMode:                     true,
+				colorMode:                    true,
+				tailSpinMode:                 false,
 				logViewCount:                 "100000",
 				selectFilterMode:             "fuzzy",
 				filterText:                   "",
@@ -391,6 +401,8 @@ func TestColor(t *testing.T) {
 
 	app := &App{
 		testMode:             true,
+		colorMode:            true,
+		tailSpinMode:         false,
 		logViewCount:         "100000",
 		selectPath:           "/home/",
 		filterListText:       "color",
@@ -458,6 +470,41 @@ func TestColor(t *testing.T) {
 	}
 }
 
+func TestTailSpinColor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skip unix test")
+	}
+
+	app := &App{
+		testMode:       true,
+		colorMode:      true,
+		tailSpinMode:   true,
+		logViewCount:   "100000",
+		selectPath:     "/home/",
+		filterListText: "color",
+	}
+
+	app.loadFiles(app.selectPath)
+	app.logfilesNotFilter = app.logfiles
+	app.applyFilterList()
+
+	if len(app.logfiles) == 0 {
+		t.Errorf("File list is null")
+	} else {
+		t.Log("Log files count:", len(app.logfiles))
+	}
+
+	var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	logFileName := ansiEscape.ReplaceAllString(app.logfiles[0].name, "")
+	app.loadFileLogs(strings.TrimSpace(logFileName), true)
+
+	app.applyFilter(true)
+	t.Log("Lines: ", len(app.filteredLogLines))
+	for _, line := range app.filteredLogLines {
+		t.Log(line)
+	}
+}
+
 func TestFilter(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skip unix test")
@@ -475,6 +522,8 @@ func TestFilter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			app := &App{
 				testMode:             true,
+				colorMode:            true,
+				tailSpinMode:         false,
 				logViewCount:         "100000",
 				selectPath:           "/home/",
 				filterListText:       "color",
@@ -562,6 +611,8 @@ func TestMainInterface(t *testing.T) {
 func TestMockInterface(t *testing.T) {
 	app := &App{
 		testMode:                     false,
+		colorMode:                    true,
+		tailSpinMode:                 false,
 		startServices:                0,
 		selectedJournal:              0,
 		startFiles:                   0,
@@ -742,7 +793,7 @@ func TestMockInterface(t *testing.T) {
 	app.updateDelimiter(true)
 	app.applyFilter(true)
 	time.Sleep(3 * time.Second)
-	t.Log("Test coloring - passed")
+	t.Log("PASS: test coloring")
 
 	// Проверяем фильтрацию текста для списков
 	app.filterListText = "a"
@@ -751,7 +802,7 @@ func TestMockInterface(t *testing.T) {
 	app.filterListText = ""
 	app.applyFilterList()
 	time.Sleep(1 * time.Second)
-	t.Log("Test filter list - passed")
+	t.Log("PASS: test filter list")
 
 	// TAB journal
 	app.nextView(g, nil)
@@ -788,7 +839,7 @@ func TestMockInterface(t *testing.T) {
 			time.Sleep(3 * time.Second)
 		}
 	}
-	t.Log("Test journals - passed")
+	t.Log("PASS: test journals")
 
 	// TAB filesystem
 	app.nextView(g, nil)
@@ -802,24 +853,24 @@ func TestMockInterface(t *testing.T) {
 		time.Sleep(1 * time.Second)
 		if runtime.GOOS != "windows" {
 			app.setLogFilesListRight(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListRight(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListRight(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListRight(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListLeft(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListLeft(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListLeft(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 			app.setLogFilesListLeft(g, v)
-			time.Sleep(3 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 	}
-	t.Log("Test filesystem - passed")
+	t.Log("PASS: test filesystem")
 
 	// TAB docker
 	app.nextView(g, nil)
@@ -846,7 +897,7 @@ func TestMockInterface(t *testing.T) {
 		app.selectDocker(g, v)
 		time.Sleep(3 * time.Second)
 	}
-	t.Log("Test containers - passed")
+	t.Log("PASS: test containers")
 
 	// TAB filter logs
 	app.nextView(g, nil)
@@ -859,7 +910,7 @@ func TestMockInterface(t *testing.T) {
 	app.clearFilterEditor(g)
 	app.applyFilter(true)
 	time.Sleep(3 * time.Second)
-	t.Log("Test filter logs - passed")
+	t.Log("PASS: test filter logs")
 
 	// Проверяем режимы фильтрации
 	if v, err := g.View("filter"); err == nil {
@@ -882,7 +933,7 @@ func TestMockInterface(t *testing.T) {
 		app.setFilterModeLeft(g, v)
 		time.Sleep(1 * time.Second)
 	}
-	t.Log("Test filter modes - passed")
+	t.Log("PASS: test filter modes")
 
 	// TAB logs output
 	app.nextView(g, nil)
@@ -928,7 +979,7 @@ func TestMockInterface(t *testing.T) {
 		app.updateLogsView(true)
 		time.Sleep(1 * time.Second)
 	}
-	t.Log("Test log output - passed")
+	t.Log("PASS: test log output")
 
 	// TAB filter list
 	app.nextView(g, nil)
