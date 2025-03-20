@@ -410,13 +410,13 @@ var (
 	// Байты или числа в шестнадцатеричном формате: 0x2 || 0xc0000001
 	hexByteRegex = regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`)
 	// Date: YYYY-MM-DDTHH:MM:SS.MS+HH:MM
-	dateTimeRegex = regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?)\b`)
+	dateTimeRegex = regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([\+\-]\d{2}:\d{2})?)\b`)
 	// MAC address + Time: H:MM || HH:MM || HH:MM:SS || XX:XX:XX:XX || XX:XX:XX:XX:XX:XX || XX-XX-XX-XX-XX-XX || HH:MM:SS,XXX || HH:MM:SS.XXX || HH:MM:SS+03
-	timeMacAddressRegex = regexp.MustCompile(`\b(?:\d{1,2}:\d{2}(:\d{2}([.,+]\d{2,6})?)?|\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b)\b`)
+	timeMacAddressRegex = regexp.MustCompile(`\b(?:\d{1,2}:\d{2}(:\d{2}([\.\,\+]\d{2,6})?)?|\b(?:[0-9A-Fa-f]{2}[\:\-]){5}[0-9A-Fa-f]{2}\b)\b`)
 	// Date + IP address + version (1.0 || 1.0.7 || 1.0-build)
-	dateIpAddressRegex = regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2}|(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?|\d+\.\d+[+-.\w\d]+|\d+\.\d+)\b`)
+	dateIpAddressRegex = regexp.MustCompile(`\b(\d{1,2}[\-\.]\d{1,2}[\-\.]\d{4}|\d{4}[\-\.]\d{1,2}[\-\.]\d{1,2}|(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?|\d+\.\d+[\+\-\.\w]+|\d+\.\d+)\b`)
 	// Date: DD-MM-YYYY || DD.MM.YYYY || YYYY-MM-DD || YYYY.MM.DD
-	dateRegex = regexp.MustCompile(`\b(\d{1,2}[-.]\d{1,2}[-.]\d{4}|\d{4}[-.]\d{1,2}[-.]\d{1,2})\b`)
+	dateRegex = regexp.MustCompile(`\b(\d{1,2}[\-\.]\d{1,2}[\-\.]\d{4}|\d{4}[\-\.]\d{1,2}[\-.]\d{1,2})\b`)
 	// IP: 255.255.255.255 || 255.255.255.255:443 || 255.255.255.255.443 || 255.255.255.255/24
 	ipAddressRegex = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+|\.\d+|/\d+)?\b`)
 	// int%
@@ -3724,14 +3724,6 @@ func (app *App) wordColor(inputWord string) string {
 				break
 			}
 		}
-	case strings.Contains(inputWordLower, "us"):
-		words := []string{"status", "used", "use"}
-		for _, word := range words {
-			if strings.Contains(inputWordLower, word) {
-				coloredWord = app.replaceWordLower(inputWord, word, "\033[36m")
-				break
-			}
-		}
 	case strings.Contains(inputWordLower, "debug"):
 		coloredWord = app.replaceWordLower(inputWord, "debug", "\033[36m")
 	case strings.Contains(inputWordLower, "verbose"):
@@ -3759,7 +3751,6 @@ func (app *App) wordColor(inputWord string) string {
 	// DateTime
 	case app.dateTimeRegex.MatchString(inputWord):
 		coloredWord = app.dateTimeRegex.ReplaceAllStringFunc(inputWord, func(match string) string {
-			// return "\033[34m" + match + "\033[0m"
 			colored := ""
 			for _, char := range match {
 				if char == '-' || char == '.' || char == ':' || char == '+' || char == 'T' {
@@ -4623,7 +4614,9 @@ func (app *App) setupKeybindings() error {
 	}
 	// Закрыть окно справки (Esc)
 	if err := app.gui.SetKeybinding("", gocui.KeyEsc, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		app.closeHelp(g)
+		if err := app.closeHelp(g); err != nil {
+			return nil
+		}
 		return nil
 	}); err != nil {
 		return err
@@ -4642,7 +4635,7 @@ func (app *App) showInterfaceHelp(g *gocui.Gui) {
 	x1 := x0 + width
 	y1 := y0 + height
 	helpView, err := g.SetView("help", x0, y0, x1, y1, 0)
-	if err != nil && err != gocui.ErrUnknownView {
+	if err != nil && !errors.Is(err, gocui.ErrUnknownView) {
 		return
 	}
 	helpView.Title = " Help "
