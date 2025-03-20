@@ -65,8 +65,6 @@ func TestWinFiles(t *testing.T) {
 				hexByteRegex:         hexByteRegex,
 				dateTimeRegex:        dateTimeRegex,
 				timeMacAddressRegex:  timeMacAddressRegex,
-				timeRegex:            timeRegex,
-				macAddressRegex:      macAddressRegex,
 				dateIpAddressRegex:   dateIpAddressRegex,
 				dateRegex:            dateRegex,
 				ipAddressRegex:       ipAddressRegex,
@@ -147,8 +145,6 @@ func TestWinEvents(t *testing.T) {
 		hexByteRegex:         hexByteRegex,
 		dateTimeRegex:        dateTimeRegex,
 		timeMacAddressRegex:  timeMacAddressRegex,
-		timeRegex:            timeRegex,
-		macAddressRegex:      macAddressRegex,
 		dateIpAddressRegex:   dateIpAddressRegex,
 		dateRegex:            dateRegex,
 		ipAddressRegex:       ipAddressRegex,
@@ -217,8 +213,6 @@ func TestUnixFiles(t *testing.T) {
 				hexByteRegex:         hexByteRegex,
 				dateTimeRegex:        dateTimeRegex,
 				timeMacAddressRegex:  timeMacAddressRegex,
-				timeRegex:            timeRegex,
-				macAddressRegex:      macAddressRegex,
 				dateIpAddressRegex:   dateIpAddressRegex,
 				dateRegex:            dateRegex,
 				ipAddressRegex:       ipAddressRegex,
@@ -292,8 +286,6 @@ func TestLinuxJournal(t *testing.T) {
 				hexByteRegex:         hexByteRegex,
 				dateTimeRegex:        dateTimeRegex,
 				timeMacAddressRegex:  timeMacAddressRegex,
-				timeRegex:            timeRegex,
-				macAddressRegex:      macAddressRegex,
 				dateIpAddressRegex:   dateIpAddressRegex,
 				dateRegex:            dateRegex,
 				ipAddressRegex:       ipAddressRegex,
@@ -361,8 +353,6 @@ func TestDockerContainer(t *testing.T) {
 				hexByteRegex:                 hexByteRegex,
 				dateTimeRegex:                dateTimeRegex,
 				timeMacAddressRegex:          timeMacAddressRegex,
-				timeRegex:                    timeRegex,
-				macAddressRegex:              macAddressRegex,
 				dateIpAddressRegex:           dateIpAddressRegex,
 				dateRegex:                    dateRegex,
 				ipAddressRegex:               ipAddressRegex,
@@ -394,7 +384,85 @@ func TestDockerContainer(t *testing.T) {
 	}
 }
 
-func TestFilterColor(t *testing.T) {
+func TestColor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skip unix test")
+	}
+
+	app := &App{
+		testMode:             true,
+		logViewCount:         "100000",
+		selectPath:           "/home/",
+		filterListText:       "color",
+		trimHttpRegex:        trimHttpRegex,
+		trimHttpsRegex:       trimHttpsRegex,
+		trimPrefixPathRegex:  trimPrefixPathRegex,
+		trimPostfixPathRegex: trimPostfixPathRegex,
+		hexByteRegex:         hexByteRegex,
+		dateTimeRegex:        dateTimeRegex,
+		timeMacAddressRegex:  timeMacAddressRegex,
+		dateIpAddressRegex:   dateIpAddressRegex,
+		dateRegex:            dateRegex,
+		ipAddressRegex:       ipAddressRegex,
+		procRegex:            procRegex,
+		syslogUnitRegex:      syslogUnitRegex,
+	}
+
+	// Определяем переменные для покраски
+	app.hostName, _ = os.Hostname()
+	if strings.Contains(app.hostName, ".") {
+		app.hostName = strings.Split(app.hostName, ".")[0]
+	}
+	currentUser, _ := user.Current()
+	app.userName = currentUser.Username
+	if strings.Contains(app.userName, "\\") {
+		app.userName = strings.Split(app.userName, "\\")[1]
+	}
+	passwd, _ := os.Open("/etc/passwd")
+	scanner := bufio.NewScanner(passwd)
+	for scanner.Scan() {
+		line := scanner.Text()
+		userName := strings.Split(line, ":")
+		if len(userName) > 0 {
+			app.userNameArray = append(app.userNameArray, userName[0])
+		}
+	}
+	files, _ := os.ReadDir("/")
+	for _, file := range files {
+		if file.IsDir() {
+			app.rootDirArray = append(app.rootDirArray, "/"+file.Name())
+		}
+	}
+
+	// Загружаем файловые журналы и фильтруем вывод (находим тестовый лог-файл)
+	app.loadFiles(app.selectPath)
+	app.logfilesNotFilter = app.logfiles
+	app.applyFilterList()
+
+	if len(app.logfiles) == 0 {
+		t.Errorf("File list is null")
+	} else {
+		t.Log("Log files count:", len(app.logfiles))
+	}
+
+	// Загружаем журнал
+	var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	logFileName := ansiEscape.ReplaceAllString(app.logfiles[0].name, "")
+	app.loadFileLogs(strings.TrimSpace(logFileName), true)
+
+	// Выводим содержимое с покраской
+	app.applyFilter(true)
+	t.Log("Lines: ", len(app.filteredLogLines))
+	for _, line := range app.filteredLogLines {
+		t.Log(line)
+	}
+}
+
+func TestFilter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skip unix test")
+	}
+
 	testCases := []struct {
 		name             string
 		selectFilterMode string
@@ -408,8 +476,10 @@ func TestFilterColor(t *testing.T) {
 			app := &App{
 				testMode:             true,
 				logViewCount:         "100000",
+				selectPath:           "/home/",
+				filterListText:       "color",
 				selectFilterMode:     tc.selectFilterMode,
-				filterText:           "line",
+				filterText:           "true",
 				trimHttpRegex:        trimHttpRegex,
 				trimHttpsRegex:       trimHttpsRegex,
 				trimPrefixPathRegex:  trimPrefixPathRegex,
@@ -417,8 +487,6 @@ func TestFilterColor(t *testing.T) {
 				hexByteRegex:         hexByteRegex,
 				dateTimeRegex:        dateTimeRegex,
 				timeMacAddressRegex:  timeMacAddressRegex,
-				timeRegex:            timeRegex,
-				macAddressRegex:      macAddressRegex,
 				dateIpAddressRegex:   dateIpAddressRegex,
 				dateRegex:            dateRegex,
 				ipAddressRegex:       ipAddressRegex,
@@ -426,28 +494,48 @@ func TestFilterColor(t *testing.T) {
 				syslogUnitRegex:      syslogUnitRegex,
 			}
 
-			app.currentLogLines = []string{
-				"1  line: http://localhost:8443",
-				"2  line: https://github.com/Lifailon/lazyjournal",
-				"3  line: /etc/ssh/sshd_config",
-				"4  line: root runner",
-				"5  line: warning",
-				"6  line: stderr: disconnected and crashed",
-				"7  line: kernel: deletion removed stopped invalidated aborted blocked deactivated",
-				"8  line: rsyslogd: exited critical failed rejection fataling closed ended dropped killing",
-				"9  line: sudo: cancelation unavailable unsuccessful found denied conflict false none",
-				"10 line: /dev/null",
-				"11 line: null success complete accept connection finish started created enable allowing posted",
-				"12 line: routing forward passed running added opened patching ok available accessible done true",
-				"13 line: stdout input GET SET head request upload listen launch change clear skip missing mount",
-				"14 line: authorization configuration option writing saving boot paused filter normal notice alert",
-				"15 line: information update shutdown status debug verbose trace protocol level",
-				"16 line: 2025-02-26T21:38:35.956968+03:00 ⎯⎯⎯ 0x04 ⎯⎯⎯",
-				"17 line: 25.02.2025 11:11 11:11:11:11:11:11 11-11-11-11-11-11",
-				"18 line: TCP UDP ICMP IP 192.168.1.1:8443",
-				"19 line: 25.02.2025 01:14:42 [INFO]: not data",
-				"20 line: cron[123]: running",
+			if tc.selectFilterMode == "regex" {
+				app.filterText = "^true$"
 			}
+
+			app.hostName, _ = os.Hostname()
+			if strings.Contains(app.hostName, ".") {
+				app.hostName = strings.Split(app.hostName, ".")[0]
+			}
+			currentUser, _ := user.Current()
+			app.userName = currentUser.Username
+			if strings.Contains(app.userName, "\\") {
+				app.userName = strings.Split(app.userName, "\\")[1]
+			}
+			passwd, _ := os.Open("/etc/passwd")
+			scanner := bufio.NewScanner(passwd)
+			for scanner.Scan() {
+				line := scanner.Text()
+				userName := strings.Split(line, ":")
+				if len(userName) > 0 {
+					app.userNameArray = append(app.userNameArray, userName[0])
+				}
+			}
+			files, _ := os.ReadDir("/")
+			for _, file := range files {
+				if file.IsDir() {
+					app.rootDirArray = append(app.rootDirArray, "/"+file.Name())
+				}
+			}
+
+			app.loadFiles(app.selectPath)
+			app.logfilesNotFilter = app.logfiles
+			app.applyFilterList()
+
+			if len(app.logfiles) == 0 {
+				t.Errorf("File list is null")
+			} else {
+				t.Log("Log files count:", len(app.logfiles))
+			}
+
+			var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+			logFileName := ansiEscape.ReplaceAllString(app.logfiles[0].name, "")
+			app.loadFileLogs(strings.TrimSpace(logFileName), true)
 
 			app.applyFilter(true)
 			t.Log("Lines: ", len(app.filteredLogLines))
@@ -496,8 +584,6 @@ func TestMockInterface(t *testing.T) {
 		hexByteRegex:                 hexByteRegex,
 		dateTimeRegex:                dateTimeRegex,
 		timeMacAddressRegex:          timeMacAddressRegex,
-		timeRegex:                    timeRegex,
-		macAddressRegex:              macAddressRegex,
 		dateIpAddressRegex:           dateIpAddressRegex,
 		dateRegex:                    dateRegex,
 		ipAddressRegex:               ipAddressRegex,
@@ -630,28 +716,28 @@ func TestMockInterface(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
+	// F1
+	app.showInterfaceHelp(g)
+	app.closeHelp(g)
+
 	// Проверяем покраску
 	app.currentLogLines = []string{
-		"1  line: http://localhost:8443",
+		"1  line: http://127.0.0.1:8443",
 		"2  line: https://github.com/Lifailon/lazyjournal",
-		"3  line: /etc/ssh/sshd_config",
-		"4  line: root runner",
+		"3  line: /dev/null",
+		"4  line: root",
 		"5  line: warning",
-		"6  line: stderr: disconnected and crashed",
-		"7  line: kernel: deletion removed stopped invalidated aborted blocked deactivated",
-		"8  line: rsyslogd: exited critical failed rejection fataling closed ended dropped killing",
-		"9  line: sudo: cancelation unavailable unsuccessful found denied conflict false none",
-		"10 line: /dev/null",
-		"11 line: null success complete accept connection finish started created enable allowing posted",
-		"12 line: routing forward passed running added opened patching ok available accessible done true",
-		"13 line: stdout input GET SET head request upload listen launch change clear skip missing mount",
-		"14 line: authorization configuration option writing saving boot paused filter normal notice alert",
-		"15 line: information update shutdown status debug verbose trace protocol level",
-		"16 line: 2025-02-26T21:38:35.956968+03:00 ⎯⎯⎯ 0x04 ⎯⎯⎯",
-		"17 line: 25.02.2025 11:11 11:11:11:11:11:11 11-11-11-11-11-11",
-		"18 line: TCP UDP ICMP IP 192.168.1.1:8443",
-		"19 line: 25.02.2025 01:14:42 [INFO]: not data",
-		"20 line: cron[123]: running",
+		"6  line: stderr",
+		"7  line: success",
+		"8  line: restart",
+		"11 line: 0x04",
+		"12 line: 2025-02-26T21:38:35.956968+03:00",
+		"13 line: 11:11 / 11:11:11",
+		"14 line: 11:11:11:11:11:11 / 11-11-11-11-11-11",
+		"15 line: 20.03.2025",
+		"16 line: 1.0 / 1.0.7 / 1.0-build",
+		"17 line: 127.0.0.1 / 127.0.0.1:8443",
+		"18 line: 100%",
 	}
 	app.updateDelimiter(true)
 	app.applyFilter(true)
