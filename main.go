@@ -2886,6 +2886,11 @@ func (app *App) applyFilter(color bool) {
 				}
 			}
 		}
+		// Если последняя строка не содержит пустую строку, то добавляем ее
+		if len(app.filteredLogLines) > 0 && app.filteredLogLines[len(app.filteredLogLines)-1] != "" {
+			app.filteredLogLines = append(app.filteredLogLines, "")
+		}
+		// Отключаем покраску в режиме colorMode
 		if app.colorMode {
 			// Режим покраски через tailspin
 			if app.tailSpinMode {
@@ -4576,8 +4581,11 @@ func (app *App) setupKeybindings() error {
 		} else {
 			app.colorMode = true
 		}
-		app.updateLogsView(true)
-		app.applyFilter(true)
+		if len(app.currentLogLines) != 0 {
+			app.updateLogsView(true)
+			app.applyFilter(false)
+			app.updateLogOutput(0)
+		}
 		return nil
 	}); err != nil {
 		return err
@@ -4597,8 +4605,11 @@ func (app *App) setupKeybindings() error {
 				}
 			}
 		}
-		app.updateLogsView(true)
-		app.applyFilter(true)
+		if len(app.currentLogLines) != 0 {
+			app.updateLogsView(true)
+			app.applyFilter(false)
+			app.updateLogOutput(0)
+		}
 		return nil
 	}); err != nil {
 		return err
@@ -4655,7 +4666,7 @@ func (app *App) showInterfaceHelp(g *gocui.Gui) {
 	fmt.Fprintln(helpView, "  \033[32m<Shift/Ctrl>+<U/D>\033[0m - quickly move up and down (alternative for macOS).")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+A\033[0m or \033[32mHome\033[0m - go to top of log.")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+E\033[0m or \033[32mEnd\033[0m - go to the end of the log.")
-	fmt.Fprintln(helpView, "  \033[32mCtrl+Q\033[0m - disable (to improve log loading performance) or enable output coloring.")
+	fmt.Fprintln(helpView, "  \033[32mCtrl+Q\033[0m - enable or disable built-in output coloring.")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+S\033[0m - enable or disable coloring via tailspin.")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+R\033[0m - update all log lists.")
 	fmt.Fprintln(helpView, "  \033[32mCtrl+W\033[0m - clear text input field for filter to quickly update current log output without filtering.")
