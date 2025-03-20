@@ -9,12 +9,16 @@ networks:
 
 commands:
   install:
-    desc: Install Go
+    desc: Install Git and Go
     run: |
       if [ "$(uname -s)" = "FreeBSD" ]; then 
-        pkg install go
-      elif [ "$(uname -s)" = "OpenBSD" ]; then 
-        pkg_add go
+        pkg update
+        pkg install -y git
+        pkg install -y go
+      elif [ "$(uname -s)" = "OpenBSD" ]; then
+        pkg_add -u
+        yes | pkg_add git
+        yes | pkg_add go
       fi
 
   clone:
@@ -35,7 +39,7 @@ commands:
       go mod verify
       go build -o /dev/null -v ./...
 
-  test:
+  unit-test:
     desc: Run unit test for interface
     run: |
       cd lazyjournal
@@ -46,8 +50,8 @@ commands:
     run: rm -rf lazyjournal
 
 targets:
-  deploy:
+  testing:
     - clone
     - prep
-    - test
+    - unit-test
     - remove
