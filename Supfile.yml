@@ -1,11 +1,16 @@
 env:
   GIT_URL: https://github.com/Lifailon/lazyjournal
+  GO_PATH: /usr/local/bin/go
+  # GO_PATH: /usr/local/go/bin/go
 
 networks:
   bsd:
     hosts:
       - root@192.168.3.102:22
       - root@192.168.3.103:22
+  mac:
+    hosts:
+      - root@192.168.3.98:22
 
 commands:
   install:
@@ -19,39 +24,71 @@ commands:
         pkg_add -u
         yes | pkg_add git
         yes | pkg_add go
+      elif [ "$(uname -s)" = "Darwin" ]; then
+        /usr/local/bin/brew update
+        /usr/local/bin/brew install git
+        /usr/local/bin/brew install go
       fi
 
   clone:
     desc: Clone repository
-    run: |
-      git clone $GIT_URL
-      cd lazyjournal
-      ls -lh
+    run: git clone $GIT_URL
 
   prep:
     desc: Install dependencies and code preparation
     run: |
       cd lazyjournal
-      go fmt ./...
-      go vet ./...
-      go get ./...
-      go mod tidy
-      go mod verify
-      go build -o /dev/null -v ./...
+      $GO_PATH version
+      $GO_PATH fmt ./...
+      $GO_PATH vet ./...
+      $GO_PATH get ./...
+      $GO_PATH mod tidy
+      $GO_PATH mod verify
+      $GO_PATH build -o /dev/null -v ./...
 
-  unit-test:
+  test-unix-files:
+    desc: Run unit test for unix files
+    run: |
+      cd lazyjournal
+      $GO_PATH test -v -cover --run "TestUnixFiles"
+
+  test-filter-color:
+    desc: Run unit test for unix files
+    run: |
+      cd lazyjournal
+      $GO_PATH test -v -cover --run "TestColor|TestFilter"
+
+  test-flags:
     desc: Run unit test for interface
     run: |
       cd lazyjournal
-      go test -v -cover --run "TestMainInterface|TestMockInterface"
+      $GO_PATH test -v -cover --run "TestFlags"
+
+  test-main-interface:
+    desc: Run unit test for interface
+    run: |
+      cd lazyjournal
+      $GO_PATH test -v -cover --run "TestMainInterface"
+
+  test-mock-interface:
+    desc: Run unit test for interface
+    run: |
+      cd lazyjournal
+      $GO_PATH test -v -cover --run "TestMockInterface"
 
   remove:
     desc: Remove repository
-    run: rm -rf lazyjournal
+    run: |
+      rm -rf lazyjournal
+      ls -l lazyjournal || echo "lazyjournal removed"
 
 targets:
   testing:
     - clone
     - prep
-    - unit-test
+    - test-unix-files
+    - test-filter-color
+    - test-flags
+    - test-main-interface
+    - test-mock-interface
     - remove
