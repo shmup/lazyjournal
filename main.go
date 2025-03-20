@@ -1378,7 +1378,7 @@ func (app *App) loadWinEventLog(eventName string) (output []byte) {
 // ---------------------------------------- Filesystem ----------------------------------------
 
 func (app *App) loadFiles(logPath string) {
-	app.logfiles = nil
+	app.logfiles = nil // сбрасываем (очищаем) массив перед загрузкой новых журналов
 	var output []byte
 	switch {
 	case logPath == "descriptor":
@@ -1707,6 +1707,7 @@ func (app *App) loadFiles(logPath string) {
 }
 
 func (app *App) loadWinFiles(logPath string) {
+	app.logfiles = nil
 	// Определяем путь по параметру
 	switch {
 	case logPath == "ProgramFiles":
@@ -3010,6 +3011,34 @@ func (app *App) containsPath(searchWord string) bool {
 	return false
 }
 
+// Покраска url путей
+func (app *App) urlPathColor(cleanedWord string) string {
+	// Используем Builder для объединения строк
+	var sb strings.Builder
+	// Начинаем с желтого цвета
+	sb.WriteString("\033[33m")
+	for _, char := range cleanedWord {
+		switch {
+		// Пурпурный цвет для символов и возвращяем желтый
+		case char == '/' || char == '?' || char == '&' || char == '=' || char == ':' || char == '.':
+			sb.WriteString("\033[35m")
+			sb.WriteRune(char)
+			sb.WriteString("\033[33m")
+		// Синий цвет для цифр
+		// case unicode.IsDigit(char):
+		case char >= '0' && char <= '9':
+			sb.WriteString("\033[34m")
+			sb.WriteRune(char)
+			sb.WriteString("\033[33m")
+		default:
+			sb.WriteRune(char)
+		}
+	}
+	// Сброс цвета
+	sb.WriteString("\033[0m")
+	return sb.String()
+}
+
 // Функция для покраски словосочетаний
 func (app *App) wordColor(inputWord string) string {
 	// Опускаем регистр слова
@@ -3017,17 +3046,32 @@ func (app *App) wordColor(inputWord string) string {
 	// Значение по умолчанию
 	var coloredWord string = inputWord
 	switch {
-	// Пурпурный (url и директории) [35m]
+	// URL
 	case strings.Contains(inputWord, "http://"):
 		cleanedWord := app.trimHttpRegex.ReplaceAllString(inputWord, "")
-		coloredWord = strings.ReplaceAll(inputWord, "http://"+cleanedWord, "\033[35m"+"http://"+cleanedWord+"\033[0m")
+		coloredChars := app.urlPathColor(cleanedWord)
+		// Красный для http
+		coloredWord = strings.ReplaceAll(inputWord, "http://"+cleanedWord, "\033[31mhttp\033[35m://"+coloredChars)
 	case strings.Contains(inputWord, "https://"):
 		cleanedWord := app.trimHttpsRegex.ReplaceAllString(inputWord, "")
-		coloredWord = strings.ReplaceAll(inputWord, "https://"+cleanedWord, "\033[35m"+"https://"+cleanedWord+"\033[0m")
+		coloredChars := app.urlPathColor(cleanedWord)
+		// Зеленый для https
+		coloredWord = strings.ReplaceAll(inputWord, "https://"+cleanedWord, "\033[32mhttps\033[35m://"+coloredChars)
+	// UNIX file paths
 	case app.containsPath(inputWord):
 		cleanedWord := app.trimPrefixPathRegex.ReplaceAllString(inputWord, "")
 		cleanedWord = app.trimPostfixPathRegex.ReplaceAllString(cleanedWord, "")
-		coloredWord = strings.ReplaceAll(inputWord, cleanedWord, "\033[35m"+cleanedWord+"\033[0m")
+		// Начинаем с желтого цвета
+		coloredChars := "\033[33m"
+		for _, char := range cleanedWord {
+			// Красим символы разделителя путей в пурпурный и возвращяем цвет
+			if char == '/' {
+				coloredChars += "\033[35m" + string(char) + "\033[33m"
+			} else {
+				coloredChars += string(char)
+			}
+		}
+		coloredWord = strings.ReplaceAll(inputWord, cleanedWord, "\033[35m"+coloredChars+"\033[0m")
 	// Желтый (известные имена: hostname и username) [33m]
 	case app.colorMode && strings.Contains(inputWord, app.hostName):
 		coloredWord = strings.ReplaceAll(inputWord, app.hostName, "\033[33m"+app.hostName+"\033[0m")
@@ -3044,7 +3088,7 @@ func (app *App) wordColor(inputWord string) string {
 				break
 			}
 		}
-	// Custom (UNIX processes)
+	// UNIX processes
 	case app.colorMode && app.syslogUnitRegex.MatchString(inputWord):
 		unitSplit := strings.Split(inputWord, "[")
 		unitName := unitSplit[0]
@@ -3711,7 +3755,7 @@ func (app *App) wordColor(inputWord string) string {
 			// return "\033[34m" + match + "\033[0m"
 			colored := ""
 			for _, char := range match {
-				if char == '-' || char == '.' || char == ':' || char == '+' {
+				if char == '-' || char == '.' || char == ':' || char == '+' || char == 'T' {
 					// Пурпурный для символов
 					colored += "\033[35m" + string(char) + "\033[0m"
 				} else {
@@ -3761,13 +3805,13 @@ func (app *App) wordColor(inputWord string) string {
 			return colored
 		})
 	// tcpdump
-	case strings.Contains(inputWordLower, "tcp"):
+	case app.colorMode && strings.Contains(inputWordLower, "tcp"):
 		coloredWord = app.replaceWordLower(inputWord, "tcp", "\033[33m")
-	case strings.Contains(inputWordLower, "udp"):
+	case app.colorMode && strings.Contains(inputWordLower, "udp"):
 		coloredWord = app.replaceWordLower(inputWord, "udp", "\033[33m")
-	case strings.Contains(inputWordLower, "icmp"):
+	case app.colorMode && strings.Contains(inputWordLower, "icmp"):
 		coloredWord = app.replaceWordLower(inputWord, "icmp", "\033[33m")
-	case strings.Contains(inputWordLower, "ip"):
+	case app.colorMode && strings.Contains(inputWordLower, "ip"):
 		words := []string{"ip4", "ipv4", "ip6", "ipv6", "ip"}
 		for _, word := range words {
 			if strings.Contains(inputWordLower, word) {
@@ -3779,7 +3823,7 @@ func (app *App) wordColor(inputWord string) string {
 	case strings.Contains(inputWord, "⎯"):
 		coloredWord = app.replaceWordLower(inputWord, "⎯", "\033[32m")
 	// Исключения
-	case strings.Contains(inputWordLower, "not"):
+	case app.colorMode && strings.Contains(inputWordLower, "not"):
 		coloredWord = app.replaceWordLower(inputWord, "not", "\033[31m")
 	}
 	return coloredWord
