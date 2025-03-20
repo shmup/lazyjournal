@@ -227,7 +227,7 @@ func TestUnixFiles(t *testing.T) {
 			}
 
 			// Пропускаем тесты в macOS
-			if runtime.GOOS == "darwin" && tc.selectPath != "/var/log/" && tc.selectPath != "/home/" {
+			if runtime.GOOS == "darwin" && tc.selectPath == "/opt/" || runtime.GOOS == "darwin" && tc.selectPath == "descriptor" {
 				t.Skip("Skip test for macOS in CI")
 			}
 
@@ -1000,6 +1000,4 @@ func TestMockInterface(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	app.backView(g, nil)
 	time.Sleep(1 * time.Second)
-
-	quit(g, nil)
 }
