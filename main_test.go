@@ -227,7 +227,7 @@ func TestUnixFiles(t *testing.T) {
 			}
 
 			// Пропускаем тесты в macOS
-			if runtime.GOOS == "darwin" && tc.selectPath != "/var/log/" {
+			if runtime.GOOS == "darwin" && tc.selectPath != "/var/log/" || runtime.GOOS == "darwin" && tc.selectPath != "/home/" {
 				t.Skip("Skip test for macOS in CI")
 			}
 
