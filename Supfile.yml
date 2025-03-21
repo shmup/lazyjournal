@@ -24,6 +24,25 @@ commands:
         fi
       fi
 
+  bin:
+    desc: Install binary
+    run: curl -sS https://raw.githubusercontent.com/Lifailon/lazyjournal/main/install.sh | bash
+
+  run:
+    desc: Run interface from release
+    run: |
+      if [ "$(uname -s)" = "FreeBSD" ]; then 
+        . /root/.shrc
+      elif [ "$(uname -s)" = "OpenBSD" ]; then
+        . /root/.kshrc
+      fi
+      lazyjournal -v
+      lazyjournal -a
+      tmux new-session -d -s test-session "lazyjournal"
+      sleep 1
+      tmux capture-pane -p
+      tmux kill-session -t test-session
+
   clone:
     desc: Clone repository
     run: |
@@ -70,6 +89,9 @@ commands:
       ls -l lazyjournal 2> /dev/null || echo "lazyjournal removed"
 
 targets:
+  release:
+    - bin
+    - run
   testing:
     - install
     - creat
