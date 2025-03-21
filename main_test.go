@@ -226,8 +226,8 @@ func TestUnixFiles(t *testing.T) {
 				syslogUnitRegex:      syslogUnitRegex,
 			}
 
-			// Пропускаем тесты в macOS
-			if runtime.GOOS == "darwin" && tc.selectPath != "/var/log/" {
+			// Пропускаем тесты в macOS/BSD
+			if runtime.GOOS != "linux" && tc.selectPath != "/var/log/" {
 				t.Skip("Skip test for macOS in CI")
 			}
 

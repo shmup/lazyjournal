@@ -1,44 +1,55 @@
 env:
   GIT_URL: https://github.com/Lifailon/lazyjournal
   GO_PATH: /usr/local/bin/go
-  # GO_PATH: /usr/local/go/bin/go
 
 networks:
   bsd:
     hosts:
       - root@192.168.3.102:22
       - root@192.168.3.103:22
-  mac:
-    hosts:
-      - root@192.168.3.98:22
 
 commands:
   install:
-    desc: Install Git and Go
+    desc: Install Go
     run: |
-      if [ "$(uname -s)" = "FreeBSD" ]; then 
-        pkg update
-        pkg install -y git
-        pkg install -y go
-      elif [ "$(uname -s)" = "OpenBSD" ]; then
-        pkg_add -u
-        yes | pkg_add git
-        yes | pkg_add go
-      elif [ "$(uname -s)" = "Darwin" ]; then
-        /usr/local/bin/brew update
-        /usr/local/bin/brew install git
-        /usr/local/bin/brew install go
+      if [ -e "$GO_PATH" ]; then
+        $GO_PATH version
+      else
+        if [ "$(uname -s)" = "FreeBSD" ]; then 
+          pkg update
+          pkg install -y go
+        elif [ "$(uname -s)" = "OpenBSD" ]; then
+          pkg_add -u
+          yes | pkg_add go
+        fi
       fi
 
   clone:
     desc: Clone repository
-    run: git clone $GIT_URL
+    run: |
+      rm -rf lazyjournal
+      git clone $GIT_URL
+
+  creat:
+    desc: Creat directory for upload files
+    run: |
+      rm -rf lazyjournal
+      mkdir lazyjournal
+
+  copy:
+    desc: Upload all files to remote hosts
+    upload:
+      - src: \*
+        dst: lazyjournal
+
+  check:
+    desc: Check directory
+    run: ls -lh lazyjournal
 
   prep:
     desc: Install dependencies and code preparation
     run: |
       cd lazyjournal
-      $GO_PATH version
       $GO_PATH fmt ./...
       $GO_PATH vet ./...
       $GO_PATH get ./...
@@ -46,49 +57,24 @@ commands:
       $GO_PATH mod verify
       $GO_PATH build -o /dev/null -v ./...
 
-  test-unix-files:
-    desc: Run unit test for unix files
+  test:
+    desc: Run unit tests
     run: |
       cd lazyjournal
-      $GO_PATH test -v -cover --run "TestUnixFiles"
-
-  test-filter-color:
-    desc: Run unit test for unix files
-    run: |
-      cd lazyjournal
-      $GO_PATH test -v -cover --run "TestColor|TestFilter"
-
-  test-flags:
-    desc: Run unit test for interface
-    run: |
-      cd lazyjournal
-      $GO_PATH test -v -cover --run "TestFlags"
-
-  test-main-interface:
-    desc: Run unit test for interface
-    run: |
-      cd lazyjournal
-      $GO_PATH test -v -cover --run "TestMainInterface"
-
-  test-mock-interface:
-    desc: Run unit test for interface
-    run: |
-      cd lazyjournal
-      $GO_PATH test -v -cover --run "TestMockInterface"
+      $GO_PATH test -v -cover --run "TestUnixFiles|TestColor|TestFilter|TestFlags|TestMainInterface|TestMockInterface"
 
   remove:
-    desc: Remove repository
+    desc: Remove files on remote hosts
     run: |
       rm -rf lazyjournal
-      ls -l lazyjournal || echo "lazyjournal removed"
+      ls -l lazyjournal 2> /dev/null || echo "lazyjournal removed"
 
 targets:
   testing:
-    - clone
+    - install
+    - creat
+    - copy
+    - check
     - prep
-    - test-unix-files
-    - test-filter-color
-    - test-flags
-    - test-main-interface
-    - test-mock-interface
+    - test
     - remove

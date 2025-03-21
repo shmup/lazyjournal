@@ -37,8 +37,10 @@ tasks:
     desc: "Get test list"
     cmds:
       - go test -list . ./...
+      - silent: true
+        cmd: |
+          echo To run the test use: task test -- TestMain
 
-  # task test -- TestMain
   test:
     desc: "Run the selected unit test"
     cmds:
@@ -49,7 +51,7 @@ tasks:
     desc: "Build"
     vars:
       VERSION:
-        sh: go run main.go -v # Get version from flag in source code
+        sh: go run main.go -v
     cmds:
       - echo Build version {{.VERSION}}
       - task: prep

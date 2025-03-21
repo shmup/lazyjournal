@@ -1,4 +1,3 @@
-# Get version from flag in source code
 version := $(shell go run main.go -v)
 
 prep:
@@ -24,8 +23,8 @@ lint: prep install-lint
 
 list:
 	@go test -list . ./...
+	@echo To run the test use: make test n=TestMain
 
-# make test n=TestMain
 test: prep
 	go test -v -cover --run $(n) ./...
 
