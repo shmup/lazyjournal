@@ -18,11 +18,12 @@ Terminal user interface for reading logs from `journalctl`, file system, Docker 
 
 This tool is inspired by and with love for [LazyDocker](https://github.com/jesseduffield/lazydocker) and [LazyGit](https://github.com/jesseduffield/lazygit), as well as is included in [Awesome-TUIs](https://github.com/rothgar/awesome-tuis?tab=readme-ov-file#development) and [Awesome-Docker](https://github.com/veggiemonk/awesome-docker?tab=readme-ov-file#terminal-ui), check out other useful projects on the repository pages.
 
-![interface](/img/fuzzy.jpg)
+![interface](/img/regex.png)
 
 ## Functional
 
-- Simple installation, download one executable file without dependencies for starting.
+- Simple installation, to run download one executable file without dependencies and settings.
+- Displays the current log output in real-time (updated every 5 seconds, file logs are updated only when there are changes).
 - List of all units (`services`, `sockets`, etc.) via `systemctl` with current running status.
 - View all system and user journals via `journalctl` (tool for reading logs from [systemd-journald](https://github.com/systemd/systemd/tree/main/src/journal)).
 - List of all system boots for kernel log output.
@@ -33,7 +34,6 @@ This tool is inspired by and with love for [LazyDocker](https://github.com/jesse
 - Kubernetes pods via `kubectl`
 - Windows Event Logs (in test mode via `powershell` and reading via `wevtutil`) and application logs from Windows file system.
 - Filtering lists to find the desired journal.
-- Displays the currently selected log output in real-time.
 
 Supports 3 filtering modes:
 
@@ -41,15 +41,20 @@ Supports 3 filtering modes:
 - **Fuzzy** - custom inexact case-insensitive search (searches for all phrases separated by a space anywhere on a line).
 - **Regex** - search with regular expression support (based on the built-in [regexp](https://pkg.go.dev/regexp) library), case insensitive by default (in case a regular expression syntax error occurs, the input field will be highlighted in red).
 
+## Coloring
+
 Supported coloring groups for output:
 
-- **Green** - keywords indicating success.
-- **Red** - keywords indicating an error.
-- **Blue** - statuses (info, debug, etc), actions (install, update, etc) and HTTP methods (GET, POST, etc).
-- **Light Blue** - numbers (date, time, bytes, ip and mac-addresses).
+- **Custom** - URLs, file paths and processes in UNIX.
 - **Yellow** - known names (host name and system users) and warnings.
-- **Purple** - url and full paths in the file system.
-- **Custom** - unix processes.
+- **Green** - keywords indicating success.
+- **Red** - keywords indicating error.
+- **Blue** - statuses (info, debug, etc), actions (install, update, etc) and HTTP methods (GET, POST, etc).
+- **Light blue** - numbers (date, time, bytes, versions, percentage, IP and MAC addresses).
+
+A full list of all keywords can be found in the [color.log](/color.log) file (used for testing only). If you have suggestions for improving coloring (e.g. adding new words), you can open an [issue](https://github.com/Lifailon/lazyjournal/issues) for a new feature. 
+
+Coloring directly affects the loading time of the log, to increase the performance of reading large logs, it is possible to disable coloring using the `Ctrl+Q`.
 
 ## Install
 
@@ -82,18 +87,16 @@ If you an Arch Linux user you can also install from the [AUR](https://aur.archli
 paru -S lazyjournal
 ```
 
-Thank you [Matteo Giordano](https://github.com/malteo) for upload and update the package in AUR.
-
 ### Conda / mamba / pixi (Linux / macOS / Windows)
 
-If you use package managers like conda or mamba, you can install lazyjournal from [conda-forge](https://anaconda.org/conda-forge/lazyjournal):
+If you use package managers like conda or mamba, you can install `lazyjournal` from [conda-forge](https://anaconda.org/conda-forge/lazyjournal):
 
 ```shell
 conda install -c conda-forge lazyjournal
 mamba install -c conda-forge lazyjournal
 ```
 
-You can install lazyjournal user-globally using [pixi](https://prefix.dev):
+You can install `lazyjournal` user-globally using [pixi](https://prefix.dev):
 
 ```shell
 pixi global install lazyjournal
@@ -101,13 +104,11 @@ pixi global install lazyjournal
 
 ### Homebrew (macOS / Linux)
 
-Use the following command to install lazyjournal using [Homebrew](https://formulae.brew.sh/formula/lazyjournal):
+Use the following command to install `lazyjournal` using [Homebrew](https://formulae.brew.sh/formula/lazyjournal):
 
 ```shell
 brew install lazyjournal
 ```
-
-Thank you [Ueno M.](https://github.com/eunos-1128) for upload and update the package in homebrew and conda.
 
 ### Windows
 
@@ -138,10 +139,6 @@ You can also use Go for install the dev version ([Go](https://go.dev/doc/install
 ```shell
 go install github.com/Lifailon/lazyjournal@latest
 ```
-
-### Others
-
-If you use other packag manager and want this package to be present there as well, open an issue or load it yourself and make [Pull requests](https://github.com/Lifailon/lazyjournal/pulls).
 
 ## Usage
 
@@ -182,10 +179,11 @@ make lint
 
 ## Testing
 
-Run unit tests to check functions and their performance:
+Unit tests cover all main functions and interface operation.
 
 ```shell
-go test -v
+make list # get a list of all tests
+make test n=TestMockInterface # run the selected test
 ```
 
 The test coverage report using CI Actions for Linux, macOS and Windows systems is available on the [Wiki](https://github.com/Lifailon/lazyjournal/wiki) page.
@@ -194,6 +192,7 @@ Testing in BSD-based systems is done in a home environment using [usup](https://
 
 ## Hotkeys
 
+- `F1` - show help on hotkeys.
 - `Tab` - switch between windows.
 - `Shift+Tab` - return to previous window.
 - `Left/Right` - switch between journal lists in the selected window.
@@ -203,12 +202,22 @@ Testing in BSD-based systems is done in a home environment using [usup](https://
 - `<Shift/Ctrl>+<U/D>` - quickly move up and down (alternative for macOS).
 - `Ctrl+A` or `Home` - go to top of log.
 - `Ctrl+E` or `End` - go to the end of the log.
+- `Ctrl+Q` - enable or disable built-in output coloring.
+- `Ctrl+S` - enable or disable coloring via [tailspin](https://github.com/bensadeh/tailspin).
+- `Ctrl+R` - update all log lists.
 - `Ctrl+W` - clear text input field for filter to quickly update current log output without filtering.
 - `Ctrl+C` - exit.
 
 ## Contributing
 
-Since this is my first Go project, there may be some bad practices, BUT I want to make LazyJournal better. Any contribution will be appreciated! If you want to implement any new feature or fix something, please [open an issue](https://github.com/Lifailon/lazyjournal/issues) first.
+Since this is my first Go project, there may be some bad practices, BUT I want to make `lazyjournal` better. Any contribution will be appreciated! If you want to implement any new feature or fix something, please [open an issue](https://github.com/Lifailon/lazyjournal/issues) first.
+
+Thanks to all participants for their contributions:
+
+- [Matteo Giordano](https://github.com/malteo) for upload and update the package in `AUR`.
+- [Ueno M.](https://github.com/eunos-1128) for upload and update the package in `homebrew` and `conda`.
+
+You can also upload the package yourself to any package manager you use and make [Pull Requests](https://github.com/Lifailon/lazyjournal/pulls).
 
 ## Alternatives
 
