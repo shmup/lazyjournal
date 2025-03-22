@@ -78,7 +78,6 @@ type App struct {
 	startFiles      int
 	selectedFile    int
 
-	dockerContainers           []DockerContainers
 	maxVisibleDockerContainers int
 	startDockerContainers      int
 	selectedDockerContainer    int
@@ -86,9 +85,8 @@ type App struct {
 	filterListText string // текст для фильтрации список журналов
 
 	// Массивы для хранения списка журналов без фильтрации
-	journalsNotFilter         []Journal
-	logfilesNotFilter         []Logfile
-	dockerContainersNotFilter []DockerContainers
+	journalsNotFilter []Journal
+	logfilesNotFilter []Logfile
 
 	// Переменные для отслеживания изменений размера окна
 	windowWidth  int
@@ -145,7 +143,7 @@ type App struct {
 }
 
 func showHelp() {
-	fmt.Println("lazyjournal - terminal user interface for reading logs from journalctl, file system, Docker and Podman containers, as well Kubernetes pods.")
+	fmt.Println("lazyjournal - terminal user interface for reading logs from journalctl and file system")
 	fmt.Println("Source code: https://github.com/Lifailon/lazyjournal")
 	fmt.Println("If you have problems with the application, please open issue: https://github.com/Lifailon/lazyjournal/issues")
 	fmt.Println("")
@@ -334,64 +332,6 @@ func (app *App) showAudit() {
 		"containerization: ",
 		"  system: ",
 	)
-	containerizationSystems := []string{
-		"docker",
-		"podman",
-		"kubernetes",
-	}
-	for _, cs := range containerizationSystems {
-		auditText = append(auditText, "  - name: "+cs)
-		if cs == "kubernetes" {
-			csCheck := exec.Command("kubectl", "version")
-			output, _ := csCheck.Output()
-			// По умолчанию у version код возврата всегда 1, по этому проверяем вывод
-			if strings.Contains(string(output), "Version:") {
-				auditText = append(auditText, "    installed: true")
-				// Преобразуем байты в строку и обрезаем пробелы
-				csVersion := strings.TrimSpace(string(output))
-				// Удаляем текст до номера версии
-				csVersion = strings.Split(csVersion, "Version: ")[1]
-				// Забираем первую строку
-				csVersion = strings.Split(csVersion, "\n")[0]
-				auditText = append(auditText, "    version: "+csVersion)
-				cmd := exec.Command(
-					cs, "get", "pods", "-o",
-					"jsonpath={range .items[*]}{.metadata.uid} {.metadata.name} {.status.phase}{'\\n'}{end}",
-				)
-				_, err := cmd.Output()
-				if err == nil {
-					app.loadDockerContainer(cs)
-					auditText = append(auditText, "    pods: "+strconv.Itoa(len(app.dockerContainers)))
-				} else {
-					auditText = append(auditText, "    pods: 0")
-				}
-			} else {
-				auditText = append(auditText, "    installed: false")
-			}
-		} else {
-			csCheck := exec.Command(cs, "--version")
-			output, err := csCheck.Output()
-			if err == nil {
-				auditText = append(auditText, "    installed: true")
-				csVersion := strings.TrimSpace(string(output))
-				csVersion = strings.Split(csVersion, "version ")[1]
-				auditText = append(auditText, "    version: "+csVersion)
-				cmd := exec.Command(
-					cs, "ps", "-a",
-					"--format", "{{.ID}} {{.Names}} {{.State}}",
-				)
-				_, err := cmd.Output()
-				if err == nil {
-					app.loadDockerContainer(cs)
-					auditText = append(auditText, "    containers: "+strconv.Itoa(len(app.dockerContainers)))
-				} else {
-					auditText = append(auditText, "    containers: 0")
-				}
-			} else {
-				auditText = append(auditText, "    installed: false")
-			}
-		}
-	}
 	for _, line := range auditText {
 		fmt.Println(line)
 	}
@@ -430,37 +370,33 @@ var g *gocui.Gui
 func runGoCui(mock bool) {
 	// Инициализация значений по умолчанию + компиляция регулярных выражений для покраски
 	app := &App{
-		testMode:                     false,
-		tailSpinMode:                 false,
-		colorMode:                    true,
-		startServices:                0, // начальная позиция списка юнитов
-		selectedJournal:              0, // начальный индекс выбранного журнала
-		startFiles:                   0,
-		selectedFile:                 0,
-		startDockerContainers:        0,
-		selectedDockerContainer:      0,
-		selectUnits:                  "services",  // "UNIT" || "USER_UNIT" || "kernel"
-		selectPath:                   "/var/log/", // "/opt/", "/home/" или "/Users/" (для MacOS) + /root/
-		selectContainerizationSystem: "docker",    // "podman" || kubernetes
-		selectFilterMode:             "default",   // "fuzzy" || "regex"
-		logViewCount:                 "200000",    // 5000-300000
-		journalListFrameColor:        gocui.ColorDefault,
-		fileSystemFrameColor:         gocui.ColorDefault,
-		dockerFrameColor:             gocui.ColorDefault,
-		autoScroll:                   true,
-		trimHttpRegex:                trimHttpRegex,
-		trimHttpsRegex:               trimHttpsRegex,
-		trimPrefixPathRegex:          trimPrefixPathRegex,
-		trimPostfixPathRegex:         trimPostfixPathRegex,
-		hexByteRegex:                 hexByteRegex,
-		dateTimeRegex:                dateTimeRegex,
-		timeMacAddressRegex:          timeMacAddressRegex,
-		dateIpAddressRegex:           dateIpAddressRegex,
-		dateRegex:                    dateRegex,
-		ipAddressRegex:               ipAddressRegex,
-		procRegex:                    procRegex,
-		syslogUnitRegex:              syslogUnitRegex,
-		keybindingsEnabled:           true,
+		testMode:              false,
+		tailSpinMode:          false,
+		colorMode:             true,
+		startServices:         0, // начальная позиция списка юнитов
+		selectedJournal:       0, // начальный индекс выбранного журнала
+		startFiles:            0,
+		selectedFile:          0,
+		selectUnits:           "services",  // "UNIT" || "USER_UNIT" || "kernel"
+		selectPath:            "/var/log/", // "/opt/", "/home/" или "/Users/" (для MacOS) + /root/
+		selectFilterMode:      "default",   // "fuzzy" || "regex"
+		logViewCount:          "200000",    // 5000-300000
+		journalListFrameColor: gocui.ColorDefault,
+		fileSystemFrameColor:  gocui.ColorDefault,
+		autoScroll:            true,
+		trimHttpRegex:         trimHttpRegex,
+		trimHttpsRegex:        trimHttpsRegex,
+		trimPrefixPathRegex:   trimPrefixPathRegex,
+		trimPostfixPathRegex:  trimPostfixPathRegex,
+		hexByteRegex:          hexByteRegex,
+		dateTimeRegex:         dateTimeRegex,
+		timeMacAddressRegex:   timeMacAddressRegex,
+		dateIpAddressRegex:    dateIpAddressRegex,
+		dateRegex:             dateRegex,
+		ipAddressRegex:        ipAddressRegex,
+		procRegex:             procRegex,
+		syslogUnitRegex:       syslogUnitRegex,
+		keybindingsEnabled:    true,
 	}
 
 	// Определяем используемую ОС (linux/darwin/*bsd/windows) и архитектуру
@@ -610,13 +546,6 @@ func runGoCui(mock bool) {
 		app.loadFiles(app.selectPath)
 	}
 
-	// Docker
-	if v, err := g.View("docker"); err == nil {
-		_, viewHeight := v.Size()
-		app.maxVisibleDockerContainers = viewHeight
-	}
-	app.loadDockerContainer(app.selectContainerizationSystem)
-
 	// Устанавливаем фокус на окно с журналами по умолчанию
 	if _, err := g.SetCurrentView("filterList"); err != nil {
 		return
@@ -691,19 +620,6 @@ func (app *App) layout(g *gocui.Gui) error {
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
 		app.updateLogsList()
-	}
-
-	// Окно для списка контейнеров Docker и Podman
-	if v, err := g.SetView("docker", 0, inputHeight+2*panelHeight, leftPanelWidth-1, maxY-1, 0); err != nil {
-		if !errors.Is(err, gocui.ErrUnknownView) {
-			return err
-		}
-		v.Title = " < Docker containers (0) > "
-		v.Highlight = true
-		v.Wrap = false
-		v.Autoscroll = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
 	}
 
 	// Окно ввода текста для фильтрации
@@ -1280,46 +1196,6 @@ func (app *App) loadJournalLogs(serviceName string, newUpdate bool) {
 		app.applyFilter(false)
 	}
 }
-
-// Функция для чтения и парсинга содержимого события Windows через PowerShell (возвращяет текст в формате байт и текст ошибки)
-// func (app *App) loadWinEventLog(eventName string) (output []byte) {
-// 	// Запуск во внешнем процессе PowerShell 5
-// 	cmd := exec.Command("powershell", "-Command",
-// 		"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;"+
-// 			"Get-WinEvent -LogName "+eventName+" -MaxEvents 5000 | "+
-// 			"Select-Object TimeCreated,Id,LevelDisplayName,Message | "+
-// 			"Sort-Object TimeCreated | "+
-// 			"ConvertTo-Json")
-// 	eventsJson, _ := cmd.Output()
-// 	var eventMessage []string
-// 	var eventStrings []map[string]interface{}
-// 	_ = json.Unmarshal(eventsJson, &eventStrings)
-// 	for _, eventString := range eventStrings {
-// 		// Извлекаем метку времени из json
-// 		TimeCreated, _ := eventString["TimeCreated"].(string)
-// 		// Извлекаем метку времени из строки
-// 		parts := strings.Split(TimeCreated, "(")
-// 		timestampString := strings.Split(parts[1], ")")[0]
-// 		// Преобразуем строку в целое число (timestamp)
-// 		timestamp, _ := strconv.Atoi(timestampString)
-// 		// Преобразуем в Unix-формат (секунды и наносекунды)
-// 		dateTime := time.Unix(int64(timestamp/1000), int64((timestamp%1000)*1000000)) // Миллисекунды -> наносекунды
-// 		// Извлекаем остальные данные из json
-// 		LogId, _ := eventString["Id"].(float64)
-// 		LogIdInt := int(LogId)
-// 		LogIdString := strconv.Itoa(LogIdInt)
-// 		LevelDisplayName, _ := eventString["LevelDisplayName"].(string)
-// 		Message, _ := eventString["Message"].(string)
-// 		// Удаляем встроенные переносы строки
-// 		messageReplace := strings.ReplaceAll(Message, "\r\n", "")
-// 		// Формируем строку и заполняем временный массив
-// 		mess := dateTime.Format("02.01.2006 15:04:05") + " " + LevelDisplayName + " (" + LogIdString + "): " + messageReplace
-// 		eventMessage = append(eventMessage, mess)
-// 	}
-// 	// Собираем все строки в одну и возвращяем байты
-// 	fullMessage := strings.Join(eventMessage, "\n")
-// 	return []byte(fullMessage)
-// }
 
 // Функция для чтения и парсинга содержимого события Windows через wevtutil
 func (app *App) loadWinEventLog(eventName string) (output []byte) {
@@ -2349,317 +2225,6 @@ func (app *App) loadWinFileLog(filePath string) (output []byte, stringErrors str
 	return decodedOutput, "nil"
 }
 
-// ---------------------------------------- Docker/Podman/k8s ----------------------------------------
-
-func (app *App) loadDockerContainer(containerizationSystem string) {
-	app.dockerContainers = nil
-	// Получаем версию для проверки, что система контейнеризации установлена
-	cmd := exec.Command(containerizationSystem, "version")
-	_, err := cmd.Output()
-	if err != nil && !app.testMode {
-		vError, _ := app.gui.View("docker")
-		vError.Clear()
-		app.dockerFrameColor = gocui.ColorRed
-		vError.FrameColor = app.dockerFrameColor
-		vError.Highlight = false
-		fmt.Fprintln(vError, "\033[31m"+containerizationSystem+" not installed (environment not found)\033[0m")
-		return
-	}
-	if err != nil && app.testMode {
-		log.Print("Error:", containerizationSystem+" not installed (environment not found)")
-	}
-	if containerizationSystem == "kubectl" {
-		// Получаем список подов из k8s
-		cmd = exec.Command(
-			containerizationSystem, "get", "pods", "-o",
-			"jsonpath={range .items[*]}{.metadata.uid} {.metadata.name} {.status.phase}{'\\n'}{end}",
-		)
-	} else {
-		// Получаем список контейнеров из Docker или Podman
-		cmd = exec.Command(
-			containerizationSystem, "ps", "-a",
-			"--format", "{{.ID}} {{.Names}} {{.State}}",
-		)
-	}
-	output, err := cmd.Output()
-	if !app.testMode {
-		if err != nil {
-			vError, _ := app.gui.View("docker")
-			vError.Clear()
-			app.dockerFrameColor = gocui.ColorRed
-			vError.FrameColor = app.dockerFrameColor
-			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[31mAccess denied or "+containerizationSystem+" not running\033[0m")
-			return
-		} else {
-			vError, _ := app.gui.View("docker")
-			app.dockerFrameColor = gocui.ColorDefault
-			vError.Highlight = true
-			if vError.FrameColor != gocui.ColorDefault {
-				vError.FrameColor = gocui.ColorGreen
-			}
-		}
-	}
-	if err != nil && app.testMode {
-		log.Print("Error: access denied or " + containerizationSystem + " not running")
-	}
-	containers := strings.Split(strings.TrimSpace(string(output)), "\n")
-	// Проверяем, что список контейнеров не пустой
-	if !app.testMode {
-		if len(containers) == 0 || (len(containers) == 1 && containers[0] == "") {
-			vError, _ := app.gui.View("docker")
-			vError.Clear()
-			vError.Highlight = false
-			fmt.Fprintln(vError, "\033[32mNo running containers\033[0m")
-			return
-		} else {
-			vError, _ := app.gui.View("docker")
-			app.fileSystemFrameColor = gocui.ColorDefault
-			if vError.FrameColor != gocui.ColorDefault {
-				vError.FrameColor = gocui.ColorGreen
-			}
-			vError.Highlight = true
-		}
-	}
-	// Проверяем статус для покраски и заполняем структуру dockerContainers
-	serviceMap := make(map[string]bool)
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
-	for scanner.Scan() {
-		idName := scanner.Text()
-		parts := strings.Fields(idName)
-		if idName != "" && !serviceMap[idName] {
-			serviceMap[idName] = true
-			containerStatus := parts[2]
-			if containerStatus == "running" || containerStatus == "Running" {
-				containerStatus = "\033[32m" + containerStatus + "\033[0m"
-			} else {
-				containerStatus = "\033[31m" + containerStatus + "\033[0m"
-			}
-			containerName := parts[1] + " (" + containerStatus + ")"
-			app.dockerContainers = append(app.dockerContainers, DockerContainers{
-				name: containerName,
-				id:   parts[0],
-			})
-		}
-	}
-	sort.Slice(app.dockerContainers, func(i, j int) bool {
-		return app.dockerContainers[i].name < app.dockerContainers[j].name
-	})
-	if !app.testMode {
-		app.dockerContainersNotFilter = app.dockerContainers
-		app.applyFilterList()
-	}
-}
-
-func (app *App) updateDockerContainerList() {
-	v, err := app.gui.View("docker")
-	if err != nil {
-		return
-	}
-	v.Clear()
-	visibleEnd := app.startDockerContainers + app.maxVisibleDockerContainers
-	if visibleEnd > len(app.dockerContainers) {
-		visibleEnd = len(app.dockerContainers)
-	}
-	for i := app.startDockerContainers; i < visibleEnd; i++ {
-		fmt.Fprintln(v, app.dockerContainers[i].name)
-	}
-}
-
-func (app *App) nextDockerContainer(v *gocui.View, step int) error {
-	_, viewHeight := v.Size()
-	app.maxVisibleDockerContainers = viewHeight
-	if len(app.dockerContainers) == 0 {
-		return nil
-	}
-	if app.selectedDockerContainer < len(app.dockerContainers)-1 {
-		app.selectedDockerContainer += step
-		if app.selectedDockerContainer >= len(app.dockerContainers) {
-			app.selectedDockerContainer = len(app.dockerContainers) - 1
-		}
-		if app.selectedDockerContainer >= app.startDockerContainers+app.maxVisibleDockerContainers {
-			app.startDockerContainers += step
-			if app.startDockerContainers > len(app.dockerContainers)-app.maxVisibleDockerContainers {
-				app.startDockerContainers = len(app.dockerContainers) - app.maxVisibleDockerContainers
-			}
-			app.updateDockerContainerList()
-		}
-		if app.selectedDockerContainer < app.startDockerContainers+app.maxVisibleDockerContainers {
-			return app.selectDockerByIndex(app.selectedDockerContainer - app.startDockerContainers)
-		}
-	}
-	return nil
-}
-
-func (app *App) prevDockerContainer(v *gocui.View, step int) error {
-	_, viewHeight := v.Size()
-	app.maxVisibleDockerContainers = viewHeight
-	if len(app.dockerContainers) == 0 {
-		return nil
-	}
-	if app.selectedDockerContainer > 0 {
-		app.selectedDockerContainer -= step
-		if app.selectedDockerContainer < 0 {
-			app.selectedDockerContainer = 0
-		}
-		if app.selectedDockerContainer < app.startDockerContainers {
-			app.startDockerContainers -= step
-			if app.startDockerContainers < 0 {
-				app.startDockerContainers = 0
-			}
-			app.updateDockerContainerList()
-		}
-		if app.selectedDockerContainer >= app.startDockerContainers {
-			return app.selectDockerByIndex(app.selectedDockerContainer - app.startDockerContainers)
-		}
-	}
-	return nil
-}
-
-func (app *App) selectDockerByIndex(index int) error {
-	v, err := app.gui.View("docker")
-	if err != nil {
-		return err
-	}
-	// Обновляем счетчик в заголовке
-	re := regexp.MustCompile(`\s\(.+\) >`)
-	updateTitle := " (0) >"
-	if len(app.dockerContainers) != 0 {
-		updateTitle = " (" + strconv.Itoa(app.selectedDockerContainer+1) + "/" + strconv.Itoa(len(app.dockerContainers)) + ") >"
-	}
-	v.Title = re.ReplaceAllString(v.Title, updateTitle)
-	if err := v.SetCursor(0, index); err != nil {
-		return nil
-	}
-	return nil
-}
-
-func (app *App) selectDocker(g *gocui.Gui, v *gocui.View) error {
-	if v == nil || len(app.dockerContainers) == 0 {
-		return nil
-	}
-	_, cy := v.Cursor()
-	line, err := v.Line(cy)
-	if err != nil {
-		return err
-	}
-	app.loadDockerLogs(strings.TrimSpace(line), true)
-	app.lastWindow = "docker"
-	app.lastSelected = strings.TrimSpace(line)
-	return nil
-}
-
-func (app *App) loadDockerLogs(containerName string, newUpdate bool) {
-	containerizationSystem := app.selectContainerizationSystem
-	// Сохраняем систему контейнеризации для автообновления при смене окна
-	if newUpdate {
-		app.lastContainerizationSystem = app.selectContainerizationSystem
-	} else {
-		containerizationSystem = app.lastContainerizationSystem
-	}
-	var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	var containerId string
-	for _, dockerContainer := range app.dockerContainers {
-		dockerContainerName := ansiEscape.ReplaceAllString(dockerContainer.name, "")
-		if dockerContainerName == containerName {
-			containerId = dockerContainer.id
-		}
-	}
-	// Сохраняем id контейнера для автообновления при смене окна
-	if newUpdate {
-		app.lastContainerId = containerId
-	} else {
-		containerId = app.lastContainerId
-	}
-	// Читаем локальный лог Docker в формате JSON
-	var readFileContainer bool = false
-	if containerizationSystem == "docker" {
-		basePath := "/var/lib/docker/containers"
-		var logFilePath string
-		// Ищем файл лога в локальной системе по id
-		_ = filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
-			if err == nil && strings.Contains(info.Name(), containerId) && strings.HasSuffix(info.Name(), "-json.log") {
-				logFilePath = path
-				// Фиксируем, если найден файловый журнал
-				readFileContainer = true
-				// Останавливаем поиск
-				return filepath.SkipDir
-			}
-			return nil
-		})
-		// Читаем файл с конца с помощью tail
-		if readFileContainer {
-			cmd := exec.Command("tail", "-n", app.logViewCount, logFilePath)
-			output, err := cmd.Output()
-			if err != nil && !app.testMode {
-				v, _ := app.gui.View("logs")
-				v.Clear()
-				fmt.Fprintln(v, "\033[31mError reading log (tail):", err, "\033[0m")
-				return
-			}
-			if err != nil && app.testMode {
-				log.Print("Error: reading log via tail. ", err)
-			}
-			// Разбиваем строки на массив
-			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-			var formattedLines []string
-			// Обрабатываем вывод в формате JSON построчно
-			for i, line := range lines {
-				// JSON-структура для парсинга
-				var jsonData map[string]interface{}
-				err := json.Unmarshal([]byte(line), &jsonData)
-				if err != nil {
-					continue
-				}
-				// Извлекаем JSON данные
-				stream, _ := jsonData["stream"].(string)
-				timeStr, _ := jsonData["time"].(string)
-				logMessage, _ := jsonData["log"].(string)
-				// Удаляем встроенный экранированный символ переноса строки
-				logMessage = strings.TrimSuffix(logMessage, "\n")
-				// Парсим строку времени в объект time.Time
-				parsedTime, err := time.Parse(time.RFC3339Nano, timeStr)
-				if err == nil {
-					// Форматируем дату в формат: DD:MM:YYYY HH:MM:SS
-					timeStr = parsedTime.Format("02.01.2006 15:04:05")
-				}
-				// Заполняем строку в формате: stream time: log
-				formattedLine := fmt.Sprintf("%s %s: %s", stream, timeStr, logMessage)
-				formattedLines = append(formattedLines, formattedLine)
-				// Если это последняя строка в выводе, добавляем перенос строки
-				if i == len(lines)-1 {
-					formattedLines = append(formattedLines, "\n")
-				}
-			}
-			app.currentLogLines = formattedLines
-		}
-	}
-	// Читаем лог через Docker cli (если файл не найден или к нему нет доступа) или Podman/k8s
-	if !readFileContainer || containerizationSystem == "podman" || containerizationSystem == "kubectl" {
-		// Извлекаем имя без статуса для k8s в containerId
-		if containerizationSystem == "kubectl" {
-			parts := strings.Split(containerName, " (")
-			containerId = parts[0]
-		}
-		cmd := exec.Command(containerizationSystem, "logs", "--tail", app.logViewCount, containerId)
-		output, err := cmd.CombinedOutput() // читаем весь вывод, включая stderr
-		if err != nil && !app.testMode {
-			v, _ := app.gui.View("logs")
-			v.Clear()
-			fmt.Fprintln(v, "\033[31mError getting logs from", containerName, "(id:", containerId, ")", "container. Error:", err, "\033[0m")
-			return
-		}
-		if err != nil && app.testMode {
-			log.Print("Error: getting logs from ", containerName, " (id:", containerId, ")", " container. Error: ", err)
-		}
-		app.currentLogLines = strings.Split(string(output), "\n")
-	}
-	if !app.testMode {
-		app.updateDelimiter(newUpdate)
-		app.applyFilter(false)
-	}
-}
-
 // ---------------------------------------- Filter ----------------------------------------
 
 // Редактор обработки ввода текста для фильтрации
@@ -2703,7 +2268,6 @@ func (app *App) applyFilterList() {
 	// Временные массивы для отфильтрованных журналов
 	var filteredJournals []Journal
 	var filteredLogFiles []Logfile
-	var filteredDockerContainers []DockerContainers
 	for _, j := range app.journalsNotFilter {
 		if strings.Contains(strings.ToLower(j.name), filter) {
 			filteredJournals = append(filteredJournals, j)
@@ -2714,28 +2278,19 @@ func (app *App) applyFilterList() {
 			filteredLogFiles = append(filteredLogFiles, j)
 		}
 	}
-	for _, j := range app.dockerContainersNotFilter {
-		if strings.Contains(strings.ToLower(j.name), filter) {
-			filteredDockerContainers = append(filteredDockerContainers, j)
-		}
-	}
 	// Сбрасываем индексы выбранного журнала для правильного позиционирования
 	app.selectedJournal = 0
 	app.selectedFile = 0
-	app.selectedDockerContainer = 0
 	app.startServices = 0
 	app.startFiles = 0
-	app.startDockerContainers = 0
 	// Сохраняем отфильтрованные и отсортированные данные
 	app.journals = filteredJournals
 	app.logfiles = filteredLogFiles
-	app.dockerContainers = filteredDockerContainers
 	// Обновляем статус количества служб
 	if !app.testMode {
 		// Обновляем списки в интерфейсе
 		app.updateServicesList()
 		app.updateLogsList()
-		app.updateDockerContainerList()
 		v, _ := app.gui.View("services")
 		// Обновляем счетчик в заголовке
 		re := regexp.MustCompile(`\s\(.+\) >`)
@@ -2754,13 +2309,9 @@ func (app *App) applyFilterList() {
 		}
 		v.Title = re.ReplaceAllString(v.Title, updateTitle)
 		// Обновляем статус количества контейнеров
-		v, _ = app.gui.View("docker")
 		// Обновляем счетчик в заголовке
 		re = regexp.MustCompile(`\s\(.+\) >`)
 		updateTitle = " (0) >"
-		if len(app.dockerContainers) != 0 {
-			updateTitle = " (" + strconv.Itoa(app.selectedDockerContainer+1) + "/" + strconv.Itoa(len(app.dockerContainers)) + ") >"
-		}
 		v.Title = re.ReplaceAllString(v.Title, updateTitle)
 	}
 }
@@ -4020,8 +3571,6 @@ func (app *App) updateLogOutput(seconds int) {
 				app.loadJournalLogs(app.lastSelected, false)
 			case "varLogs":
 				app.loadFileLogs(app.lastSelected, false)
-			case "docker":
-				app.loadDockerLogs(app.lastSelected, false)
 			}
 			return nil
 		})
@@ -4051,10 +3600,6 @@ func (app *App) updateWindowSize(seconds int) {
 				if v, err := g.View("varLogs"); err == nil {
 					_, viewHeight := v.Size()
 					app.maxVisibleFiles = viewHeight
-				}
-				if v, err := g.View("docker"); err == nil {
-					_, viewHeight := v.Size()
-					app.maxVisibleDockerContainers = viewHeight
 				}
 				app.applyFilterList()
 			}
@@ -4115,9 +3660,6 @@ func (app *App) setupKeybindings() error {
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyEnter, gocui.ModNone, app.selectFile); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyEnter, gocui.ModNone, app.selectDocker); err != nil {
-		return err
-	}
 	// Перемещение вниз к следующей службе (функция nextService), файлу (nextFileName) или контейнеру (nextDockerContainer)
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 1)
@@ -4126,11 +3668,6 @@ func (app *App) setupKeybindings() error {
 	}
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextFileName(v, 1)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextDockerContainer(v, 1)
 	}); err != nil {
 		return err
 	}
@@ -4145,11 +3682,6 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextDockerContainer(v, 10)
-	}); err != nil {
-		return err
-	}
 	// Alt+Down 100
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowDown, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 100)
@@ -4158,11 +3690,6 @@ func (app *App) setupKeybindings() error {
 	}
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowDown, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextFileName(v, 100)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowDown, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextDockerContainer(v, 100)
 	}); err != nil {
 		return err
 	}
@@ -4177,11 +3704,6 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", 'D', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextDockerContainer(v, 10)
-	}); err != nil {
-		return err
-	}
 	// Ctrl+D на 100 для macOS
 	if err := app.gui.SetKeybinding("services", gocui.KeyCtrlD, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 100)
@@ -4190,11 +3712,6 @@ func (app *App) setupKeybindings() error {
 	}
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyCtrlD, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextFileName(v, 100)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyCtrlD, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextDockerContainer(v, 100)
 	}); err != nil {
 		return err
 	}
@@ -4209,11 +3726,6 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyPgdn, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextDockerContainer(v, 1)
-	}); err != nil {
-		return err
-	}
 	// Shift+Pgdn 10
 	if err := app.gui.SetKeybinding("services", gocui.KeyPgdn, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 10)
@@ -4225,11 +3737,6 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyPgdn, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextDockerContainer(v, 10)
-	}); err != nil {
-		return err
-	}
 	// Alt+Pgdn 100
 	if err := app.gui.SetKeybinding("services", gocui.KeyPgdn, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextService(v, 100)
@@ -4238,11 +3745,6 @@ func (app *App) setupKeybindings() error {
 	}
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgdn, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.nextFileName(v, 100)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyPgdn, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
-		return app.nextDockerContainer(v, 100)
 	}); err != nil {
 		return err
 	}
@@ -4258,11 +3760,6 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 1)
-	}); err != nil {
-		return err
-	}
 	// Shift+Up 10
 	if err := app.gui.SetKeybinding("services", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 10)
@@ -4271,11 +3768,6 @@ func (app *App) setupKeybindings() error {
 	}
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevFileName(v, 10)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 10)
 	}); err != nil {
 		return err
 	}
@@ -4290,11 +3782,6 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowUp, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 100)
-	}); err != nil {
-		return err
-	}
 	// Shift+U на 10 для macOS
 	if err := app.gui.SetKeybinding("services", 'U', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 10)
@@ -4303,11 +3790,6 @@ func (app *App) setupKeybindings() error {
 	}
 	if err := app.gui.SetKeybinding("varLogs", 'U', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevFileName(v, 10)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", 'U', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 10)
 	}); err != nil {
 		return err
 	}
@@ -4322,11 +3804,6 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyCtrlU, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 100)
-	}); err != nil {
-		return err
-	}
 	// Pgup 1
 	if err := app.gui.SetKeybinding("services", gocui.KeyPgup, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 1)
@@ -4335,11 +3812,6 @@ func (app *App) setupKeybindings() error {
 	}
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgup, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevFileName(v, 1)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyPgup, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 1)
 	}); err != nil {
 		return err
 	}
@@ -4354,11 +3826,6 @@ func (app *App) setupKeybindings() error {
 	}); err != nil {
 		return err
 	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyPgup, gocui.ModShift, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 10)
-	}); err != nil {
-		return err
-	}
 	// Alt+Pgup 100
 	if err := app.gui.SetKeybinding("services", gocui.KeyPgup, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevService(v, 100)
@@ -4367,11 +3834,6 @@ func (app *App) setupKeybindings() error {
 	}
 	if err := app.gui.SetKeybinding("varLogs", gocui.KeyPgup, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
 		return app.prevFileName(v, 100)
-	}); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyPgup, gocui.ModAlt, func(g *gocui.Gui, v *gocui.View) error {
-		return app.prevDockerContainer(v, 100)
 	}); err != nil {
 		return err
 	}
@@ -4401,13 +3863,6 @@ func (app *App) setupKeybindings() error {
 		if err := app.gui.DeleteKeybinding("varLogs", gocui.KeyArrowLeft, gocui.ModNone); err != nil {
 			return err
 		}
-	}
-	// Переключение выбора журналов для Containerization System
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowRight, gocui.ModNone, app.setContainersListRight); err != nil {
-		return err
-	}
-	if err := app.gui.SetKeybinding("docker", gocui.KeyArrowLeft, gocui.ModNone, app.setContainersListLeft); err != nil {
-		return err
 	}
 	// Переключение между режимами фильтрации через Up/Down для выбранного окна (filter)
 	if err := app.gui.SetKeybinding("filter", gocui.KeyArrowUp, gocui.ModNone, app.setFilterModeRight); err != nil {
@@ -4560,7 +4015,6 @@ func (app *App) setupKeybindings() error {
 		} else {
 			app.loadWinFiles(app.selectPath)
 		}
-		app.loadDockerContainer(app.selectContainerizationSystem)
 		return nil
 	}); err != nil {
 		return err
@@ -4982,57 +4436,6 @@ func (app *App) setLogFilesListLeft(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-// Функция для переключения выбора системы контейнеризации (Docker/Podman)
-func (app *App) setContainersListRight(g *gocui.Gui, v *gocui.View) error {
-	selectedDocker, err := g.View("docker")
-	if err != nil {
-		log.Panicln(err)
-	}
-	app.dockerContainers = app.dockerContainers[:0]
-	app.startDockerContainers = 0
-	app.selectedDockerContainer = 0
-	switch app.selectContainerizationSystem {
-	case "docker":
-		app.selectContainerizationSystem = "podman"
-		selectedDocker.Title = " < Podman containers (0) > "
-		app.loadDockerContainer(app.selectContainerizationSystem)
-	case "podman":
-		app.selectContainerizationSystem = "kubectl"
-		selectedDocker.Title = " < Kubernetes pods (0) > "
-		app.loadDockerContainer(app.selectContainerizationSystem)
-	case "kubectl":
-		app.selectContainerizationSystem = "docker"
-		selectedDocker.Title = " < Docker containers (0) > "
-		app.loadDockerContainer(app.selectContainerizationSystem)
-	}
-	return nil
-}
-
-func (app *App) setContainersListLeft(g *gocui.Gui, v *gocui.View) error {
-	selectedDocker, err := g.View("docker")
-	if err != nil {
-		log.Panicln(err)
-	}
-	app.dockerContainers = app.dockerContainers[:0]
-	app.startDockerContainers = 0
-	app.selectedDockerContainer = 0
-	switch app.selectContainerizationSystem {
-	case "docker":
-		app.selectContainerizationSystem = "kubectl"
-		selectedDocker.Title = " < Kubernetes pods (0) > "
-		app.loadDockerContainer(app.selectContainerizationSystem)
-	case "kubectl":
-		app.selectContainerizationSystem = "podman"
-		selectedDocker.Title = " < Podman containers (0) > "
-		app.loadDockerContainer(app.selectContainerizationSystem)
-	case "podman":
-		app.selectContainerizationSystem = "docker"
-		selectedDocker.Title = " < Docker containers (0) > "
-		app.loadDockerContainer(app.selectContainerizationSystem)
-	}
-	return nil
-}
-
 // Функция для переключения окон через Tab
 func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 	selectedFilterList, err := g.View("filterList")
@@ -5044,10 +4447,6 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 		log.Panicln(err)
 	}
 	selectedVarLog, err := g.View("varLogs")
-	if err != nil {
-		log.Panicln(err)
-	}
-	selectedDocker, err := g.View("docker")
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -5078,8 +4477,6 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedServices.TitleColor = gocui.ColorGreen
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
@@ -5093,40 +4490,20 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = gocui.ColorGreen
 			selectedVarLog.TitleColor = gocui.ColorGreen
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
 			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "varLogs":
-			nextView = "docker"
 			selectedFilterList.FrameColor = gocui.ColorDefault
 			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = gocui.ColorGreen
-			selectedDocker.TitleColor = gocui.ColorGreen
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
-			selectedLogs.FrameColor = gocui.ColorDefault
-			selectedLogs.TitleColor = gocui.ColorDefault
-			selectedScrollLogs.FrameColor = gocui.ColorDefault
-		case "docker":
-			nextView = "filter"
-			selectedFilterList.FrameColor = gocui.ColorDefault
-			selectedFilterList.TitleColor = gocui.ColorDefault
-			selectedServices.FrameColor = app.journalListFrameColor
-			selectedServices.TitleColor = gocui.ColorDefault
-			selectedVarLog.FrameColor = app.fileSystemFrameColor
-			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
-			selectedFilter.FrameColor = gocui.ColorGreen
-			selectedFilter.TitleColor = gocui.ColorGreen
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
 			selectedScrollLogs.FrameColor = gocui.ColorDefault
@@ -5138,8 +4515,6 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorGreen
@@ -5153,8 +4528,6 @@ func (app *App) nextView(g *gocui.Gui, v *gocui.View) error {
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
@@ -5180,10 +4553,6 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 		log.Panicln(err)
 	}
 	selectedVarLog, err := g.View("varLogs")
-	if err != nil {
-		log.Panicln(err)
-	}
-	selectedDocker, err := g.View("docker")
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -5213,8 +4582,6 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorGreen
@@ -5228,8 +4595,6 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
@@ -5243,38 +4608,18 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorGreen
 			selectedFilter.TitleColor = gocui.ColorGreen
 			selectedLogs.FrameColor = gocui.ColorDefault
 			selectedLogs.TitleColor = gocui.ColorDefault
 			selectedScrollLogs.FrameColor = gocui.ColorDefault
 		case "filter":
-			nextView = "docker"
 			selectedFilterList.FrameColor = gocui.ColorDefault
 			selectedFilterList.TitleColor = gocui.ColorDefault
 			selectedServices.FrameColor = app.journalListFrameColor
 			selectedServices.TitleColor = gocui.ColorDefault
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = gocui.ColorGreen
-			selectedDocker.TitleColor = gocui.ColorGreen
-			selectedFilter.FrameColor = gocui.ColorDefault
-			selectedFilter.TitleColor = gocui.ColorDefault
-			selectedLogs.FrameColor = gocui.ColorDefault
-			selectedLogs.TitleColor = gocui.ColorDefault
-			selectedScrollLogs.FrameColor = gocui.ColorDefault
-		case "docker":
-			nextView = "varLogs"
-			selectedFilterList.FrameColor = gocui.ColorDefault
-			selectedFilterList.TitleColor = gocui.ColorDefault
-			selectedServices.FrameColor = app.journalListFrameColor
-			selectedServices.TitleColor = gocui.ColorDefault
-			selectedVarLog.FrameColor = gocui.ColorGreen
-			selectedVarLog.TitleColor = gocui.ColorGreen
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
@@ -5288,8 +4633,6 @@ func (app *App) backView(g *gocui.Gui, v *gocui.View) error {
 			selectedServices.TitleColor = gocui.ColorGreen
 			selectedVarLog.FrameColor = app.fileSystemFrameColor
 			selectedVarLog.TitleColor = gocui.ColorDefault
-			selectedDocker.FrameColor = app.dockerFrameColor
-			selectedDocker.TitleColor = gocui.ColorDefault
 			selectedFilter.FrameColor = gocui.ColorDefault
 			selectedFilter.TitleColor = gocui.ColorDefault
 			selectedLogs.FrameColor = gocui.ColorDefault
